@@ -78,6 +78,7 @@ def test_chat_applies_revised_plan(sample, tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline, "run", lambda *a, **k: real_run(*a, **{**k, "words": k.get("words") or TAKE}))
 
     c = TestClient(server.app)
+    c.post("/api/settings", json={"provider": "none"})
     with sample.open("rb") as f:
         job = c.post("/api/jobs", files={"video": ("toma.mp4", f, "video/mp4")}).json()
 
@@ -91,7 +92,6 @@ def test_chat_applies_revised_plan(sample, tmp_path, monkeypatch):
     assert wait(job["id"])["status"] == "done"
     # Sin IA conectada, el chat lo explica en vez de fallar en silencio.
     assert c.post(f"/api/jobs/{job['id']}/chat", json={"message": "hola"}).status_code == 400
-    (tmp_path / "jobs" / job["id"] / "transcript.json").write_text(json.dumps([w.__dict__ for w in TAKE]))
 
     c.post("/api/settings", json={"provider": "claude", "anthropic_key": "sk-test"})
     revised = EditPlan(hook_title="Nuevo gancho", effects=[{"type": "palabra", "word": 18, "text": "GRATIS"}], zooms=[(12, 15)])

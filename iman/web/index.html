@@ -17,6 +17,7 @@
       <button data-step="edit"><b>2</b> Cómo lo editas</button>
       <button data-step="result"><b>3</b> Tu reel</button>
     </nav>
+    <a href="#" class="pill" id="trial-pill" hidden></a>
     <button class="ghost" id="open-settings">Ajustes</button>
   </header>
 
@@ -135,15 +136,28 @@
   <dialog id="settings">
     <form method="dialog" id="settings-form" class="stack">
       <h2>Ajustes</h2>
-      <p class="hint">Imán usa tu propia cuenta de IA. Las claves se guardan solo en este ordenador.</p>
+      <h3>Tu licencia</h3>
+      <p class="hint" id="license-status"></p>
+      <div class="row" id="license-activate">
+        <input name="license_input" id="license-input" placeholder="Pega aquí tu clave de licencia" autocomplete="off">
+        <button class="primary" id="license-btn" type="button">Activar</button>
+      </div>
+      <p class="hint" id="license-buy">¿Aún no la tienes? <a href="https://imanreels.com/#precio" target="_blank" rel="noopener">Consigue Imán</a>: soporte, actualizaciones e IA incluidos.</p>
+      <div class="row" id="license-active" hidden><button class="ghost" id="license-off" type="button">Desactivar en este ordenador</button></div>
+      <p class="hint error" id="license-error" hidden></p>
       <h3>IA que edita</h3>
       <div class="choices inline">
-        <label class="choice"><input type="radio" name="provider" value="claude"><span>Claude</span></label>
-        <label class="choice"><input type="radio" name="provider" value="openai"><span>ChatGPT</span></label>
+        <label class="choice"><input type="radio" name="provider" value="iman"><span>Imán<small>incluida, sin cuentas extra</small></span></label>
+        <label class="choice"><input type="radio" name="provider" value="claude"><span>Mi Claude<small>con tu clave</small></span></label>
+        <label class="choice"><input type="radio" name="provider" value="openai"><span>Mi ChatGPT<small>con tu clave</small></span></label>
         <label class="choice"><input type="radio" name="provider" value="none"><span>Sin IA</span></label>
       </div>
-      <label>Clave de Anthropic (Claude)<input name="anthropic_key" type="password" placeholder="sk-ant-…" autocomplete="off"></label>
-      <label>Clave de OpenAI (ChatGPT)<input name="openai_key" type="password" placeholder="sk-…" autocomplete="off"></label>
+      <details id="own-keys">
+        <summary>Usar mi propia clave de IA</summary>
+        <p class="hint">Solo si prefieres pagar la IA aparte. Las claves se guardan solo en este ordenador.</p>
+        <label>Clave de Anthropic (Claude)<input name="anthropic_key" type="password" placeholder="sk-ant-…" autocomplete="off"></label>
+        <label>Clave de OpenAI (ChatGPT)<input name="openai_key" type="password" placeholder="sk-…" autocomplete="off"></label>
+      </details>
       <h3>Transcripción</h3>
       <div class="choices inline">
         <label class="choice"><input type="radio" name="transcriber" value="local"><span>En mi ordenador (gratis)</span></label>

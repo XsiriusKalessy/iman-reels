@@ -122,3 +122,12 @@ dialog::backdrop { background: rgba(0,0,0,.6); }
 .msg.iman { justify-self: start; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
 .chat-form { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
 .chat-form input { margin-top: 0; flex: 1; min-width: 0; }
+
+/* licencia */
+.pill { font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 99px; text-decoration: none;
+  color: var(--text); border: 1px solid var(--line); }
+.pill.warn { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+#license-activate input { flex: 1; min-width: 0; }
+details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+details[open] summary { margin-bottom: 8px; }
+[hidden] { display: none !important; }

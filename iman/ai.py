@@ -115,16 +115,20 @@ def transcript_for_prompt(words: list[Word]) -> str:
 
 @dataclass
 class AIConfig:
-    provider: str = "none"  # claude | openai | none
+    provider: str = "none"  # iman | claude | openai | none
     anthropic_key: str | None = None
     openai_key: str | None = None
     claude_model: str = CLAUDE_MODEL
     openai_model: str = OPENAI_MODEL
+    license_key: str | None = None
+    license_instance: str | None = None
 
     @property
     def enabled(self) -> bool:
-        return (self.provider == "claude" and bool(self.anthropic_key)) or (
-            self.provider == "openai" and bool(self.openai_key)
+        return (
+            self.provider == "iman"  # con licencia, o en prueba gratis limitada
+            or (self.provider == "claude" and bool(self.anthropic_key))
+            or (self.provider == "openai" and bool(self.openai_key))
         )
 
 
@@ -160,13 +164,22 @@ def _ask_json(cfg: AIConfig, system: str, user: str, schema: dict) -> dict:
 
 
 def plan_edit(cfg: AIConfig, words: list[Word], instructions: str = "", hook_template: str = "") -> EditPlan:
+    if cfg.provider == "iman":
+        from . import cloud
+
+        data = cloud.call(cfg, "plan", {"words": [w.__dict__ for w in words],
+                                        "instructions": instructions, "hook_template": hook_template})
+        return _plan_from(data, len(words), "iman")
+    return _plan_from(plan_edit_raw(cfg, words, instructions, hook_template), len(words), cfg.provider)
+
+
+def plan_edit_raw(cfg: AIConfig, words: list[Word], instructions: str = "", hook_template: str = "") -> dict:
     user = "TRANSCRIPCIÓN:\n" + transcript_for_prompt(words)
     if hook_template:
         user += f"\n\nPLANTILLA DE GANCHO elegida por el creador (adáptala a lo que dice el vídeo): {hook_template}"
     if instructions.strip():
         user += f"\n\nINSTRUCCIONES DEL CREADOR:\n{instructions.strip()}"
-    data = _ask_json(cfg, EDIT_SYSTEM, user, EDIT_SCHEMA)
-    return _plan_from(data, len(words), cfg.provider)
+    return _ask_json(cfg, EDIT_SYSTEM, user, EDIT_SCHEMA)
 
 
 def _plan_from(data: dict, n: int, source: str) -> EditPlan:
@@ -234,15 +247,26 @@ def _plan_to_prompt(plan: EditPlan) -> dict:
 def revise_plan(cfg: AIConfig, words: list[Word], plan: EditPlan, message: str,
                 rhythm: str, style: str) -> tuple[EditPlan, dict, str]:
     """Aplica un cambio pedido en lenguaje natural. Devuelve (plan, ajustes, respuesta)."""
+    if cfg.provider == "iman":
+        from . import cloud
+
+        data = cloud.call(cfg, "revise", {"words": [w.__dict__ for w in words], "plan": plan.to_dict(),
+                                          "message": message, "rhythm": rhythm, "style": style})
+        settings = {k: v for k, v in (data.get("settings") or {}).items() if v}
+        return _plan_from(data, len(words), "iman"), settings, data.get("reply", "").strip()
+    data = revise_plan_raw(cfg, words, plan, message, rhythm, style)
+    settings = {k: v for k, v in (data.get("settings") or {}).items() if v}
+    return _plan_from(data, len(words), cfg.provider), settings, data.get("reply", "").strip()
+
+
+def revise_plan_raw(cfg: AIConfig, words: list[Word], plan: EditPlan, message: str, rhythm: str, style: str) -> dict:
     user = (
         "TRANSCRIPCIÓN:\n" + transcript_for_prompt(words)
         + "\n\nPLAN ACTUAL:\n" + json.dumps(_plan_to_prompt(plan), ensure_ascii=False)
         + f"\n\nAJUSTES ACTUALES: ritmo={rhythm}, estilo={style}"
         + f"\n\nEL CREADOR PIDE:\n{message.strip()}"
     )
-    data = _ask_json(cfg, REVISE_SYSTEM, user, REVISE_SCHEMA)
-    settings = {k: v for k, v in (data.get("settings") or {}).items() if v}
-    return _plan_from(data, len(words), cfg.provider), settings, data.get("reply", "").strip()
+    return _ask_json(cfg, REVISE_SYSTEM, user, REVISE_SCHEMA)
 
 
 # --- Agente de ideas (paso 0: antes de grabar) ---------------------------------
@@ -275,6 +299,11 @@ una línea explicando por qué puede funcionar. Si te pasa ejemplos de cómo hab
 
 
 def generate_ideas(cfg: AIConfig, topic: str, audience: str = "", voice_samples: str = "", n: int = 3) -> list[dict]:
+    if cfg.provider == "iman":
+        from . import cloud
+
+        return cloud.call(cfg, "ideas", {"topic": topic, "audience": audience,
+                                         "voice_samples": voice_samples[:6000], "n": n}).get("ideas", [])
     user = f"Tema: {topic}\nNúmero de ideas: {n}"
     if audience:
         user += f"\nPúblico: {audience}"

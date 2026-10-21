@@ -17,7 +17,7 @@ document.addEventListener("click", e => {
 async function api(path, opts = {}) {
   const r = await fetch(path, opts);
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.detail || `Error ${r.status}`);
+  if (!r.ok) throw Object.assign(new Error(data.detail || `Error ${r.status}`), { status: r.status });
   return data;
 }
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -33,6 +33,8 @@ async function loadOptions() {
   $("#hook-template").innerHTML += o.hook_templates.map(t => `<option>${esc(t)}</option>`).join("");
 }
 
+const NAMES = { iman: "la IA de Imán", claude: "tu Claude", openai: "tu ChatGPT" };
+
 async function loadSettings() {
   state.settings = await api("/api/settings");
   const s = state.settings;
@@ -40,17 +42,58 @@ async function loadSettings() {
   f.provider.value = s.provider; f.transcriber.value = s.transcriber; f.language.value = s.language;
   f.anthropic_key.placeholder = s.has_anthropic_key ? "Guardada ✓ (escribe para cambiarla)" : "sk-ant-…";
   f.openai_key.placeholder = s.has_openai_key ? "Guardada ✓ (escribe para cambiarla)" : "sk-…";
-  const ok = (s.provider === "claude" && s.has_anthropic_key) || (s.provider === "openai" && s.has_openai_key);
+  $("#own-keys").open = s.provider === "claude" || s.provider === "openai";
+  const ok = s.provider === "iman" || (s.provider === "claude" && s.has_anthropic_key) || (s.provider === "openai" && s.has_openai_key);
   $("#ai-hint").innerHTML = ok
-    ? `Edita con ${s.provider === "claude" ? "Claude" : "ChatGPT"}.`
-    : `Sin IA conectada: cortaré silencios y repeticiones igualmente. <a href="#" id="hint-settings">Conectar Claude o ChatGPT</a> para el gancho y las instrucciones.`;
+    ? `Edita con ${NAMES[s.provider]}.`
+    : `Sin IA: cortaré silencios y repeticiones igualmente. <a href="#" id="hint-settings">Activa la IA</a> para el gancho, los efectos y las instrucciones.`;
+  renderLicense(s.license);
 }
+
+function renderLicense(l) {
+  const pill = $("#trial-pill");
+  $("#license-error").hidden = true;
+  $("#license-active").hidden = !l.licensed;
+  $("#license-activate").hidden = $("#license-buy").hidden = l.licensed;
+  if (l.licensed) {
+    const until = l.expires ? ` hasta el ${new Date(l.expires).toLocaleDateString("es-ES")}` : "";
+    $("#license-status").textContent = `Licencia activa${until}. Gracias por confiar en Imán.`;
+    pill.hidden = true;
+  } else {
+    const left = l.free_left;
+    $("#license-status").textContent = left
+      ? `Estás probando Imán: te quedan ${left} ${left === 1 ? "reel" : "reels"} gratis (con marca de agua).`
+      : "Has usado tus reels de prueba. Activa tu licencia para seguir editando sin marca de agua.";
+    pill.hidden = l.dev;
+    pill.textContent = left ? `Prueba · ${left} gratis` : "Activa tu licencia";
+    pill.classList.toggle("warn", !left);
+  }
+}
+$("#trial-pill").onclick = e => { e.preventDefault(); $("#settings").showModal(); };
+$("#license-btn").onclick = async () => {
+  const key = $("#license-input").value.trim();
+  if (!key) return $("#license-input").focus();
+  $("#license-btn").disabled = true; $("#license-btn").textContent = "Activando…";
+  try {
+    const s = await api("/api/license", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key }) });
+    $("#license-input").value = "";
+    state.settings = s; renderLicense(s.license);
+  } catch (err) {
+    $("#license-error").textContent = err.message; $("#license-error").hidden = false;
+  } finally { $("#license-btn").disabled = false; $("#license-btn").textContent = "Activar"; }
+};
+$("#license-off").onclick = async () => {
+  if (!confirm("¿Desactivar la licencia en este ordenador? Podrás activarla en otro.")) return;
+  const s = await api("/api/license", { method: "DELETE" });
+  state.settings = s; renderLicense(s.license);
+};
 $("#open-settings").onclick = () => $("#settings").showModal();
 document.addEventListener("click", e => { if (e.target.id === "hint-settings") { e.preventDefault(); $("#settings").showModal(); } });
 $("#save-settings").onclick = async e => {
   e.preventDefault();
   const f = $("#settings-form");
   const body = Object.fromEntries(new FormData(f));
+  delete body.license_input;
   await api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   f.anthropic_key.value = ""; f.openai_key.value = "";
   await loadSettings();
@@ -114,7 +157,10 @@ $("#go").onclick = async () => {
   try {
     state.job = await api("/api/jobs", { method: "POST", body: fd });
     poll();
-  } catch (err) { showError(err.message); }
+  } catch (err) {
+    if (err.status === 402) { showError(err.message, true); $("#settings").showModal(); }
+    else showError(err.message);
+  }
 };
 
 // ---------- 3. resultado ----------
@@ -122,9 +168,11 @@ function showWorking(step, pct) {
   $("#working").hidden = false; $("#out").hidden = true;
   $("#working").innerHTML = `<div class="spinner"></div><strong>${esc(step)}</strong><div class="bar"><i style="width:${Math.round(pct * 100)}%"></i></div><span class="hint">Puedes hacer otra cosa mientras tanto.</span>`;
 }
-function showError(msg) {
+function showError(msg, needsLicense = false) {
   $("#working").hidden = false; $("#out").hidden = true;
-  $("#working").innerHTML = `<strong class="error">No he podido editarlo</strong><span class="hint">${esc(msg)}</span>`;
+  $("#working").innerHTML = needsLicense
+    ? `<strong>Tu prueba gratis ha terminado</strong><span class="hint">${esc(msg)}</span><button class="primary" id="hint-settings">Activar licencia</button>`
+    : `<strong class="error">No he podido editarlo</strong><span class="hint">${esc(msg)}</span>`;
 }
 function poll() {
   clearTimeout(state.poll);
@@ -133,7 +181,7 @@ function poll() {
     state.job = j;
     if (j.status === "working") { showWorking(j.step, j.progress); return poll(); }
     if (j.status === "error") return showError(j.error);
-    showResult(j);
+    showResult(j); if (j.options?.watermark) loadSettings();
   }, 900);
 }
 function fmt(s) { return `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`; }

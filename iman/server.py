@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai, config, pipeline
+from . import ai, config, license, pipeline
 from .captions import STYLES
 from .models import EditPlan, Word
 from .rhythm import RHYTHMS
@@ -72,6 +72,32 @@ def set_settings(body: SettingsIn):
     return config.public(config.save(data))
 
 
+class LicenseIn(BaseModel):
+    key: str
+
+
+@app.post("/api/license")
+def activate_license(body: LicenseIn):
+    try:
+        data = license.activate(body.key)
+    except license.LicenseError as e:
+        raise HTTPException(400, str(e))
+    return config.public(config.save(data))
+
+
+@app.delete("/api/license")
+def remove_license():
+    cfg = config.load()
+    license.deactivate(cfg)
+    return config.public(config.save({"license_key": "", "license_instance": "", "license_valid": False}))
+
+
+def _refresh_license() -> dict:
+    cfg = config.load()
+    upd = license.validate(cfg)
+    return config.save(upd) if upd else cfg
+
+
 class IdeasIn(BaseModel):
     topic: str
     audience: str = ""
@@ -109,6 +135,9 @@ async def create_job(
 ):
     if rhythm not in RHYTHMS or style not in STYLES or size not in ("1080", "4k") or fit not in ("recortar", "fondo"):
         raise HTTPException(400, "Opción no válida")
+    allowed, watermark = license.can_edit(_refresh_license())
+    if not allowed:
+        raise HTTPException(402, "Has usado tus reels de prueba. Activa tu licencia en Ajustes para seguir editando.")
     job_id = uuid.uuid4().hex[:10]
     workdir = JOBS_DIR / job_id
     workdir.mkdir(parents=True, exist_ok=True)
@@ -116,9 +145,10 @@ async def create_job(
     src = workdir / f"original{suffix}"
     with src.open("wb") as f:
         shutil.copyfileobj(video.file, f)
-    opts = pipeline.EditOptions(rhythm, style, size, fit, hook, hook_title, hook_template, instructions, voice=voice)
+    opts = pipeline.EditOptions(rhythm, style, size, fit, hook, hook_title, hook_template, instructions,
+                                voice=voice, watermark=watermark)
     JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0,
-                    "options": asdict(opts), "created": time.time()}
+                    "options": asdict(opts), "created": time.time(), "trial": watermark}
     threading.Thread(target=_work, args=(job_id, src, workdir, opts), daemon=True).start()
     return JOBS[job_id]
 
@@ -127,6 +157,9 @@ def _work(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions, pla
     try:
         res = pipeline.run(src, workdir, opts, config.load(),
                            progress=lambda msg, pct: _set(job_id, step=msg, progress=pct), plan=plan)
+        if JOBS[job_id].pop("trial", False):
+            cfg = config.load()
+            config.save({"free_reels_used": int(cfg.get("free_reels_used") or 0) + 1})
         _set(job_id, status="done", result=res.summary())
     except Exception as e:
         _set(job_id, status="error", error=str(e))

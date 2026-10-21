@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,6 +14,23 @@ from .models import Span
 
 FONTS_DIR = Path(__file__).parent / "assets" / "fonts"
 HDR_TRANSFERS = {"smpte2084", "arib-std-b67"}
+
+
+def _tool(name: str) -> str:
+    """Ruta a ffmpeg/ffprobe: variable de entorno, copia incluida en la app o el del sistema."""
+    env = os.environ.get(f"IMAN_{name.upper()}")
+    if env:
+        return env
+    exe = name + (".exe" if os.name == "nt" else "")
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+    for cand in (base / "bin" / exe, Path(__file__).parent / "bin" / exe):
+        if cand.exists():
+            return str(cand)
+    return shutil.which(name) or name
+
+
+FFMPEG = _tool("ffmpeg")
+FFPROBE = _tool("ffprobe")
 
 
 @dataclass
@@ -25,7 +45,7 @@ class MediaInfo:
 
 def probe(path: Path) -> MediaInfo:
     out = subprocess.run(
-        ["ffprobe", "-v", "error", "-print_format", "json", "-show_streams", "-show_format", str(path)],
+        [FFPROBE, "-v", "error", "-print_format", "json", "-show_streams", "-show_format", str(path)],
         capture_output=True, text=True, check=True,
     ).stdout
     data = json.loads(out)
@@ -53,7 +73,7 @@ def probe(path: Path) -> MediaInfo:
 
 def extract_audio(src: Path, dst: Path) -> Path:
     subprocess.run(
-        ["ffmpeg", "-y", "-v", "error", "-i", str(src), "-vn", "-ac", "1", "-ar", "16000", str(dst)],
+        [FFMPEG, "-y", "-v", "error", "-i", str(src), "-vn", "-ac", "1", "-ar", "16000", str(dst)],
         check=True,
     )
     return dst
@@ -147,7 +167,7 @@ def render(
     script = dst.with_suffix(".filters.txt")
     script.write_text(graph)
     cmd = [
-        "ffmpeg", "-y", "-v", "error", "-i", str(src),
+        FFMPEG, "-y", "-v", "error", "-i", str(src),
         "-filter_complex_script", str(script),
         "-map", "[vout]", "-map", "[aout]",
         "-c:v", "libx264", "-preset", preset, "-crf", "18", "-profile:v", "high",
@@ -162,7 +182,7 @@ def render(
 
 def thumbnail(src: Path, dst: Path, t: float = 0.5) -> Path:
     subprocess.run(
-        ["ffmpeg", "-y", "-v", "error", "-ss", f"{t:.2f}", "-i", str(src), "-frames:v", "1", "-q:v", "3", str(dst)],
+        [FFMPEG, "-y", "-v", "error", "-ss", f"{t:.2f}", "-i", str(src), "-frames:v", "1", "-q:v", "3", str(dst)],
         check=True,
     )
     return dst

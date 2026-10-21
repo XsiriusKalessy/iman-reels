@@ -9,7 +9,12 @@ from typing import Callable
 
 from . import ai, effects, media
 from .config import ai_config
-from .captions import STYLES, build_ass
+from .captions import STYLES, _ts, build_ass
+
+WATERMARK = (
+    "Dialogue: 9,0:00:00.00,{end},Sub,,0,0,0,,"
+    "{{\\an2\\pos(540,1840)\\fs40\\bord2\\shad0\\alpha&H40&}}Hecho con Imán · prueba gratis"
+)
 from .models import EditPlan, Word
 from .rhythm import RHYTHMS, keep_spans, remap_words
 
@@ -28,6 +33,7 @@ class EditOptions:
     voice: bool = True  # limpiar y nivelar la voz
     auto_zoom: bool = True  # alternar plano normal y cerrado en cada corte
     effects: bool = True  # lista animada, palabra gigante y zoom de énfasis
+    watermark: bool = False  # reels de prueba sin licencia
 
 
 @dataclass
@@ -80,6 +86,7 @@ def run(
             audio, cfg.get("transcriber", "local"), cfg.get("language") or None,
             cfg.get("whisper_model", "small"), cfg.get("openai_key") or None,
         )
+    if not transcript_file.exists():
         transcript_file.write_text(json.dumps([w.__dict__ for w in words], ensure_ascii=False, indent=1))
 
     progress("Buscando fallos y el mejor gancho", 0.40)
@@ -110,7 +117,7 @@ def run(
     (workdir / "plan.json").write_text(json.dumps(plan.to_dict(), ensure_ascii=False, indent=1))
 
     ass_path = None
-    if opts.captions or opts.hook:
+    if opts.captions or opts.hook or opts.watermark:
         style = STYLES[opts.style]
         emphasis_out = {j for j, i in enumerate(kept_idx) if i in set(plan.emphasis)}
         fx_lines, fx_windows = ([], [])
@@ -121,7 +128,8 @@ def run(
         ass = build_ass(
             kept if opts.captions else [], style, out_duration,
             plan.hook_title if opts.hook else "", emphasis_out,
-            extra_events=fx_lines, hide=fx_windows,
+            extra_events=fx_lines + ([WATERMARK.format(end=_ts(out_duration))] if opts.watermark else []),
+            hide=fx_windows,
         )
         ass_path = workdir / "subs.ass"
         ass_path.write_text(ass, encoding="utf-8")

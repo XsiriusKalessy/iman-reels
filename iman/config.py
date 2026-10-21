@@ -12,7 +12,8 @@ HOME = Path(os.environ.get("IMAN_HOME", Path.home() / ".iman"))
 CONFIG_FILE = HOME / "config.json"
 
 DEFAULTS = {
-    "provider": "claude",
+    # "iman": la IA incluida en la licencia (servidor de Imán). "claude"/"openai": tu propia clave.
+    "provider": "iman",
     "anthropic_key": "",
     "openai_key": "",
     "claude_model": "claude-opus-5-5",
@@ -20,6 +21,12 @@ DEFAULTS = {
     "transcriber": "local",
     "whisper_model": "small",
     "language": "es",
+    "license_key": "",
+    "license_instance": "",
+    "license_expires": "",
+    "license_checked": 0,
+    "license_valid": False,
+    "free_reels_used": 0,
 }
 
 
@@ -51,9 +58,12 @@ def save(updates: dict) -> dict:
 
 def public(cfg: dict) -> dict:
     """Versión para enseñar en la web: nunca devuelve las claves."""
-    out = {k: v for k, v in cfg.items() if not k.endswith("_key")}
+    out = {k: v for k, v in cfg.items() if not k.endswith("_key") and not k.startswith("license_")}
     out["has_anthropic_key"] = bool(cfg["anthropic_key"])
     out["has_openai_key"] = bool(cfg["openai_key"])
+    from .license import status
+
+    out["license"] = status(cfg)
     return out
 
 
@@ -64,4 +74,6 @@ def ai_config(cfg: dict) -> AIConfig:
         openai_key=cfg["openai_key"] or None,
         claude_model=cfg["claude_model"],
         openai_model=cfg["openai_model"],
+        license_key=cfg.get("license_key") or None,
+        license_instance=cfg.get("license_instance") or None,
     )
