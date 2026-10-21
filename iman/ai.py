@@ -33,8 +33,44 @@ EDIT_SCHEMA = {
             },
         },
         "emphasis": {"type": "array", "items": {"type": "integer"}},
+        "effects": {
+            "type": "array",
+            "description": "Efectos en pantalla. Úsalos con moderación: 0 a 3 por reel.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string", "enum": ["lista", "palabra"]},
+                    "title": {"type": "string", "description": "lista: título corto opcional, o vacío"},
+                    "items": {
+                        "type": "array",
+                        "description": "lista: de 2 a 5 puntos, cada uno con el índice de la palabra donde se empieza a decir",
+                        "items": {
+                            "type": "object",
+                            "properties": {"text": {"type": "string"}, "at_word": {"type": "integer"}},
+                            "required": ["text", "at_word"],
+                            "additionalProperties": False,
+                        },
+                    },
+                    "until_word": {"type": "integer", "description": "lista: índice de la última palabra del bloque"},
+                    "word": {"type": "integer", "description": "palabra: índice de la palabra que aparece gigante"},
+                    "text": {"type": "string", "description": "palabra: texto a mostrar (1 a 3 palabras)"},
+                },
+                "required": ["type", "title", "items", "until_word", "word", "text"],
+                "additionalProperties": False,
+            },
+        },
+        "zooms": {
+            "type": "array",
+            "description": "Rangos [desde, hasta] de palabras donde acercar la cámara para dar énfasis (0 a 4).",
+            "items": {
+                "type": "object",
+                "properties": {"from": {"type": "integer"}, "to": {"type": "integer"}},
+                "required": ["from", "to"],
+                "additionalProperties": False,
+            },
+        },
     },
-    "required": ["hook_title", "hook_line", "drop", "emphasis"],
+    "required": ["hook_title", "hook_line", "drop", "emphasis", "effects", "zooms"],
     "additionalProperties": False,
 }
 
@@ -50,7 +86,20 @@ Tu trabajo:
    con las palabras del propio creador cuando sea posible. Sin emojis ni comillas.
 3. hook_line: una frase de gancho alternativa por si el creador quiere regrabar el arranque.
 4. emphasis: índices de 3 a 8 palabras clave que conviene resaltar en los subtítulos (cifras, conceptos clave).
+5. effects: solo si aportan.
+   - "lista": cuando el creador enumera pasos o razones ("uno…, dos…, tres…"). Cada punto, en 2 a 5 palabras,
+     con el índice donde empieza a decirlo. Para "lista" deja word en -1 y text vacío.
+   - "palabra": una palabra o cifra clave que salta gigante en pantalla un segundo. Deja title vacío,
+     items vacío y until_word en -1.
+6. zooms: rangos cortos (una frase) donde acercar la cámara para subrayar una idea fuerte.
 Respeta el idioma del vídeo. Sigue las instrucciones del creador si las hay."""
+
+REVISE_SYSTEM = EDIT_SYSTEM + """
+
+Ahora el reel ya está montado y el creador te pide cambios, como a su editor. Recibes el plan actual en JSON.
+Devuelve el plan COMPLETO actualizado: conserva todo lo que no te pide cambiar y aplica solo lo que pide.
+Si pide cambiar el ritmo o el estilo de subtítulos, indícalo en settings (si no, deja los campos vacíos).
+En reply, responde al creador en una frase corta diciendo qué has cambiado."""
 
 
 def transcript_for_prompt(words: list[Word]) -> str:
@@ -117,21 +166,83 @@ def plan_edit(cfg: AIConfig, words: list[Word], instructions: str = "", hook_tem
     if instructions.strip():
         user += f"\n\nINSTRUCCIONES DEL CREADOR:\n{instructions.strip()}"
     data = _ask_json(cfg, EDIT_SYSTEM, user, EDIT_SCHEMA)
-    n = len(words)
+    return _plan_from(data, len(words), cfg.provider)
+
+
+def _plan_from(data: dict, n: int, source: str) -> EditPlan:
     drops, reasons = [], []
     for d in data.get("drop", []):
         a, b = int(d["from"]), int(d["to"])
         if 0 <= a <= b < n and (b - a) < n * 0.5:  # nunca dejar que borre medio vídeo
             drops.append((a, b))
             reasons.append(d.get("reason", ""))
+    effects = []
+    for fx in data.get("effects", []):
+        if fx.get("type") == "lista":
+            items = [it for it in fx.get("items", []) if 0 <= int(it.get("at_word", -1)) < n and it.get("text")]
+            if len(items) >= 2:
+                until = int(fx.get("until_word", -1))
+                effects.append({"type": "lista", "title": fx.get("title", ""), "items": items,
+                                "until_word": until if 0 <= until < n else None})
+        elif fx.get("type") == "palabra" and 0 <= int(fx.get("word", -1)) < n:
+            effects.append({"type": "palabra", "word": int(fx["word"]), "text": fx.get("text", "")})
+    zooms = [(int(z["from"]), int(z["to"])) for z in data.get("zooms", [])
+             if 0 <= int(z["from"]) <= int(z["to"]) < n]
     return EditPlan(
         hook_title=data.get("hook_title", "").strip(),
         hook_line=data.get("hook_line", "").strip(),
         drop=drops,
         drop_reasons=reasons,
         emphasis=[i for i in data.get("emphasis", []) if 0 <= int(i) < n],
-        source=cfg.provider,
+        effects=effects,
+        zooms=zooms,
+        source=source,
     )
+
+
+REVISE_SCHEMA = {
+    **EDIT_SCHEMA,
+    "properties": {
+        **EDIT_SCHEMA["properties"],
+        "settings": {
+            "type": "object",
+            "properties": {
+                "rhythm": {"type": "string", "enum": ["", "rapido", "dinamico", "natural", "sin_tocar"]},
+                "style": {"type": "string", "enum": ["", "impacto", "editorial", "palabra", "neon"]},
+            },
+            "required": ["rhythm", "style"],
+            "additionalProperties": False,
+        },
+        "reply": {"type": "string"},
+    },
+    "required": EDIT_SCHEMA["required"] + ["settings", "reply"],
+}
+
+
+def _plan_to_prompt(plan: EditPlan) -> dict:
+    return {
+        "hook_title": plan.hook_title,
+        "hook_line": plan.hook_line,
+        "drop": [{"from": a, "to": b, "reason": r} for (a, b), r in
+                 zip(plan.drop, plan.drop_reasons + [""] * len(plan.drop))],
+        "emphasis": plan.emphasis,
+        "effects": plan.effects,
+        "zooms": [{"from": a, "to": b} for a, b in plan.zooms],
+    }
+
+
+def revise_plan(cfg: AIConfig, words: list[Word], plan: EditPlan, message: str,
+                rhythm: str, style: str) -> tuple[EditPlan, dict, str]:
+    """Aplica un cambio pedido en lenguaje natural. Devuelve (plan, ajustes, respuesta)."""
+    user = (
+        "TRANSCRIPCIÓN:\n" + transcript_for_prompt(words)
+        + "\n\nPLAN ACTUAL:\n" + json.dumps(_plan_to_prompt(plan), ensure_ascii=False)
+        + f"\n\nAJUSTES ACTUALES: ritmo={rhythm}, estilo={style}"
+        + f"\n\nEL CREADOR PIDE:\n{message.strip()}"
+    )
+    data = _ask_json(cfg, REVISE_SYSTEM, user, REVISE_SCHEMA)
+    settings = {k: v for k, v in (data.get("settings") or {}).items() if v}
+    return _plan_from(data, len(words), cfg.provider), settings, data.get("reply", "").strip()
 
 
 # --- Agente de ideas (paso 0: antes de grabar) ---------------------------------

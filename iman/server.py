@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from . import ai, config, pipeline
 from .captions import STYLES
+from .models import EditPlan, Word
 from .rhythm import RHYTHMS
 
 WEB = Path(__file__).parent / "web"
@@ -122,10 +123,10 @@ async def create_job(
     return JOBS[job_id]
 
 
-def _work(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions) -> None:
+def _work(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions, plan=None) -> None:
     try:
         res = pipeline.run(src, workdir, opts, config.load(),
-                           progress=lambda msg, pct: _set(job_id, step=msg, progress=pct))
+                           progress=lambda msg, pct: _set(job_id, step=msg, progress=pct), plan=plan)
         _set(job_id, status="done", result=res.summary())
     except Exception as e:
         _set(job_id, status="error", error=str(e))
@@ -142,7 +143,45 @@ def reedit(job_id: str, body: dict):
     merged = {**job["options"], **{k: v for k, v in body.items() if k in job["options"]}}
     opts = pipeline.EditOptions(**merged)
     _set(job_id, status="working", step="Aplicando cambios", progress=0.0, options=asdict(opts), error=None)
-    threading.Thread(target=_work, args=(job_id, src, workdir, opts), daemon=True).start()
+    plan_file = workdir / "plan.json"
+    plan = EditPlan.from_dict(json.loads(plan_file.read_text())) if plan_file.exists() else None
+    if plan is not None and "hook_title" in body:
+        plan.hook_title = body["hook_title"]
+    threading.Thread(target=_work, args=(job_id, src, workdir, opts, plan), daemon=True).start()
+    return JOBS[job_id]
+
+
+class ChatIn(BaseModel):
+    message: str
+
+
+@app.post("/api/jobs/{job_id}/chat")
+def chat(job_id: str, body: ChatIn):
+    """"Dímelo como a tu editor": cambios en lenguaje natural sobre el reel ya montado."""
+    job = JOBS.get(job_id)
+    if not job or job["status"] == "working":
+        raise HTTPException(404, "No encuentro ese reel o aún se está editando")
+    aicfg = config.ai_config(config.load())
+    if not aicfg.enabled:
+        raise HTTPException(400, "Conecta Claude o ChatGPT en Ajustes para pedir cambios por chat")
+    workdir = JOBS_DIR / job_id
+    words = [Word(**w) for w in json.loads((workdir / "transcript.json").read_text())]
+    plan = EditPlan.from_dict(json.loads((workdir / "plan.json").read_text()))
+    opts = pipeline.EditOptions(**job["options"])
+    try:
+        new_plan, settings, reply = ai.revise_plan(aicfg, words, plan, body.message, opts.rhythm, opts.style)
+    except Exception as e:
+        raise HTTPException(502, f"La IA no ha podido aplicar el cambio: {e}")
+    if settings.get("rhythm") in RHYTHMS:
+        opts.rhythm = settings["rhythm"]
+    if settings.get("style") in STYLES:
+        opts.style = settings["style"]
+    opts.hook_title = ""  # el gancho lo decide ahora el plan revisado
+    history = job.get("chat", []) + [{"role": "user", "text": body.message}, {"role": "iman", "text": reply}]
+    _set(job_id, status="working", step="Aplicando tus cambios", progress=0.0, options=asdict(opts),
+         error=None, chat=history)
+    src = next(workdir.glob("original.*"))
+    threading.Thread(target=_work, args=(job_id, src, workdir, opts, new_plan), daemon=True).start()
     return JOBS[job_id]
 
 

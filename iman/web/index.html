@@ -104,7 +104,13 @@
           <div id="stats" class="stats"></div>
           <div id="hook-box"></div>
           <details id="cuts-box"><summary>Qué he quitado</summary><div id="cuts"></div></details>
-          <h3>¿Algún cambio?</h3>
+          <h3>Dímelo como a tu editor</h3>
+          <div id="chat" class="chat"></div>
+          <form id="chat-form" class="chat-form">
+            <input id="chat-input" placeholder="Ej.: pon una lista con los 3 pasos y quita la parte del precio" autocomplete="off">
+            <button class="primary" type="submit">Enviar</button>
+          </form>
+          <h3>Cambios rápidos</h3>
           <div class="quick">
             <button data-rhythm="rapido">Más rápido</button>
             <button data-rhythm="natural">Más natural</button>
@@ -113,7 +119,7 @@
             <button data-style="palabra">Palabra a palabra</button>
             <button data-style="neon">Estilo Neón</button>
           </div>
-          <form id="reedit-form" class="stack">
+          <form id="reedit-form" class="chat-form">
             <input id="new-hook" placeholder="Cambiar el gancho por…">
             <button class="ghost" type="submit">Aplicar</button>
           </form>

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import ai, media
+from . import ai, effects, media
 from .config import ai_config
 from .captions import STYLES, build_ass
 from .models import EditPlan, Word
@@ -26,6 +26,8 @@ class EditOptions:
     instructions: str = ""
     captions: bool = True
     voice: bool = True  # limpiar y nivelar la voz
+    auto_zoom: bool = True  # alternar plano normal y cerrado en cada corte
+    effects: bool = True  # lista animada, palabra gigante y zoom de énfasis
 
 
 @dataclass
@@ -58,6 +60,7 @@ def run(
     cfg: dict,
     progress: Progress = lambda msg, pct: None,
     words: list[Word] | None = None,
+    plan: EditPlan | None = None,
 ) -> EditResult:
     workdir.mkdir(parents=True, exist_ok=True)
     progress("Preparando tu vídeo", 0.03)
@@ -81,18 +84,25 @@ def run(
 
     progress("Buscando fallos y el mejor gancho", 0.40)
     aicfg = ai_config(cfg)
-    plan = EditPlan()
-    if aicfg.enabled and words:
+    if plan is not None:
+        pass  # plan ya decidido (p. ej. tras un cambio pedido por chat)
+    elif aicfg.enabled and words:
+        plan = EditPlan()
         try:
             plan = ai.plan_edit(aicfg, words, opts.instructions, opts.hook_template)
         except Exception as e:  # la IA es un extra: si falla, seguimos
             plan.drop_reasons.append(f"IA no disponible: {e}")
+    else:
+        plan = EditPlan()
     if opts.hook_title:
         plan.hook_title = opts.hook_title
 
     progress("Cortando silencios y tomas falsas", 0.55)
     rhythm = RHYTHMS[opts.rhythm]
     spans, drops = keep_spans(words, info.duration, rhythm, plan.drop)
+    zooms_wanted = plan.zooms if opts.effects else []
+    spans = effects.split_spans(spans, words, zooms_wanted)
+    zoom = effects.zoom_flags(spans, words, zooms_wanted, opts.auto_zoom and rhythm.cut)
     kept, kept_idx = remap_words(words, spans, drops)
     out_duration = sum(s.duration for s in spans)
     if not plan.hook_title and kept:
@@ -103,19 +113,26 @@ def run(
     if opts.captions or opts.hook:
         style = STYLES[opts.style]
         emphasis_out = {j for j, i in enumerate(kept_idx) if i in set(plan.emphasis)}
+        fx_lines, fx_windows = ([], [])
+        if opts.effects:
+            fx_lines, fx_windows = effects.build_effects(
+                plan.effects, effects.WordClock(kept, kept_idx), style, out_duration
+            )
         ass = build_ass(
             kept if opts.captions else [], style, out_duration,
             plan.hook_title if opts.hook else "", emphasis_out,
+            extra_events=fx_lines, hide=fx_windows,
         )
         ass_path = workdir / "subs.ass"
         ass_path.write_text(ass, encoding="utf-8")
 
     progress("Montando tu reel", 0.65)
     out = workdir / "reel.mp4"
-    media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice)
+    media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice, zoom)
     media.thumbnail(out, workdir / "reel.jpg", min(0.6, out_duration / 2))
     progress("Listo", 1.0)
     return EditResult(
         video=out, plan=plan, duration_in=info.duration, duration_out=out_duration,
-        removed_words=[words[i].text for i in sorted(drops)], cuts=max(0, len(spans) - 1),
+        removed_words=[words[i].text for i in sorted(drops)],
+        cuts=sum(1 for a, b in zip(spans, spans[1:]) if abs(a.end - b.start) > 1e-3),
     )

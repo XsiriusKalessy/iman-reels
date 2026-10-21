@@ -65,6 +65,8 @@ VOICE_CHAIN = (
     "acompressor=threshold=-20dB:ratio=3:attack=8:release=120:makeup=2"
 )
 
+ZOOM = 1.15  # plano cerrado: un 15 % más de cerca
+
 SIZES = {"1080": (1080, 1920), "4k": (2160, 3840)}
 
 
@@ -76,17 +78,27 @@ def _filter_path(p: Path) -> str:
 def build_filtergraph(
     spans: list[Span], info: MediaInfo, ass_path: Path | None, size: str = "1080", fit: str = "recortar",
     voice: bool = True,
+    zooms: list[bool] | None = None,
 ) -> str:
     W, H = SIZES[size]
+    zooms = zooms or [False] * len(spans)
+    w0, h0 = info.width - info.width % 2, info.height - info.height % 2
     parts = []
     labels = []
     for i, sp in enumerate(spans):
         d = sp.duration
         fade = min(0.012, d / 4)
-        parts.append(f"[0:v]trim=start={sp.start:.3f}:end={sp.end:.3f},setpts=PTS-STARTPTS[v{i}]")
+        zoom = f",crop=iw/{ZOOM}:ih/{ZOOM},scale={w0}:{h0}" if zooms[i] else ""
+        parts.append(f"[0:v]trim=start={sp.start:.3f}:end={sp.end:.3f},setpts=PTS-STARTPTS{zoom},setsar=1[v{i}]")
+        # Microfundidos solo en los cortes de verdad, no donde un tramo sigue al anterior.
+        fades = []
+        if i == 0 or abs(spans[i - 1].end - sp.start) > 1e-3:
+            fades.append(f"afade=t=in:d={fade:.3f}")
+        if i == len(spans) - 1 or abs(spans[i + 1].start - sp.end) > 1e-3:
+            fades.append(f"afade=t=out:st={d - fade:.3f}:d={fade:.3f}")
+        afx = "".join("," + f for f in fades)
         parts.append(
-            f"[0:a]atrim=start={sp.start:.3f}:end={sp.end:.3f},asetpts=PTS-STARTPTS,"
-            f"afade=t=in:d={fade:.3f},afade=t=out:st={d - fade:.3f}:d={fade:.3f}[a{i}]"
+            f"[0:a]atrim=start={sp.start:.3f}:end={sp.end:.3f},asetpts=PTS-STARTPTS{afx}[a{i}]"
         )
         labels.append(f"[v{i}][a{i}]")
     parts.append(f"{''.join(labels)}concat=n={len(spans)}:v=1:a=1[vc][ac]")
@@ -128,9 +140,10 @@ def render(
     size: str = "1080",
     fit: str = "recortar",
     voice: bool = True,
+    zooms: list[bool] | None = None,
     preset: str = "medium",
 ) -> Path:
-    graph = build_filtergraph(spans, info, ass_path, size, fit, voice)
+    graph = build_filtergraph(spans, info, ass_path, size, fit, voice, zooms)
     script = dst.with_suffix(".filters.txt")
     script.write_text(graph)
     cmd = [

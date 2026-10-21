@@ -96,9 +96,28 @@ def build_ass(
     hook_title: str = "",
     emphasis: set[int] | None = None,
     hook_seconds: float = 2.8,
+    extra_events: list[str] | None = None,
+    hide: list | None = None,
 ) -> str:
     """`words` ya están en la línea de tiempo del reel. `emphasis` son índices de `words`."""
     emphasis = emphasis or set()
+    hide = hide or []
+
+    def visible(a: float, b: float) -> list[tuple[float, float]]:
+        """Recorta [a, b) quitando los tramos en los que hay un efecto a pantalla completa."""
+        parts = [(a, b)]
+        for win in hide:
+            nxt = []
+            for x, y in parts:
+                if win.end <= x or win.start >= y:
+                    nxt.append((x, y))
+                    continue
+                if x < win.start:
+                    nxt.append((x, win.start))
+                if win.end < y:
+                    nxt.append((win.end, y))
+            parts = nxt
+        return [(x, y) for x, y in parts if y - x > 0.03]
     lines = [
         "[Script Info]",
         "ScriptType: v4.00+",
@@ -124,6 +143,10 @@ def build_ass(
     hook_end = 0.0
     if hook_title:
         hook_end = min(hook_seconds, duration)
+        # Si un efecto a pantalla completa empieza pronto, el gancho le deja sitio.
+        for win in hide:
+            if 0.8 < win.start < hook_end:
+                hook_end = win.start
         title = _esc(hook_title.upper() if style.uppercase else hook_title)
         anim = r"{\pos(540,560)\fad(120,200)\fscx70\fscy70\t(0,180,\fscx104\fscy104)\t(180,260,\fscx100\fscy100)}"
         lines.append(f"Dialogue: 2,{_ts(0)},{_ts(hook_end)},Hook,,0,0,0,,{anim}{title}")
@@ -157,7 +180,9 @@ def build_ass(
                     parts.append(txt)
             pop = r"\fscx82\fscy82\t(0,110,\fscx100\fscy100)" if pos == 0 else ""
             y = style.y
-            lines.append(
-                f"Dialogue: 1,{_ts(seg_start)},{_ts(seg_end)},Sub,,0,0,0,,{{\\pos(540,{y}){pop}}}" + " ".join(parts)
-            )
+            for a, b in visible(seg_start, seg_end):
+                lines.append(
+                    f"Dialogue: 1,{_ts(a)},{_ts(b)},Sub,,0,0,0,,{{\\pos(540,{y}){pop}}}" + " ".join(parts)
+                )
+    lines += extra_events or []
     return "\n".join(lines) + "\n"

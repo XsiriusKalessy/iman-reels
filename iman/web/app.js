@@ -137,7 +137,28 @@ function poll() {
   }, 900);
 }
 function fmt(s) { return `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`; }
+function renderChat(j) {
+  $("#chat").innerHTML = (j.chat || []).map(m => `<div class="msg ${m.role === "user" ? "user" : "iman"}">${esc(m.text)}</div>`).join("");
+  $("#chat").scrollTop = 1e6;
+}
+$("#chat-form").onsubmit = async e => {
+  e.preventDefault();
+  const input = $("#chat-input"), msg = input.value.trim();
+  if (!msg || !state.job || state.job.status === "working") return;
+  input.value = "";
+  renderChat({ chat: [...(state.job.chat || []), { role: "user", text: msg }] });
+  showWorking("Pensando el cambio", 0.02);
+  try {
+    state.job = await api(`/api/jobs/${state.job.id}/chat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: msg }) });
+    renderChat(state.job);
+    poll();
+  } catch (err) {
+    renderChat({ chat: [...(state.job.chat || []), { role: "user", text: msg }, { role: "iman", text: err.message }] });
+    if (state.job.result) showResult(state.job); else showError(err.message);
+  }
+};
 function showResult(j) {
+  renderChat(j);
   const r = j.result, bust = `?t=${Date.now()}`;
   const v = $("#out");
   v.src = `/api/jobs/${j.id}/reel.mp4${bust}`; v.hidden = false; $("#working").hidden = true;

@@ -63,3 +63,42 @@ def test_web_api_flow(sample, tmp_path, monkeypatch):
     assert job["status"] == "done", job
     assert c.get(f"/api/jobs/{job['id']}/reel.mp4").status_code == 200
     assert json.loads((tmp_path / "jobs" / job["id"] / "plan.json").read_text())["hook_title"]
+
+
+def test_chat_applies_revised_plan(sample, tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from iman import ai, config, server
+    from iman.models import EditPlan
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    real_run = pipeline.run
+    monkeypatch.setattr(pipeline, "run", lambda *a, **k: real_run(*a, **{**k, "words": k.get("words") or TAKE}))
+
+    c = TestClient(server.app)
+    with sample.open("rb") as f:
+        job = c.post("/api/jobs", files={"video": ("toma.mp4", f, "video/mp4")}).json()
+
+    def wait(jid):
+        for _ in range(120):
+            j = c.get(f"/api/jobs/{jid}").json()
+            if j["status"] != "working":
+                return j
+            time.sleep(0.5)
+
+    assert wait(job["id"])["status"] == "done"
+    # Sin IA conectada, el chat lo explica en vez de fallar en silencio.
+    assert c.post(f"/api/jobs/{job['id']}/chat", json={"message": "hola"}).status_code == 400
+    (tmp_path / "jobs" / job["id"] / "transcript.json").write_text(json.dumps([w.__dict__ for w in TAKE]))
+
+    c.post("/api/settings", json={"provider": "claude", "anthropic_key": "sk-test"})
+    revised = EditPlan(hook_title="Nuevo gancho", effects=[{"type": "palabra", "word": 18, "text": "GRATIS"}], zooms=[(12, 15)])
+    monkeypatch.setattr(ai, "revise_plan", lambda *a: (revised, {"style": "neon"}, "Hecho: gancho nuevo y estilo neón."))
+    j = c.post(f"/api/jobs/{job['id']}/chat", json={"message": "cambia el gancho y ponlo en neón"}).json()
+    assert j["chat"][-1]["text"].startswith("Hecho")
+    j = wait(job["id"])
+    assert j["status"] == "done", j
+    assert j["options"]["style"] == "neon"
+    assert j["result"]["plan"]["hook_title"] == "Nuevo gancho"
