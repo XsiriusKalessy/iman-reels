@@ -63,7 +63,7 @@ def run(
     progress("Preparando tu vídeo", 0.03)
     info = media.probe(src)
     if not info.has_audio:
-        raise ValueError("El vídeo no tiene audio: Reelia necesita oírte para editar")
+        raise ValueError("El vídeo no tiene audio: Imán necesita oírte para editar")
 
     transcript_file = workdir / "transcript.json"
     if words is None and transcript_file.exists():

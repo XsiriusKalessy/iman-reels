@@ -1,4 +1,4 @@
-"""Ajustes locales (proveedor de IA y claves) en ~/.reelia/config.json."""
+"""Ajustes locales (proveedor de IA y claves) en ~/.iman/config.json."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .ai import AIConfig
 
-HOME = Path(os.environ.get("REELIA_HOME", Path.home() / ".reelia"))
+HOME = Path(os.environ.get("IMAN_HOME", Path.home() / ".iman"))
 CONFIG_FILE = HOME / "config.json"
 
 DEFAULTS = {

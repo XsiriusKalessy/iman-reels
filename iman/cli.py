@@ -1,7 +1,7 @@
 """Línea de comandos.
 
-  reelia web                         abre la app en el navegador
-  reelia editar video.mp4 [opciones] edita un vídeo sin abrir la web
+  iman web                         abre la app en el navegador
+  iman editar video.mp4 [opciones] edita un vídeo sin abrir la web
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from .rhythm import RHYTHMS
 
 
 def main(argv: list[str] | None = None) -> None:
-    p = argparse.ArgumentParser(prog="reelia", description="Edita tus reels con IA")
+    p = argparse.ArgumentParser(prog="iman", description="Edita tus reels con IA")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     w = sub.add_parser("web", help="Abre la app web local")
@@ -44,7 +44,7 @@ def main(argv: list[str] | None = None) -> None:
 
         if not args.no_abrir:
             webbrowser.open(f"http://localhost:{args.port}")
-        uvicorn.run("reelia.server:app", host="127.0.0.1", port=args.port)
+        uvicorn.run("iman.server:app", host="127.0.0.1", port=args.port)
         return
 
     words = None

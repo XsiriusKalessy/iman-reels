@@ -1,7 +1,7 @@
 """El "editor" con IA: decide gancho, tomas falsas y palabras a destacar.
 
 Funciona con Claude o con ChatGPT (cada uno con tu propia clave). Si no hay
-clave, Reelia sigue funcionando con heurísticas locales.
+clave, Imán sigue funcionando con heurísticas locales.
 """
 
 from __future__ import annotations

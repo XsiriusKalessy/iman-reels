@@ -1,6 +1,6 @@
-# Reelia
+# Imán
 
-Edita tus reels con IA. Subes una toma en bruto grabada con el móvil y Reelia te devuelve un reel vertical listo para publicar:
+Edita tus reels con IA. Subes una toma en bruto grabada con el móvil y Imán te devuelve un reel vertical listo para publicar:
 
 - **Quita los fallos**: silencios, muletillas ("eh", "em") y tomas falsas (frases que empiezas y repites).
 - **Ritmo a elegir**: Rápido (recomendado), Dinámico, Natural o Sin tocar.
@@ -17,8 +17,8 @@ Edita tus reels con IA. Subes una toma en bruto grabada con el móvil y Reelia t
 Necesitas Python 3.10+ y [ffmpeg](https://ffmpeg.org/download.html).
 
 ```bash
-git clone https://github.com/XsiriusKalessy/reelia.git
-cd reelia
+git clone https://github.com/XsiriusKalessy/iman-reels.git
+cd iman-reels
 python -m venv .venv && source .venv/bin/activate   # en Windows: .venv\Scripts\activate
 pip install -e .
 ```
@@ -26,15 +26,15 @@ pip install -e .
 ## Usar
 
 ```bash
-reelia web
+iman web
 ```
 
-Se abre http://localhost:8765. En **Ajustes** eliges Claude o ChatGPT y pegas tu clave (se guarda solo en tu ordenador, en `~/.reelia/config.json`). La primera vez que edites se descarga el modelo de transcripción (unos 500 MB).
+Se abre http://localhost:8765. En **Ajustes** eliges Claude o ChatGPT y pegas tu clave (se guarda solo en tu ordenador, en `~/.iman/config.json`). La primera vez que edites se descarga el modelo de transcripción (unos 500 MB).
 
 También desde la terminal:
 
 ```bash
-reelia editar toma.mp4 --ritmo rapido --estilo editorial --instrucciones "resalta los números"
+iman editar toma.mp4 --ritmo rapido --estilo editorial --instrucciones "resalta los números"
 ```
 
 Las claves también se pueden pasar con `ANTHROPIC_API_KEY` u `OPENAI_API_KEY`.
@@ -58,4 +58,4 @@ Las claves también se pueden pasar con `ANTHROPIC_API_KEY` u `OPENAI_API_KEY`.
 pip install -e ".[dev]" && pytest
 ```
 
-Las fuentes de `reelia/assets/fonts` son de Google Fonts, con licencia SIL OFL 1.1 (ver los `OFL-*.txt`).
+Las fuentes de `iman/assets/fonts` son de Google Fonts, con licencia SIL OFL 1.1 (ver los `OFL-*.txt`).

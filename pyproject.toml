@@ -1,5 +1,5 @@
 [project]
-name = "reelia"
+name = "iman-reels"
 version = "0.1.0"
 description = "Edita tus reels con IA: quita fallos, pone subtítulos y gancho, y exporta en vertical."
 readme = "README.md"
@@ -17,14 +17,14 @@ dependencies = [
 dev = ["pytest>=8", "httpx>=0.27"]
 
 [project.scripts]
-reelia = "reelia.cli:main"
+iman = "iman.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["reelia*"]
+include = ["iman*"]
 
 [tool.setuptools.package-data]
-reelia = ["web/*", "assets/fonts/*"]
+iman = ["web/*", "assets/fonts/*"]

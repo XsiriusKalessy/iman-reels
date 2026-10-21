@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from reelia import media, pipeline
+from iman import media, pipeline
 
 from .test_core import TAKE
 
@@ -38,7 +38,7 @@ def test_pipeline_renders_vertical_reel(sample, tmp_path):
 def test_web_api_flow(sample, tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 
-    from reelia import config, server
+    from iman import config, server
 
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
     monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")

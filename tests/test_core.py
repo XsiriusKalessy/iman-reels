@@ -1,7 +1,7 @@
-from reelia import ai
-from reelia.captions import STYLES, build_ass, group_words
-from reelia.models import Word
-from reelia.rhythm import RHYTHMS, TimeMap, detect_retakes, is_filler, keep_spans, remap_words
+from iman import ai
+from iman.captions import STYLES, build_ass, group_words
+from iman.models import Word
+from iman.rhythm import RHYTHMS, TimeMap, detect_retakes, is_filler, keep_spans, remap_words
 
 
 def W(spec):

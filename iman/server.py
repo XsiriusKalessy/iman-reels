@@ -1,4 +1,4 @@
-"""Servidor web local: `reelia web` y abre http://localhost:8765"""
+"""Servidor web local: `iman web` y abre http://localhost:8765"""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from .rhythm import RHYTHMS
 WEB = Path(__file__).parent / "web"
 JOBS_DIR = config.HOME / "jobs"
 
-app = FastAPI(title="Reelia")
+app = FastAPI(title="Imán")
 JOBS: dict[str, dict] = {}
 _lock = threading.Lock()
 
