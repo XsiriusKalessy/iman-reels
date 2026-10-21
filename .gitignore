@@ -1,0 +1,8 @@
+__pycache__/
+*.egg-info/
+.venv/
+*_trabajo/
+*.mp4
+*.mov
+!tests/fixtures/*.mp4
+.pytest_cache/

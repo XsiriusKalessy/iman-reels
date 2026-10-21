@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reelia</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23c8ff3d'/><path d='M12 9l11 7-11 7z' fill='%23111'/></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="logo">▶</span> Reelia <small>beta</small></div>
+    <nav class="steps" id="steps">
+      <button data-step="idea"><b>0</b> Idea</button>
+      <button data-step="upload"><b>1</b> Sube tu vídeo</button>
+      <button data-step="edit"><b>2</b> Cómo lo editas</button>
+      <button data-step="result"><b>3</b> Tu reel</button>
+    </nav>
+    <button class="ghost" id="open-settings">Ajustes</button>
+  </header>
+
+  <main>
+    <!-- 0. IDEA -->
+    <section class="panel" data-panel="idea">
+      <h1>¿Sobre qué grabas hoy?</h1>
+      <p class="lead">El agente de ideas te da el gancho y un guion corto con tus palabras. Grábalo de una toma, con el móvil apoyado y luz natural. Es opcional: si ya lo tienes grabado, <a href="#" data-goto="upload">sáltate este paso</a>.</p>
+      <form id="idea-form" class="stack">
+        <label>Tema<input name="topic" required placeholder="Ej.: cómo conseguir tus primeros clientes como fisio"></label>
+        <label>Para quién<input name="audience" placeholder="Ej.: fisios que empiezan por su cuenta"></label>
+        <button class="primary" type="submit">Dame 3 ideas</button>
+      </form>
+      <div id="ideas" class="cards"></div>
+    </section>
+
+    <!-- 1. UPLOAD -->
+    <section class="panel" data-panel="upload">
+      <h1>Sube tu vídeo</h1>
+      <p class="lead">Una toma en bruto, en vertical u horizontal. Reelia quita los fallos, pone los subtítulos y el gancho.</p>
+      <label class="drop" id="drop">
+        <input type="file" id="file" accept="video/*" hidden>
+        <div class="drop-inner">
+          <div class="drop-icon">⬆</div>
+          <strong>Arrastra tu vídeo aquí</strong>
+          <span>o pulsa para elegirlo · MP4, MOV</span>
+        </div>
+        <video id="preview" muted playsinline hidden></video>
+      </label>
+      <div class="row end"><button class="primary" id="to-edit" disabled>Siguiente: cómo lo editas →</button></div>
+    </section>
+
+    <!-- 2. EDIT -->
+    <section class="panel" data-panel="edit">
+      <h1>Cómo lo editas</h1>
+      <div class="grid2">
+        <div>
+          <h3>Ritmo</h3>
+          <div id="rhythms" class="choices"></div>
+          <h3>Estilo de subtítulos</h3>
+          <div id="styles" class="choices inline"></div>
+          <h3>Encuadre</h3>
+          <div class="choices inline">
+            <label class="choice"><input type="radio" name="fit" value="recortar" checked><span>Recortar a vertical</span></label>
+            <label class="choice"><input type="radio" name="fit" value="fondo"><span>Fondo desenfocado</span></label>
+          </div>
+          <h3>Sonido</h3>
+          <label class="check"><input type="checkbox" id="voice" checked> Mejorar la voz (menos ruido, volumen estable)</label>
+          <h3>Calidad</h3>
+          <div class="choices inline">
+            <label class="choice"><input type="radio" name="size" value="1080" checked><span>1080 × 1920</span></label>
+            <label class="choice"><input type="radio" name="size" value="4k"><span>4K</span></label>
+          </div>
+        </div>
+        <div>
+          <h3>Gancho</h3>
+          <label class="check"><input type="checkbox" id="hook" checked> Poner título de gancho al principio</label>
+          <input id="hook-title" placeholder="Escríbelo tú, o deja que lo proponga la IA">
+          <select id="hook-template"><option value="">Plantilla de gancho (opcional)</option></select>
+          <h3>Dímelo como a tu editor</h3>
+          <textarea id="instructions" rows="5" placeholder="Ej.: quita la parte en la que me equivoco con el precio y resalta «gratis»"></textarea>
+          <p class="hint" id="ai-hint"></p>
+        </div>
+      </div>
+      <div class="row between">
+        <button class="ghost" data-goto="upload">← Cambiar vídeo</button>
+        <button class="primary" id="go">Hazlo tú, Reelia ✦</button>
+      </div>
+    </section>
+
+    <!-- 3. RESULT -->
+    <section class="panel" data-panel="result">
+      <div class="result">
+        <div class="phone">
+          <video id="out" controls playsinline hidden></video>
+          <div id="working" class="working">
+            <div class="spinner"></div>
+            <strong id="step">Preparando tu vídeo</strong>
+            <div class="bar"><i id="bar"></i></div>
+            <span class="hint">Puedes hacer otra cosa mientras tanto.</span>
+          </div>
+        </div>
+        <div class="side">
+          <h1>Tu reel</h1>
+          <div id="stats" class="stats"></div>
+          <div id="hook-box"></div>
+          <details id="cuts-box"><summary>Qué he quitado</summary><div id="cuts"></div></details>
+          <h3>¿Algún cambio?</h3>
+          <div class="quick">
+            <button data-rhythm="rapido">Más rápido</button>
+            <button data-rhythm="natural">Más natural</button>
+            <button data-style="impacto">Estilo Impacto</button>
+            <button data-style="editorial">Estilo Editorial</button>
+            <button data-style="palabra">Palabra a palabra</button>
+            <button data-style="neon">Estilo Neón</button>
+          </div>
+          <form id="reedit-form" class="stack">
+            <input id="new-hook" placeholder="Cambiar el gancho por…">
+            <button class="ghost" type="submit">Aplicar</button>
+          </form>
+          <div class="row">
+            <a class="primary" id="download" href="#" download>Descargar reel</a>
+            <button class="ghost" data-goto="upload">Editar un nuevo reel</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="settings">
+    <form method="dialog" id="settings-form" class="stack">
+      <h2>Ajustes</h2>
+      <p class="hint">Reelia usa tu propia cuenta de IA. Las claves se guardan solo en este ordenador.</p>
+      <h3>IA que edita</h3>
+      <div class="choices inline">
+        <label class="choice"><input type="radio" name="provider" value="claude"><span>Claude</span></label>
+        <label class="choice"><input type="radio" name="provider" value="openai"><span>ChatGPT</span></label>
+        <label class="choice"><input type="radio" name="provider" value="none"><span>Sin IA</span></label>
+      </div>
+      <label>Clave de Anthropic (Claude)<input name="anthropic_key" type="password" placeholder="sk-ant-…" autocomplete="off"></label>
+      <label>Clave de OpenAI (ChatGPT)<input name="openai_key" type="password" placeholder="sk-…" autocomplete="off"></label>
+      <h3>Transcripción</h3>
+      <div class="choices inline">
+        <label class="choice"><input type="radio" name="transcriber" value="local"><span>En mi ordenador (gratis)</span></label>
+        <label class="choice"><input type="radio" name="transcriber" value="openai"><span>OpenAI Whisper</span></label>
+      </div>
+      <label>Idioma del vídeo<select name="language"><option value="es">Español</option><option value="en">Inglés</option><option value="pt">Portugués</option><option value="">Detectar</option></select></label>
+      <div class="row end"><button class="ghost" value="cancel">Cerrar</button><button class="primary" id="save-settings" value="default">Guardar</button></div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
