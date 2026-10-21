@@ -1,0 +1,295 @@
+<title>Marca Imán</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Figtree:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: libro de marca en una columna ancha; cada sección es una "lámina" con su etiqueta a la izquierda. */
+:root {
+  --norte: #E63A2E;      /* polo norte, rojo */
+  --sur: #2B59E6;        /* polo sur, azul */
+  --grafito: #141518;
+  --limadura: #6E7178;   /* gris de limadura de hierro */
+  --papel: #F7F7F5;
+  --bg: #F7F7F5;
+  --fg: #141518;
+  --muted: #5E6168;
+  --line: #DCDDE0;
+  --card: #FFFFFF;
+  --logo-body: #141518;
+  --logo-n: #E63A2E;
+  --logo-s: #2B59E6;
+  --display: "Bricolage Grotesque", "Arial Black", system-ui, sans-serif;
+  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111215; --fg: #F2F2EF; --muted: #A2A5AC; --line: #2A2C31; --card: #1A1B1F;
+    --logo-body: #F2F2EF; --logo-n: #FF5547; --logo-s: #5B80FF; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111215; --fg: #F2F2EF; --muted: #A2A5AC; --line: #2A2C31; --card: #1A1B1F;
+  --logo-body: #F2F2EF; --logo-n: #FF5547; --logo-s: #5B80FF; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 17px/1.6 var(--body); }
+.wrap { max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 96px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+h2 { font-size: clamp(28px, 4vw, 40px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
+h3 { font-size: 20px; font-weight: 800; }
+p { margin: 0; max-width: 62ch; }
+.mono { font-family: var(--mono); font-size: 13px; letter-spacing: .02em; }
+.muted { color: var(--muted); }
+
+/* Portada */
+.hero { display: grid; grid-template-columns: auto 1fr; gap: 40px; align-items: center; padding-block: 72px 56px; border-bottom: 1px solid var(--line); }
+.hero svg { width: clamp(120px, 20vw, 200px); height: auto; }
+.hero h1 { font-size: clamp(72px, 13vw, 168px); font-weight: 800; letter-spacing: -0.045em; line-height: .85; }
+.hero .claim { font-family: var(--display); font-weight: 500; font-size: clamp(22px, 3vw, 32px); margin-top: 14px; }
+.field { display: flex; gap: 6px; margin-top: 18px; align-items: center; }
+.field i { display: block; height: 3px; border-radius: 2px; background: var(--limadura); opacity: .5; }
+
+section { display: grid; grid-template-columns: 180px 1fr; gap: 32px; padding-block: 56px; border-bottom: 1px solid var(--line); }
+section > .label { padding-top: 10px; }
+section > .label .mono { color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+.content { display: grid; gap: 24px; min-width: 0; }
+@media (max-width: 760px) {
+  .hero { grid-template-columns: 1fr; gap: 20px; padding-block: 40px 32px; }
+  section { grid-template-columns: 1fr; gap: 12px; padding-block: 40px; }
+}
+
+/* Posicionamiento */
+.pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.pillars div { border-top: 3px solid var(--fg); padding-top: 12px; display: grid; gap: 6px; }
+.pillars div:nth-child(1) { border-color: var(--norte); }
+.pillars div:nth-child(3) { border-color: var(--sur); }
+@media (max-width: 760px) { .pillars { grid-template-columns: 1fr; } }
+
+/* Logo */
+.logos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.tile { border-radius: 10px; aspect-ratio: 1; max-width: 100%; display: grid; place-items: center; position: relative; }
+.tile svg { width: 52%; }
+.tile .mono { position: absolute; left: 12px; bottom: 10px; }
+.t-light { background: #FFFFFF; border: 1px solid var(--line); color: #5E6168; }
+.t-dark { background: #141518; color: #A2A5AC; }
+.t-red { background: #E63A2E; color: #FFFFFF; }
+.t-app { background: var(--card); border: 1px solid var(--line); color: var(--muted); }
+.appicon { width: 46%; aspect-ratio: 1; border-radius: 22%; background: #141518; display: grid; place-items: center; }
+.appicon svg { width: 66%; }
+.lockup { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.lockup svg { width: 56px; }
+.lockup b { font-family: var(--display); font-weight: 800; font-size: 44px; letter-spacing: -0.04em; }
+@media (max-width: 760px) { .logos { grid-template-columns: repeat(2, 1fr); } }
+.rules { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.rules ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
+@media (max-width: 760px) { .rules { grid-template-columns: 1fr; } }
+
+/* Color */
+.swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.sw { display: grid; gap: 8px; min-width: 0; }
+.sw .chip { aspect-ratio: 4/5; border-radius: 10px; border: 1px solid var(--line); max-width: 100%; }
+.sw b { font-size: 15px; }
+.sw span { color: var(--muted); font-size: 14px; }
+@media (max-width: 760px) { .swatches { grid-template-columns: repeat(2, 1fr); } }
+.ratio { display: flex; height: 18px; border-radius: 99px; overflow: hidden; }
+.ratio i { display: block; height: 100%; }
+
+/* Tipografía */
+.type { display: grid; gap: 20px; }
+.specimen { display: grid; grid-template-columns: 160px 1fr; gap: 20px; align-items: baseline; border-top: 1px solid var(--line); padding-top: 16px; }
+.specimen .big { font-family: var(--display); font-weight: 800; font-size: clamp(36px, 6vw, 64px); letter-spacing: -0.03em; line-height: 1; }
+.specimen .bodyspec { font-size: 19px; }
+@media (max-width: 760px) { .specimen { grid-template-columns: 1fr; gap: 6px; } }
+
+/* Voz */
+.voice { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.voice div { display: grid; gap: 6px; }
+.pairs { display: grid; gap: 10px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pair p { padding: 12px 14px; border-radius: 8px; font-size: 15.5px; max-width: none; }
+.pair .no { background: color-mix(in srgb, var(--limadura) 14%, transparent); color: var(--muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--norte) 70%, transparent); }
+.pair .si { background: var(--card); border: 1px solid var(--line); }
+@media (max-width: 760px) { .voice, .pair { grid-template-columns: 1fr; } }
+
+/* Mensajes */
+.claims { display: grid; gap: 14px; }
+.claims p { font-family: var(--display); font-weight: 800; font-size: clamp(24px, 3.4vw, 34px); letter-spacing: -0.02em; line-height: 1.15; max-width: none; }
+.claims p small { display: block; font-family: var(--body); font-weight: 500; font-size: 14px; color: var(--muted); letter-spacing: 0; margin-top: 4px; }
+
+/* Aplicaciones */
+.apps { display: grid; grid-template-columns: 260px 1fr; gap: 32px; align-items: start; }
+.phone { aspect-ratio: 9/16; max-width: 100%; border-radius: 26px; background: linear-gradient(160deg, #3a3d44, #1b1c20 60%, #0e0f11); position: relative; overflow: hidden; border: 1px solid var(--line); }
+.phone .person { position: absolute; left: 50%; bottom: -8%; width: 70%; aspect-ratio: 3/4; transform: translateX(-50%); border-radius: 50% 50% 0 0; background: radial-gradient(circle at 50% 22%, #6a6d74 0 16%, transparent 16.5%), radial-gradient(ellipse at 50% 100%, #4a4d55 0 60%, transparent 61%); }
+.phone .hook { position: absolute; top: 18%; left: 8%; right: 8%; background: #141518; color: #F7F7F5; font-family: var(--display); font-weight: 800; font-size: 19px; line-height: 1.1; padding: 10px 12px; text-align: center; letter-spacing: -0.01em; }
+.phone .hook em { font-style: normal; color: #FF5547; }
+.phone .sub { position: absolute; top: 66%; left: 0; right: 0; text-align: center; font-family: var(--display); font-weight: 800; font-size: 24px; color: #fff; text-shadow: 0 2px 0 #000, 0 0 6px #000; letter-spacing: -0.01em; }
+.phone .sub b { color: #FF5547; }
+.phone .mark { position: absolute; right: 10px; bottom: 10px; width: 22px; opacity: .85; }
+.uiset { display: grid; gap: 16px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; border-radius: 99px; padding: 12px 20px; font-weight: 700; background: var(--norte); color: #fff; width: fit-content; }
+.btn.alt { background: transparent; color: var(--fg); border: 1.5px solid var(--fg); }
+.btns { display: flex; gap: 12px; flex-wrap: wrap; }
+.bio { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--card); display: grid; gap: 4px; max-width: 420px; }
+.bio b { font-family: var(--display); font-size: 18px; }
+@media (max-width: 760px) { .apps { grid-template-columns: 1fr; } .phone { max-width: 260px; } }
+
+/* Registro */
+.steps { display: grid; gap: 12px; counter-reset: s; }
+.step { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; }
+.step::before { counter-increment: s; content: counter(s); font-family: var(--mono); font-size: 13px; width: 28px; height: 28px; border-radius: 99px; border: 1.5px solid var(--fg); display: grid; place-items: center; }
+.step p { max-width: 70ch; }
+.table { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 15px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 500; }
+a { color: var(--sur); }
+:root[data-theme="dark"] a { color: #8FA8FF; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) a { color: #8FA8FF; } }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="logo" viewBox="0 0 80 80">
+      <path d="M18 14 V40 a22 22 0 0 0 44 0 V14" fill="none" stroke="var(--c-body, #141518)" stroke-width="14"/>
+      <rect x="11" y="8" width="14" height="12" fill="var(--c-n, #E63A2E)"/>
+      <rect x="55" y="8" width="14" height="12" fill="var(--c-s, #2B59E6)"/>
+      <path d="M33 30 L50 40 L33 50 Z" fill="var(--c-body, #141518)"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <header class="hero">
+    <svg viewBox="0 0 80 80" style="--c-body: var(--logo-body); --c-n: var(--logo-n); --c-s: var(--logo-s)" role="img" aria-label="Logotipo de Imán"><use href="#logo"/></svg>
+    <div>
+      <h1>Imán</h1>
+      <p class="claim">Tus reels, imposibles de pasar.</p>
+      <div class="field" aria-hidden="true"><i style="width:64px"></i><i style="width:40px"></i><i style="width:22px"></i><i style="width:12px"></i><i style="width:6px"></i></div>
+    </div>
+  </header>
+
+  <section>
+    <div class="label"><span class="mono">La idea</span></div>
+    <div class="content">
+      <h2>Grabas una toma. Imán la convierte en un reel que atrapa.</h2>
+      <p class="muted">Imán es el editor con IA para emprendedores, coaches y creadores que saben de lo suyo pero no tienen tiempo ni ganas de editar. Quita los fallos y los silencios, escribe el gancho, pone los subtítulos y deja la voz limpia. En minutos, sin saber editar.</p>
+      <div class="pillars">
+        <div><h3>Atrae</h3><p class="muted">Un gancho en los tres primeros segundos que frena el dedo.</p></div>
+        <div><h3>Retiene</h3><p class="muted">Ritmo sin silencios y subtítulos que se leen solos.</p></div>
+        <div><h3>Convierte</h3><p class="muted">Un mensaje claro y una llamada a la acción al final.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="label"><span class="mono">Logotipo</span></div>
+    <div class="content">
+      <p>Un imán de herradura con un botón de play dentro: el vídeo que atrae. Los dos polos llevan los colores de los imanes de clase de física, rojo para el norte y azul para el sur.</p>
+      <div class="logos">
+        <div class="tile t-light"><svg viewBox="0 0 80 80" role="img" aria-label="Logo sobre claro"><use href="#logo"/></svg><span class="mono">Principal</span></div>
+        <div class="tile t-dark"><svg viewBox="0 0 80 80" style="--c-body:#F7F7F5;--c-n:#FF5547;--c-s:#5B80FF" role="img" aria-label="Logo sobre oscuro"><use href="#logo"/></svg><span class="mono">Sobre oscuro</span></div>
+        <div class="tile t-red"><svg viewBox="0 0 80 80" style="--c-body:#FFFFFF;--c-n:#FFFFFF;--c-s:#FFFFFF" role="img" aria-label="Logo a una tinta"><use href="#logo"/></svg><span class="mono">Una tinta</span></div>
+        <div class="tile t-app"><div class="appicon"><svg viewBox="0 0 80 80" style="--c-body:#F7F7F5;--c-n:#FF5547;--c-s:#5B80FF" role="img" aria-label="Icono de app"><use href="#logo"/></svg></div><span class="mono">Icono de app</span></div>
+      </div>
+      <div class="lockup"><svg viewBox="0 0 80 80" style="--c-body: var(--logo-body); --c-n: var(--logo-n); --c-s: var(--logo-s)" aria-hidden="true"><use href="#logo"/></svg><b>Imán</b></div>
+      <div class="rules">
+        <div><h3>Sí</h3><ul><li>Deja alrededor un margen libre igual al ancho de un polo.</li><li>Mínimo 24 px de alto en pantalla.</li><li>Escribe siempre "Imán", con tilde y la primera en mayúscula.</li></ul></div>
+        <div><h3>No</h3><ul><li>No cambies el orden de los polos (el rojo siempre a la izquierda).</li><li>No lo inclines, ni le pongas sombras o degradados.</li><li>No lo pongas sobre fotos con mucho detalle sin una placa de fondo.</li></ul></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="label"><span class="mono">Color</span></div>
+    <div class="content">
+      <div class="swatches">
+        <div class="sw"><div class="chip" style="background:#E63A2E"></div><b>Polo norte</b><span class="mono">#E63A2E</span><span>Acción y gancho</span></div>
+        <div class="sw"><div class="chip" style="background:#2B59E6"></div><b>Polo sur</b><span class="mono">#2B59E6</span><span>Enlaces y detalles</span></div>
+        <div class="sw"><div class="chip" style="background:#141518"></div><b>Grafito</b><span class="mono">#141518</span><span>Texto y logo</span></div>
+        <div class="sw"><div class="chip" style="background:#6E7178"></div><b>Limadura</b><span class="mono">#6E7178</span><span>Texto secundario</span></div>
+        <div class="sw"><div class="chip" style="background:#F7F7F5"></div><b>Papel</b><span class="mono">#F7F7F5</span><span>Fondos</span></div>
+      </div>
+      <p class="muted">Proporción de uso: mucho papel y grafito, el rojo solo donde hay que mirar (el gancho, el botón de comprar) y el azul como apoyo. Si todo es rojo, nada destaca.</p>
+      <div class="ratio" role="img" aria-label="Proporción de uso de los colores"><i style="width:46%;background:#F7F7F5;border:1px solid var(--line)"></i><i style="width:30%;background:#141518"></i><i style="width:10%;background:#6E7178"></i><i style="width:9%;background:#E63A2E"></i><i style="width:5%;background:#2B59E6"></i></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="label"><span class="mono">Tipografía</span></div>
+    <div class="content type">
+      <div class="specimen"><span class="mono muted">Bricolage Grotesque<br>ExtraBold · títulos y ganchos</span><span class="big">Frena el scroll.</span></div>
+      <div class="specimen"><span class="mono muted">Figtree<br>Regular / Bold · textos</span><span class="bodyspec">Sube tu vídeo en bruto y en unos minutos tienes el reel listo, con subtítulos, gancho y la voz limpia.</span></div>
+      <div class="specimen"><span class="mono muted">JetBrains Mono<br>datos y etiquetas</span><span class="mono" style="font-size:16px">2:14 → 0:48 · 37 cortes · −14 LUFS</span></div>
+      <p class="muted">Las tres son gratuitas (Google Fonts, licencia OFL), así que se pueden usar en la web, en la app y en anuncios sin pagar licencias.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="label"><span class="mono">Voz y tono</span></div>
+    <div class="content">
+      <div class="voice">
+        <div><h3>Directa</h3><p class="muted">Frases cortas, de tú a tú. Decimos qué hace y cuánto tiempo te ahorra.</p></div>
+        <div><h3>Con energía, sin humo</h3><p class="muted">Prometemos lo que hace el producto, con números reales. Nada de "revoluciona tu vida".</p></div>
+        <div><h3>Del lado del creador</h3><p class="muted">Hablamos de su problema (no saber editar, no tener tiempo), no de nuestra tecnología.</p></div>
+        <div><h3>Visual</h3><p class="muted">Si se puede enseñar en un antes y después, se enseña.</p></div>
+      </div>
+      <div class="pairs">
+        <div class="pair"><p class="no">Solución de edición audiovisual impulsada por inteligencia artificial.</p><p class="si">Grabas una toma y Imán te la devuelve editada.</p></div>
+        <div class="pair"><p class="no">Optimiza tu flujo de trabajo de contenidos.</p><p class="si">Un reel al día en 10 minutos.</p></div>
+        <div class="pair"><p class="no">¡¡La herramienta definitiva que cambiará tu negocio!!</p><p class="si">Quita tus fallos, pone los subtítulos y limpia tu voz.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="label"><span class="mono">Mensajes</span></div>
+    <div class="content claims">
+      <p>Tus reels, imposibles de pasar.<small>Eslogan principal</small></p>
+      <p>Frena el scroll.<small>Para anuncios y portadas</small></p>
+      <p>Grabas. Imán edita. Tú publicas.<small>Cómo funciona, en una línea</small></p>
+      <p>Edita como un profesional sin saber editar.<small>Para quien nunca ha abierto un editor</small></p>
+    </div>
+  </section>
+
+  <section>
+    <div class="label"><span class="mono">Aplicaciones</span></div>
+    <div class="content apps">
+      <div class="phone" role="img" aria-label="Ejemplo de reel editado con Imán">
+        <div class="person"></div>
+        <div class="hook">El error que comete el <em>90%</em> al grabar reels</div>
+        <div class="sub">y es <b>GRATIS</b></div>
+        <svg class="mark" viewBox="0 0 80 80" style="--c-body:#F7F7F5;--c-n:#FF5547;--c-s:#5B80FF" aria-hidden="true"><use href="#logo"/></svg>
+      </div>
+      <div class="uiset">
+        <h3>En el producto y en la web</h3>
+        <div class="btns"><span class="btn">Hazlo tú, Imán</span><span class="btn alt">Ver un antes y después</span></div>
+        <div class="bio"><b>Imán · Editor de reels con IA</b><span class="muted">Grabas una toma. Imán quita los fallos, pone subtítulos y gancho, y limpia tu voz. 👇 Prueba gratis tu primer reel</span></div>
+        <p class="muted">En los reels editados, el gancho va en placa grafito con la palabra clave en rojo, y los subtítulos en blanco con la palabra que se está diciendo resaltada.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="label"><span class="mono">Registro</span></div>
+    <div class="content">
+      <p>Cómo proteger el nombre antes de lanzar. Los precios son aproximados; confírmalos en la web oficial antes de pagar.</p>
+      <div class="steps">
+        <div class="step"><p><b>Busca marcas parecidas</b> en <a href="https://www.tmdn.org/tmview" target="_blank" rel="noopener">TMview</a>: escribe "Imán" y filtra por las clases 9 y 42. Si hay una igual o parecida para software, hay que pensar otro nombre.</p></div>
+        <div class="step"><p><b>Asegura el dominio y las redes</b> antes de anunciar nada: imanreels.com (y .es) y @imanreels en Instagram y TikTok.</p></div>
+        <div class="step"><p><b>Registra la marca mixta</b> (nombre + logo) en las clases 9 (software descargable) y 42 (software como servicio online).</p></div>
+        <div class="step"><p><b>Espera la publicación</b>: hay un plazo de oposición de unos dos meses en la OEPM y de tres en la EUIPO. Si nadie se opone, queda concedida para diez años.</p></div>
+      </div>
+      <div class="table">
+        <table>
+          <thead><tr><th>Dónde</th><th>Cubre</th><th>Coste aprox.</th><th>Cuándo elegirla</th></tr></thead>
+          <tbody>
+            <tr><td><a href="https://www.oepm.es" target="_blank" rel="noopener">OEPM</a></td><td>España</td><td>≈ 125–150 € la primera clase, menos las siguientes</td><td>Para empezar barato y vender en España</td></tr>
+            <tr><td><a href="https://euipo.europa.eu" target="_blank" rel="noopener">EUIPO</a></td><td>Los 27 países de la UE</td><td>850 € (1 clase), 900 € (2 clases)</td><td>Cuando vayas a vender en toda Europa</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>

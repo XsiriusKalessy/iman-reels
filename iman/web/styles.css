@@ -1,11 +1,12 @@
 :root {
-  --bg: #0f0f0e;
-  --panel: #181816;
-  --line: #2a2a27;
-  --text: #f3f2ec;
-  --muted: #9b9a92;
-  --accent: #c8ff3d;
-  --accent-ink: #141a00;
+  --bg: #111215;
+  --panel: #1A1B1F;
+  --line: #2A2C31;
+  --text: #F2F2EF;
+  --muted: #A2A5AC;
+  --accent: #FF5547;
+  --accent-ink: #FFFFFF;
+  --sur: #5B80FF;
   --danger: #ff6b5b;
   --radius: 14px;
   color-scheme: dark;
@@ -13,10 +14,10 @@
 * { box-sizing: border-box; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
-  font: 15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 15px/1.5 Figtree, Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 a { color: var(--accent); }
-h1 { font-size: 30px; letter-spacing: -0.02em; margin: 0 0 6px; }
+h1 { font-family: "Bricolage Grotesque", Figtree, sans-serif; font-size: 32px; letter-spacing: -0.02em; margin: 0 0 6px; }
 h2 { margin: 0; }
 h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 22px 0 8px; }
 .lead { color: var(--muted); max-width: 640px; margin: 0 0 22px; }
@@ -26,9 +27,9 @@ h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: v
   display: flex; align-items: center; gap: 18px; padding: 14px 24px;
   border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 5;
 }
-.brand { font-weight: 800; font-size: 18px; display: flex; align-items: center; gap: 8px; }
+.brand { font-family: "Bricolage Grotesque", Figtree, sans-serif; font-weight: 800; font-size: 20px; letter-spacing: -0.02em; display: flex; align-items: center; gap: 8px; }
 .brand small { font-size: 10px; font-weight: 700; color: var(--accent-ink); background: var(--accent); padding: 1px 6px; border-radius: 99px; }
-.logo { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 12px; }
+.logo { width: 28px; height: 28px; }
 .steps { display: flex; gap: 4px; flex: 1; justify-content: center; flex-wrap: wrap; }
 .steps button { background: none; border: 0; color: var(--muted); font: inherit; padding: 6px 10px; border-radius: 99px; cursor: pointer; }
 .steps button b { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 99px; border: 1px solid var(--line); font-size: 11px; margin-right: 4px; }
