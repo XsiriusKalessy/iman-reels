@@ -1,3 +1,5 @@
+import pytest
+
 from iman import ai, effects
 from iman.captions import STYLES, build_ass
 from iman.models import EditPlan, Span
@@ -74,3 +76,67 @@ def test_plan_from_validates_effects():
 def test_plan_roundtrip():
     p = EditPlan(hook_title="h", drop=[(1, 2)], zooms=[(3, 4)], effects=[{"type": "palabra", "word": 1}])
     assert EditPlan.from_dict(p.to_dict()) == p
+
+
+NEW_EFFECTS = [
+    {"type": "titular", "word": 6, "text": "No he editado ni", "subtitle": "un segundo", "look": "revista", "until_word": 12},
+    {"type": "titular", "word": 6, "text": "¿Cuánto cuesta", "subtitle": "editar un reel?", "look": "mixto"},
+    {"type": "cifra", "word": 6, "text": "90%", "subtitle": "de los creadores"},
+    {"type": "frase", "word": 6, "text": "Y es gratis."},
+    {"type": "frase", "word": 6, "text": "Imán está hecho para reels cortos", "look": "enfoque"},
+    {"type": "tecleo", "word": 6, "title": "Le pido a Imán", "text": "Pon la palabra gigante"},
+    {"type": "color", "word": 6, "text": "Rosa", "subtitle": "tu estilo", "look": "rosa"},
+    {"type": "comentario", "word": 6, "text": "No me gusta tu estilo", "title": "lucia"},
+    {"type": "contador", "word": 6, "text": "-"},
+    {"type": "portada", "word": 6, "text": "Imán", "subtitle": "El vídeo entero, editado"},
+    {"type": "cta", "word": 6, "text": "Editar", "subtitle": ""},
+    {"type": "dato", "word": 6, "text": "12", "subtitle": "horas de vídeo"},
+    {"type": "lista", "look": "checklist", "title": "Imán hace",
+     "items": [{"text": "Corta", "at_word": 6}, {"text": "Limpia", "at_word": 11}], "until_word": 15},
+    {"type": "lista", "look": "capitulos", "title": "",
+     "items": [{"text": "Uno", "at_word": 6}, {"text": "Dos", "at_word": 11}], "until_word": 15},
+]
+
+
+@pytest.mark.parametrize("fx", NEW_EFFECTS, ids=lambda f: f["type"] + ":" + f.get("look", ""))
+def test_every_effect_draws_inside_the_reel(fx):
+    clock, dur = _clock()
+    lines, wins = effects.build_effects([fx], clock, STYLES["palabra"], dur, source_duration=12.0)
+    assert lines and all(l.startswith("Dialogue: ") for l in lines)
+    for w in wins:
+        assert 0 <= w.start < w.end <= dur + 1e-6
+
+
+def test_effects_never_overlap_the_next_one():
+    clock, dur = _clock()
+    fx = [{"type": "cifra", "word": 6, "text": "90"}, {"type": "color", "word": 11, "text": "Ya", "look": "negro"}]
+    _, wins = effects.build_effects(fx, clock, STYLES["impacto"], dur)
+    assert wins[0].end <= wins[1].start
+
+
+def test_contador_counts_from_raw_to_final():
+    clock, dur = _clock()
+    lines, _ = effects.build_effects([{"type": "contador", "word": 6, "text": "-"}], clock, STYLES["impacto"], dur,
+                                     source_duration=80)
+    text = "\n".join(lines)
+    assert "1:20" in text and effects._mmss(dur) in text
+
+
+def test_plan_accepts_new_types_and_fixes_bad_looks():
+    data = {
+        "hook_title": "x", "hook_line": "", "drop": [], "emphasis": [], "zooms": [],
+        "effects": [
+            {"type": "titular", "title": "", "items": [], "until_word": 3, "word": 1, "text": "Hola", "subtitle": "", "look": "rosa"},
+            {"type": "color", "title": "", "items": [], "until_word": -1, "word": 2, "text": "Ya", "subtitle": "", "look": "nada"},
+            {"type": "cta", "title": "", "items": [], "until_word": -1, "word": 99, "text": "Editar", "subtitle": "", "look": ""},
+            {"type": "frase", "title": "", "items": [], "until_word": -1, "word": 4, "text": "  ", "subtitle": "", "look": ""},
+        ],
+    }
+    plan = ai._plan_from(data, len(TAKE), "claude")
+    assert [(f["type"], f["look"]) for f in plan.effects] == [("titular", "revista"), ("color", "rosa")]
+
+
+def test_caja_style_puts_captions_in_a_box():
+    clock, dur = _clock()
+    ass = build_ass(clock.kept, STYLES["caja"], dur)
+    assert "Style: Box," in ass and ",Box,," in ass

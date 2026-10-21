@@ -14,6 +14,13 @@ from .models import EditPlan, Word
 CLAUDE_MODEL = "claude-opus-5-5"
 OPENAI_MODEL = "gpt-4o"
 
+EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "color", "comentario",
+                "contador", "portada", "cta", "dato"]
+FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato")
+TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
+COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
+LOOK_ENUM = ["", *TITULAR_LOOKS, "checklist", "capitulos", "enfoque", *COLORS]
+
 EDIT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -39,7 +46,7 @@ EDIT_SCHEMA = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "type": {"type": "string", "enum": ["lista", "palabra"]},
+                    "type": {"type": "string", "enum": EFFECT_TYPES},
                     "title": {"type": "string", "description": "lista: título corto opcional, o vacío"},
                     "items": {
                         "type": "array",
@@ -52,10 +59,14 @@ EDIT_SCHEMA = {
                         },
                     },
                     "until_word": {"type": "integer", "description": "lista: índice de la última palabra del bloque"},
-                    "word": {"type": "integer", "description": "palabra: índice de la palabra que aparece gigante"},
-                    "text": {"type": "string", "description": "palabra: texto a mostrar (1 a 3 palabras)"},
+                    "word": {"type": "integer", "description": "palabra, titular, cifra, frase: índice de la palabra donde aparece"},
+                    "text": {"type": "string", "description": "texto principal del efecto"},
+                    "subtitle": {"type": "string", "description": "titular: remate en letra manuscrita; cifra: qué mide la cifra; si no, vacío"},
+                    "look": {"type": "string", "enum": LOOK_ENUM,
+                             "description": "titular: revista, elegante, pizarra o mixto; lista: checklist, capitulos o vacío; "
+                                            "frase: enfoque o vacío; color: el color; si no, vacío"},
                 },
-                "required": ["type", "title", "items", "until_word", "word", "text"],
+                "required": ["type", "title", "items", "until_word", "word", "text", "subtitle", "look"],
                 "additionalProperties": False,
             },
         },
@@ -89,8 +100,33 @@ Tu trabajo:
 5. effects: solo si aportan.
    - "lista": cuando el creador enumera pasos o razones ("uno…, dos…, tres…"). Cada punto, en 2 a 5 palabras,
      con el índice donde empieza a decirlo. Para "lista" deja word en -1 y text vacío.
-   - "palabra": una palabra o cifra clave que salta gigante en pantalla un segundo. Deja title vacío,
-     items vacío y until_word en -1.
+   - "palabra": una palabra clave que salta gigante en pantalla un segundo.
+   - "titular": la frase más potente del vídeo como titular de revista en la parte de arriba (text: 3 a 6
+     palabras; subtitle: 1 a 3 palabras de remate en letra manuscrita, que no repitan text; look: revista,
+     elegante, pizarra o mixto; mixto = palabras en mayúsculas sobre cajitas y el remate grande en cursiva,
+     ideal para preguntas tipo "¿CUÁNTO CUESTA…?"). Dura hasta until_word.
+   - "cifra": un número que impresiona (text: solo la cifra, p. ej. "80" o "3x"; subtitle: qué mide, 3 a 7
+     palabras). Ocupa la pantalla dos segundos.
+   - "frase": una frase corta y emocional (1 a 4 palabras) a pantalla completa en letra manuscrita. Con look
+     "enfoque", una afirmación de hasta 12 palabras en serif que entra desenfocada sobre fondo oscuro.
+   - "dato": etiqueta pequeña junto a la cara con un dato (text: la cifra, "12"; subtitle: "horas de vídeo").
+   - "contador": cuando el creador habla de cuánto dura la toma en bruto o del tiempo que ahorra; muestra la
+     duración real de la toma bajando hasta la del reel. Deja text en "-" y title y subtitle vacíos.
+   - "portada": el vídeo convertido en portada de revista (text: la cabecera, 1 palabra corta, p. ej. la
+     marca o el tema; subtitle: un titular de portada de 4 a 8 palabras). Úsalo como mucho una vez.
+   - "cta": al final, si el creador pide comentar una palabra para recibir algo (text: esa palabra;
+     subtitle: el aviso, p. ej. "Te envío el enlace por privado").
+   - "tecleo": una caja que se escribe sola con una petición o mensaje que el creador cuenta que escribe
+     (text: hasta 120 caracteres; title: etiqueta corta, p. ej. "Le pido a la IA").
+   - "color": golpe de color a pantalla completa durante un segundo, con una palabra enorme (text: 1 palabra;
+     subtitle: 1 a 3 palabras o vacío; look: el color). Para cambios de tema o remates. Puede haber hasta 3
+     seguidos, uno por palabra, si el creador enumera.
+   - "comentario": burbuja de un comentario de un seguidor al principio, solo si el creador responde a un
+     comentario (text: el comentario; title: nombre de usuario o vacío). word suele ser 0.
+   En "lista", look "capitulos" muestra un índice numerado que se ilumina por partes; look "checklist" muestra casillas arriba que se marcan al decir cada punto (bueno para
+   "lo que hace" o "lo que no necesitas"); vacío muestra la lista grande en el centro.
+   Rellena siempre todos los campos: los que no use el tipo van vacíos, [] o -1. Como mucho uno de cada
+   tipo y nunca dos efectos a la vez.
 6. zooms: rangos cortos (una frase) donde acercar la cámara para subrayar una idea fuerte.
 Respeta el idioma del vídeo. Sigue las instrucciones del creador si las hay."""
 
@@ -182,6 +218,16 @@ def plan_edit_raw(cfg: AIConfig, words: list[Word], instructions: str = "", hook
     return _ask_json(cfg, EDIT_SYSTEM, user, EDIT_SCHEMA)
 
 
+def _look(kind: str, look: str) -> str:
+    if kind == "titular":
+        return look if look in TITULAR_LOOKS else "revista"
+    if kind == "color":
+        return look if look in COLORS else "rosa"
+    if kind == "frase" and look == "enfoque":
+        return look
+    return ""
+
+
 def _plan_from(data: dict, n: int, source: str) -> EditPlan:
     drops, reasons = [], []
     for d in data.get("drop", []):
@@ -196,9 +242,18 @@ def _plan_from(data: dict, n: int, source: str) -> EditPlan:
             if len(items) >= 2:
                 until = int(fx.get("until_word", -1))
                 effects.append({"type": "lista", "title": fx.get("title", ""), "items": items,
-                                "until_word": until if 0 <= until < n else None})
+                                "until_word": until if 0 <= until < n else None,
+                                "look": fx.get("look") if fx.get("look") in ("checklist", "capitulos") else ""})
         elif fx.get("type") == "palabra" and 0 <= int(fx.get("word", -1)) < n:
             effects.append({"type": "palabra", "word": int(fx["word"]), "text": fx.get("text", "")})
+        elif fx.get("type") in FREE_TEXT_TYPES and 0 <= int(fx.get("word", -1)) < n \
+                and str(fx.get("text", "")).strip():
+            until = int(fx.get("until_word", -1))
+            effects.append({"type": fx["type"], "word": int(fx["word"]), "text": str(fx["text"]).strip()[:140],
+                            "subtitle": str(fx.get("subtitle", "")).strip()[:60],
+                            "title": str(fx.get("title", "")).strip()[:40],
+                            "look": _look(fx["type"], fx.get("look", "")),
+                            "until_word": until if int(fx["word"]) < until < n else None})
     zooms = [(int(z["from"]), int(z["to"])) for z in data.get("zooms", [])
              if 0 <= int(z["from"]) <= int(z["to"]) < n]
     return EditPlan(
@@ -221,7 +276,7 @@ REVISE_SCHEMA = {
             "type": "object",
             "properties": {
                 "rhythm": {"type": "string", "enum": ["", "rapido", "dinamico", "natural", "sin_tocar"]},
-                "style": {"type": "string", "enum": ["", "impacto", "editorial", "palabra", "neon"]},
+                "style": {"type": "string", "enum": ["", "impacto", "editorial", "palabra", "karaoke", "caja", "neon"]},
             },
             "required": ["rhythm", "style"],
             "additionalProperties": False,

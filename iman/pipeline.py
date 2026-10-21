@@ -123,7 +123,7 @@ def run(
         fx_lines, fx_windows = ([], [])
         if opts.effects:
             fx_lines, fx_windows = effects.build_effects(
-                plan.effects, effects.WordClock(kept, kept_idx), style, out_duration
+                plan.effects, effects.WordClock(kept, kept_idx), style, out_duration, info.duration
             )
         ass = build_ass(
             kept if opts.captions else [], style, out_duration,

@@ -28,6 +28,8 @@ class Style:
     max_words: int = 3
     max_chars: int = 16
     y: int = 1340  # altura de los subtítulos
+    pop: bool = True  # la palabra activa crece un poco
+    box: str = ""  # color de caja detrás de cada bloque (vacío = sin caja)
 
 
 def rgb(hex6: str) -> str:
@@ -50,6 +52,15 @@ STYLES: dict[str, Style] = {
         "palabra", "Palabra a palabra", "Playfair Display ExtraBold", 132, rgb("#FFFFFF"), rgb("#FFFFFF"),
         rgb("#000000"), 0, 4, False, "Montserrat Black", 72, rgb("#111111"), rgb("#FFFFFF"),
         max_words=1, max_chars=40, y=1240,
+    ),
+    "karaoke": Style(
+        "karaoke", "Karaoke", "Figtree ExtraBold", 70, rgb("#FFFFFF"), rgb("#FF4F7B"), rgb("#000000"),
+        2, 3, False, "Figtree ExtraBold", 84, rgb("#FFFFFF"), rgb("#141518"), max_words=7, max_chars=30, y=1300, pop=False,
+    ),
+    "caja": Style(
+        "caja", "Caja", "Playfair Display ExtraBold", 64, rgb("#FFFFFF"), rgb("#7CF5D8"), rgb("#123A35"),
+        14, 0, False, "Playfair Display ExtraBold", 88, rgb("#123A35"), rgb("#FFFFFF"),
+        max_words=4, max_chars=22, y=1380, pop=False, box=rgb("#123A35"),
     ),
     "neon": Style(
         "neon", "Neón", "Anton", 96, rgb("#FFFFFF"), rgb("#39FF88"), rgb("#0A0A0A"),
@@ -133,6 +144,8 @@ def build_ass(
         "Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
         f"Style: Sub,{style.font},{style.size},{style.text},{style.accent},{style.outline},&H80000000,"
         f"0,0,0,0,100,100,0,0,1,{style.outline_w},{style.shadow},5,60,60,0,1",
+        f"Style: Box,{style.font},{style.size},{style.text},{style.accent},{style.box or style.outline},"
+        f"{style.box or style.outline},0,0,0,0,100,100,0,0,3,{style.outline_w},0,5,60,60,0,1",
         f"Style: Hook,{style.title_font},{style.title_size},{style.title_text},{style.title_text},"
         f"{style.title_box},{style.title_box},0,0,0,0,100,100,0,0,3,28,0,5,90,90,0,1",
         "",
@@ -169,6 +182,8 @@ def build_ass(
                 if kk == k and pos == 0:
                     # El bloque entero ya entra con "pop"; aquí solo cambia el color.
                     parts.append(r"{\c" + style.accent + "&}" + txt + r"{\c" + style.text + "&}")
+                elif kk == k and not style.pop:
+                    parts.append(r"{\c" + style.accent + "&}" + txt + r"{\c" + style.text + "&}")
                 elif kk == k:
                     parts.append(
                         r"{\c" + style.accent + r"&\fscx100\fscy100\t(0,90,\fscx112\fscy112)\t(90,160,\fscx106\fscy106)}"
@@ -182,7 +197,8 @@ def build_ass(
             y = style.y
             for a, b in visible(seg_start, seg_end):
                 lines.append(
-                    f"Dialogue: 1,{_ts(a)},{_ts(b)},Sub,,0,0,0,,{{\\pos(540,{y}){pop}}}" + " ".join(parts)
+                    f"Dialogue: 1,{_ts(a)},{_ts(b)},{'Box' if style.box else 'Sub'},,0,0,0,,{{\\pos(540,{y}){pop}}}"
+                    + " ".join(parts)
                 )
     lines += extra_events or []
     return "\n".join(lines) + "\n"
