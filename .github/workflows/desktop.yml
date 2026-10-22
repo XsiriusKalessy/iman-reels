@@ -50,6 +50,13 @@ jobs:
           done
           chmod +x packaging/bin/*
 
+      - name: Versión
+        shell: bash
+        run: |
+          v="${IMAN_VERSION#v}"
+          sed -i.bak "s/^__version__ = .*/__version__ = \"$v\"/" iman/__init__.py && rm iman/__init__.py.bak
+          grep __version__ iman/__init__.py
+
       - name: Pruebas
         shell: bash
         run: |
@@ -83,3 +90,25 @@ jobs:
           path: |
             packaging/Output/*.exe
             *.dmg
+
+  # Al etiquetar una versión (v0.2.0…), sube los instaladores al repositorio público de descargas.
+  # La app mira ahí si hay versión nueva. Necesita el secreto RELEASES_TOKEN con permiso sobre ese repositorio.
+  publicar:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Publicar en iman-descargas
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          NOTES: ${{ github.event.head_commit.message }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "Falta el secreto RELEASES_TOKEN: no se publica."; exit 0; fi
+          gh release create "${{ github.ref_name }}" out/* \
+            --repo XsiriusKalessy/iman-descargas \
+            --title "Imán ${{ github.ref_name }}" \
+            --notes "${NOTES:-Mejoras y correcciones.}"

@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai, brand, config, license, packs, pipeline
+from . import ai, brand, config, license, packs, pipeline, updates
 from .captions import STYLES
 from .models import EditPlan, Word
 from .rhythm import RHYTHMS
@@ -91,6 +91,24 @@ def options():
         "packs": [{"key": p.key, "label": p.label, "description": p.description, "style": p.style,
                    "hooks": list(p.hooks)} for p in packs.PACKS.values()],
     }
+
+
+@app.get("/api/update")
+def update_check(force: bool = False):
+    if force:
+        updates.latest(force=True)
+    return {**updates.check(), "install": updates.install_status()}
+
+
+@app.post("/api/update/install")
+def update_install():
+    info = updates.check()
+    if not info.get("available"):
+        raise HTTPException(400, "No hay ninguna versión nueva")
+    if not info.get("covered"):
+        raise HTTPException(402, "Esta versión salió después de que caducara tu licencia. Renueva para tenerla.")
+    updates.start_install(info)
+    return updates.install_status()
 
 
 HOOK_TEMPLATES = [

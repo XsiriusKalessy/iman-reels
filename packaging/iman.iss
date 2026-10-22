@@ -15,6 +15,9 @@ SolidCompression=yes
 PrivilegesRequired=lowest
 WizardStyle=modern
 SetupIconFile=iman.ico
+; Las actualizaciones desde la app se instalan en silencio: cierra Imán, instala y lo vuelve a abrir.
+CloseApplications=yes
+RestartApplications=no
 
 [Languages]
 Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"
@@ -28,3 +31,4 @@ Name: "{autodesktop}\Imán"; Filename: "{app}\Iman.exe"
 
 [Run]
 Filename: "{app}\Iman.exe"; Description: "Abrir Imán"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Iman.exe"; Flags: nowait; Check: WizardSilent

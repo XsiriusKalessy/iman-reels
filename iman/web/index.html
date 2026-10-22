@@ -23,6 +23,13 @@
     <button class="ghost" id="open-settings">Ajustes</button>
   </header>
 
+  <div class="update" id="update" role="status" hidden>
+    <span><b id="update-title">Hay una versión nueva de Imán</b> <span id="update-text"></span></span>
+    <details id="update-notes-wrap" hidden><summary>Qué trae</summary><p id="update-notes"></p></details>
+    <button class="primary" id="update-btn">Actualizar ahora</button>
+    <button class="ghost" id="update-later" aria-label="Más tarde">Más tarde</button>
+  </div>
+
   <main>
     <!-- BIBLIOTECA -->
     <section class="panel" data-panel="home">

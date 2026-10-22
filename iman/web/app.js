@@ -428,5 +428,39 @@ $("#brand-save").onclick = async e => {
 };
 $("#open-brand").onclick = () => { brandError(""); $("#brand").showModal(); };
 $("#brand-edit-link").onclick = e => { e.preventDefault(); $("#brand").showModal(); };
+// Versión nueva: aviso arriba y actualización con un clic.
+async function checkUpdate() {
+  let u;
+  try { u = await api("/api/update"); } catch { return; }
+  const box = $("#update");
+  if (!u.available || localStorage.getItem("iman-update-later") === u.latest) return;
+  $("#update-title").textContent = `Hay una versión nueva de Imán (${u.latest})`;
+  $("#update-text").textContent = u.covered ? "Tardas un minuto y no pierdes nada de lo que tienes."
+    : "Salió después de que caducara tu licencia. Renueva para tenerla.";
+  $("#update-notes").textContent = u.notes || "";
+  $("#update-notes-wrap").hidden = !u.notes;
+  $("#update-btn").hidden = !u.covered;
+  $("#update-later").onclick = () => { try { localStorage.setItem("iman-update-later", u.latest); } catch {} box.hidden = true; };
+  box.hidden = false;
+}
+$("#update-btn").onclick = async () => {
+  const btn = $("#update-btn");
+  btn.disabled = true;
+  try { await postJSON("/api/update/install", {}); }
+  catch (err) { $("#update-text").textContent = err.message; btn.disabled = false; return; }
+  const tick = async () => {
+    const s = (await api("/api/update").catch(() => null))?.install;
+    if (!s) { $("#update-text").textContent = "Instalando… Imán se volverá a abrir solo."; return; }
+    if (s.state === "downloading") {
+      btn.textContent = `Descargando… ${Math.round(s.progress * 100)}%`;
+      return setTimeout(tick, 800);
+    }
+    btn.hidden = s.state !== "error"; btn.disabled = false; btn.textContent = "Reintentar";
+    $("#update-text").textContent = s.message;
+  };
+  tick();
+};
+checkUpdate(); setInterval(checkUpdate, 6 * 3600 * 1000);
+
 loadOptions().then(() => api("/api/brand").then(renderBrand)); loadSettings();
 api("/api/reels").then(r => go(r.reels.length ? "home" : "upload"));

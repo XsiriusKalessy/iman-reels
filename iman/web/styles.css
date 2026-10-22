@@ -222,3 +222,13 @@ label.color input { width: 44px; height: 34px; padding: 2px; margin: 0; border-r
 .cover a { display: inline-block; margin-top: 8px; font-size: 14px; }
 .result .phone { position: sticky; top: 90px; }
 @media (max-width: 760px) { .result .phone { position: relative; top: 0; } }
+
+/* aviso de versión nueva */
+.update { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; max-width: 1040px; margin: 16px auto 0;
+  padding: 12px 16px; border: 1px solid var(--accent); border-radius: 14px; background: var(--panel); font-size: 14.5px; }
+.update > span { flex: 1; min-width: 220px; }
+.update #update-text { color: var(--muted); }
+.update details { flex-basis: 100%; order: 3; }
+.update details p { white-space: pre-line; color: var(--muted); font-size: 14px; }
+.update button { padding: 8px 14px; }
+@media (max-width: 1088px) { .update { margin-inline: 24px; } }
