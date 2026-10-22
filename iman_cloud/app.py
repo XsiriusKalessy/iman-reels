@@ -107,6 +107,16 @@ def ideas(request: Request, body: IdeasIn, x_iman_license: str = Header(""), x_i
     return {"ideas": ai.generate_ideas(_cfg(), body.topic, body.audience, body.voice_samples, body.n)}
 
 
+class BrandIn(BaseModel):
+    description: str = Field(..., max_length=400)
+
+
+@app.post("/v1/brand")
+def brand(request: Request, body: BrandIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
+    _check(x_iman_license, x_iman_instance, request)
+    return ai.brand_copy(_cfg(), body.description)
+
+
 @app.get("/health")
 def health():
     return {"ok": True}

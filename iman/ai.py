@@ -383,6 +383,36 @@ def generate_ideas(cfg: AIConfig, topic: str, audience: str = "", voice_samples:
     return _ask_json(cfg, IDEA_SYSTEM, user, IDEA_SCHEMA).get("ideas", [])
 
 
+# --- Kit de marca: la IA escribe el cierre a partir de una frase -------------------
+
+BRAND_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "cta": {"type": "string"},
+        "font": {"type": "string", "enum": ["Moderna", "Impacto", "Condensada", "Elegante", "Manuscrita"]},
+    },
+    "required": ["name", "cta", "font"],
+    "additionalProperties": False,
+}
+
+BRAND_SYSTEM = """Preparas el kit de marca de un negocio o creador para sus reels de Instagram y TikTok.
+Te describen el negocio en una frase. Devuelve: el nombre de la marca tal cual lo dicen (o vacío si no lo
+dicen), una llamada a la acción para el cierre del reel (máximo 5 palabras, en imperativo, concreta para ese
+negocio, p. ej. "Reserva tu viaje por WhatsApp", "Apúntate al curso", "Pide el tuyo hoy") y la fuente que mejor
+encaja: Moderna (limpia, versátil), Impacto (fuerte, ventas), Condensada (titulares, deporte), Elegante (lujo,
+moda, viajes premium) o Manuscrita (cercana, artesanal)."""
+
+
+def brand_copy(cfg: AIConfig, description: str) -> dict:
+    if cfg.provider == "iman":
+        from . import cloud
+
+        return cloud.call(cfg, "brand", {"description": description})
+    data = _ask_json(cfg, BRAND_SYSTEM, f"Negocio: {description}", BRAND_SCHEMA)
+    return {"name": data.get("name", "")[:40], "cta": data.get("cta", "")[:40], "font": data.get("font", "")}
+
+
 def fallback_hook(words: list[Word], max_words: int = 6) -> str:
     """Sin IA: usa la primera frase del vídeo como título."""
     out = []

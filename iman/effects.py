@@ -39,6 +39,8 @@ class VideoOp:
     start: float
     end: float
     src_start: float = 0.0
+    path: str = ""  # imagen que se superpone (logo)
+    color: str = ""  # fondo liso (cierre de marca)
 
 
 @dataclass
@@ -814,3 +816,58 @@ def split_spans(spans: list[Span], words: list[Word], zooms: list[tuple[int, int
             start = c
         out.append(Span(start, sp.end))
     return out
+
+
+END_CARD = 2.4  # segundos del cierre de marca
+
+
+def brand_ops(brand, duration: float) -> list[VideoOp]:
+    """Logo en la esquina durante el reel y, al final, el cierre con fondo de marca y logo grande.
+
+    El fondo del cierre lo pinta ffmpeg (no el ASS) para que el logo quede encima
+    y los textos del cierre, que van en el ASS, encima de todo.
+    """
+    if brand is None or not brand.active:
+        return []
+    logo = brand.logo_path
+    closing = brand.end_card and duration > END_CARD + 1
+    end_start = duration - END_CARD if closing else duration
+    ops = []
+    if logo and brand.logo_corner and end_start > 0.5:
+        ops.append(VideoOp("logo", 0.0, end_start, path=str(logo)))
+    if closing:
+        ops.append(VideoOp("endcard", end_start, duration, color=brand.primary or "#141518"))
+        if logo:
+            from .brand import logo_card
+
+            ops.append(VideoOp("logo_end", end_start, duration, path=str(logo_card())))
+    return ops
+
+
+def end_card_events(brand, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Cierre de marca: fondo del color de la marca, llamada a la acción y contacto."""
+    if brand is None or not brand.end_card or not brand.active or duration <= END_CARD + 1:
+        return [], None
+    start, end = duration - END_CARD, duration
+    t = f"{_ts(start)},{_ts(end)}"
+    bg = brand.primary or "#141518"
+    from .brand import ink_on
+
+    ink = rgb(ink_on(bg))
+    lines = []
+    y = 980 if brand.logo_path else 860
+    if not brand.logo_path and brand.name:
+        size = textfit.fit(brand.name, "Figtree ExtraBold", 120, 900)
+        lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an5\\pos(540,700)\\fnFigtree ExtraBold\\fs{size:.0f}\\bord0\\shad0"
+                     f"\\c{ink}&\\fad(300,0)}}{_esc(brand.name)}")
+    if brand.cta:
+        size = textfit.fit(brand.cta, "Figtree ExtraBold", 76, 920)
+        lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an8\\pos(540,{y})\\fnFigtree ExtraBold\\fs{size:.0f}\\bord0\\shad0"
+                     f"\\c{ink}&\\fad(400,0)}}{_esc(brand.cta)}")
+        y += size * 1.4
+    for txt in (brand.contact, brand.handle):
+        if txt:
+            lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an8\\pos(540,{y:.0f})\\fnFigtree SemiBold\\fs52\\bord0\\shad0"
+                         f"\\c{ink}&\\alpha&H30&\\fad(500,0)}}{_esc(txt)}")
+            y += 72
+    return lines, Window(start, end)

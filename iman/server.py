@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai, config, license, pipeline
+from . import ai, brand, config, license, pipeline
 from .captions import STYLES
 from .models import EditPlan, Word
 from .rhythm import RHYTHMS
@@ -98,6 +98,87 @@ def _refresh_license() -> dict:
     return config.save(upd) if upd else cfg
 
 
+def _brand_out(b: brand.Brand) -> dict:
+    return {**asdict(b), "has_logo": b.logo_path is not None, "fonts": list(brand.FONTS)}
+
+
+@app.get("/api/brand")
+def get_brand():
+    return _brand_out(brand.load())
+
+
+class BrandIn(BaseModel):
+    name: str | None = None
+    primary: str | None = None
+    secondary: str | None = None
+    font: str | None = None
+    handle: str | None = None
+    cta: str | None = None
+    contact: str | None = None
+    logo_corner: bool | None = None
+    end_card: bool | None = None
+
+
+@app.post("/api/brand")
+def set_brand(body: BrandIn):
+    b = brand.load()
+    for k, v in body.model_dump().items():
+        if v is None:
+            continue
+        if k in ("primary", "secondary") and v and not brand.is_hex(v):
+            raise HTTPException(400, "El color tiene que ser tipo #FF5547")
+        if k == "font" and v and v not in brand.FONTS:
+            raise HTTPException(400, "Fuente no válida")
+        setattr(b, k, v.strip() if isinstance(v, str) else v)
+    return _brand_out(brand.save(b))
+
+
+@app.post("/api/brand/logo")
+async def upload_logo(logo: UploadFile = File(...)):
+    data = await logo.read()
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(413, "El logo pesa demasiado (máximo 10 MB)")
+    try:
+        return _brand_out(brand.set_logo(data))
+    except Exception:
+        raise HTTPException(400, "No he podido leer esa imagen. Prueba con un PNG o JPG.")
+
+
+@app.delete("/api/brand/logo")
+def delete_logo():
+    return _brand_out(brand.remove_logo())
+
+
+@app.get("/api/brand/logo.png")
+def get_logo():
+    p = brand.load().logo_path
+    if p is None:
+        raise HTTPException(404)
+    return FileResponse(p, media_type="image/png")
+
+
+class BrandAutoIn(BaseModel):
+    description: str
+
+
+@app.post("/api/brand/auto")
+def brand_auto(body: BrandAutoIn):
+    """La IA rellena nombre, cierre y fuente a partir de una frase sobre el negocio."""
+    cfg = config.ai_config(config.load())
+    if not cfg.enabled:
+        raise HTTPException(400, "Activa la IA en Ajustes para que rellene tu marca")
+    try:
+        data = ai.brand_copy(cfg, body.description[:400])
+    except Exception as e:
+        raise HTTPException(502, f"La IA no ha podido preparar tu marca: {e}")
+    b = brand.load()
+    b.name = b.name or data.get("name", "")
+    b.cta = data.get("cta") or b.cta
+    if data.get("font") in brand.FONTS:
+        b.font = data["font"]
+    return _brand_out(brand.save(b))
+
+
 class IdeasIn(BaseModel):
     topic: str
     audience: str = ""
@@ -132,6 +213,7 @@ async def create_job(
     hook_template: str = Form(""),
     instructions: str = Form(""),
     voice: bool = Form(True),
+    use_brand: bool = Form(True),
 ):
     if rhythm not in RHYTHMS or style not in STYLES or size not in ("1080", "4k") or fit not in ("recortar", "fondo"):
         raise HTTPException(400, "Opción no válida")
@@ -146,7 +228,7 @@ async def create_job(
     with src.open("wb") as f:
         shutil.copyfileobj(video.file, f)
     opts = pipeline.EditOptions(rhythm, style, size, fit, hook, hook_title, hook_template, instructions,
-                                voice=voice, watermark=watermark)
+                                voice=voice, watermark=watermark, brand=use_brand)
     JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0,
                     "options": asdict(opts), "created": time.time(), "trial": watermark}
     threading.Thread(target=_work, args=(job_id, src, workdir, opts), daemon=True).start()

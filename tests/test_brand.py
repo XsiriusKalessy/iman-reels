@@ -1,0 +1,117 @@
+"""Kit de marca: colores sacados del logo, estilo con la marca, cierre y API."""
+
+import io
+import shutil
+import subprocess
+
+import pytest
+from fastapi.testclient import TestClient
+from PIL import Image, ImageDraw
+
+from iman import ai, brand, config, effects, media, pipeline
+from iman.captions import STYLES, rgb
+
+from .test_core import TAKE
+
+
+def _logo_png() -> bytes:
+    img = Image.new("RGBA", (600, 300), (255, 255, 255, 0))
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 0, 380, 300], fill=(20, 110, 190, 255))  # azul, el color principal
+    d.ellipse([400, 80, 560, 240], fill=(250, 170, 30, 255))  # naranja, el secundario
+    d.rectangle([60, 120, 300, 180], fill=(255, 255, 255, 255))  # texto blanco: se ignora
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    return buf.getvalue()
+
+
+def _close(a: str, b: tuple, tol=30) -> bool:
+    h = a.lstrip("#")
+    return all(abs(int(h[i:i + 2], 16) - v) <= tol for i, v in zip((0, 2, 4), b))
+
+
+def test_logo_gives_brand_colors():
+    b = brand.set_logo(_logo_png())
+    assert b.logo_path is not None
+    assert _close(b.primary, (20, 110, 190)) and _close(b.secondary, (250, 170, 30))
+    # Si el creador ya eligió su color, el logo no se lo pisa.
+    b.primary = "#FF0000"
+    brand.save(b)
+    assert brand.set_logo(_logo_png()).primary == "#FF0000"
+    assert brand.remove_logo().logo_path is None
+
+
+def test_apply_brand_to_style():
+    b = brand.Brand(primary="#146EBE", secondary="#FAAA1E", font="Elegante")
+    s = brand.apply(STYLES["impacto"], b)
+    assert s.accent == rgb("#146EBE") and s.title_box == rgb("#146EBE")
+    assert s.font == "Playfair Display ExtraBold"
+    boxed = brand.apply(STYLES["caja"], b)
+    assert boxed.box == rgb("#146EBE") and boxed.accent == rgb("#FAAA1E")
+    assert brand.apply(STYLES["impacto"], brand.Brand()) == STYLES["impacto"]
+    assert brand.ink_on("#FFE600") == "#141518" and brand.ink_on("#123A35") == "#FFFFFF"
+
+
+def test_brand_ops_and_end_card():
+    b = brand.set_logo(_logo_png())
+    b.cta, b.handle = "Reserva por WhatsApp", "@viajesnelson"
+    ops = effects.brand_ops(b, 20.0)
+    assert [o.kind for o in ops] == ["logo", "endcard", "logo_end"]
+    assert ops[0].end == ops[1].start == 20.0 - effects.END_CARD
+    lines, win = effects.end_card_events(b, STYLES["impacto"], 20.0)
+    assert win.start == 20.0 - effects.END_CARD and any("Reserva por WhatsApp" in l for l in lines)
+    # Reel muy corto: sin cierre, solo el logo.
+    assert [o.kind for o in effects.brand_ops(b, 3.0)] == ["logo"]
+    assert effects.end_card_events(b, STYLES["impacto"], 3.0) == ([], None)
+    brand.remove_logo()
+    assert effects.brand_ops(brand.Brand(), 20.0) == []
+
+
+def test_brand_api(tmp_path, monkeypatch):
+    from iman import server
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    c = TestClient(server.app)
+    assert c.get("/api/brand").json()["has_logo"] is False
+    r = c.post("/api/brand/logo", files={"logo": ("logo.png", _logo_png(), "image/png")}).json()
+    assert r["has_logo"] and r["primary"] and len(r["palette"]) >= 2
+    assert c.get("/api/brand/logo.png").status_code == 200
+    assert c.post("/api/brand", json={"primary": "rojo"}).status_code == 400
+    r = c.post("/api/brand", json={"cta": " Escríbenos ", "font": "Impacto"}).json()
+    assert r["cta"] == "Escríbenos" and r["font"] == "Impacto"
+    assert c.post("/api/brand/logo", files={"logo": ("x.png", b"nada", "image/png")}).status_code == 400
+
+    config.save({"provider": "iman"})
+    monkeypatch.setattr(ai, "brand_copy", lambda cfg, d: {"name": "Viajes Nelson", "cta": "Reserva tu viaje",
+                                                         "font": "Elegante"})
+    r = c.post("/api/brand/auto", json={"description": "agencia de viajes en Valencia"}).json()
+    assert r["name"] == "Viajes Nelson" and r["cta"] == "Reserva tu viaje" and r["font"] == "Elegante"
+    assert c.delete("/api/brand/logo").json()["has_logo"] is False
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="necesita ffmpeg")
+def test_reel_with_brand(tmp_path):
+    src = tmp_path / "toma.mp4"
+    subprocess.run([
+        "ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=gray:size=1280x720:rate=30:duration=12",
+        "-f", "lavfi", "-i", "sine=frequency=220:duration=12", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-shortest", str(src),
+    ], check=True)
+    b = brand.set_logo(_logo_png())
+    b.cta = "Reserva por WhatsApp"
+    brand.save(b)
+    cfg = {**config.DEFAULTS, "provider": "none"}
+    res = pipeline.run(src, tmp_path / "work", pipeline.EditOptions(rhythm="natural"), cfg, words=TAKE)
+    if res.duration_out <= effects.END_CARD + 1:
+        pytest.skip("toma demasiado corta para el cierre")
+    # En el cierre, el fondo es el color de la marca (esquina de abajo, lejos del logo y los textos).
+    frame = tmp_path / "end.png"
+    media.thumbnail(res.video, frame, res.duration_out - 0.4)
+    px = Image.open(frame).convert("RGB").getpixel((60, 1860))
+    assert _close("#%02X%02X%02X" % px, tuple(int(b.primary[i:i + 2], 16) for i in (1, 3, 5)), tol=40)
+    # Durante el reel, el logo está arriba a la derecha y el fondo sigue gris.
+    mid = tmp_path / "mid.png"
+    media.thumbnail(res.video, mid, 0.8)
+    im = Image.open(mid).convert("RGB")
+    assert _close("#%02X%02X%02X" % im.getpixel((60, 1000)), (128, 128, 128), tol=40)
+    assert _close("#%02X%02X%02X" % im.getpixel((1080 - 40 - 60, 230)), (20, 110, 190), tol=45)

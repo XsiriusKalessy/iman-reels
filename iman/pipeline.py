@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import ai, effects, media, segment
+from . import ai, brand, effects, media, segment
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Word
@@ -34,6 +34,7 @@ class EditOptions:
     auto_zoom: bool = True  # alternar plano normal y cerrado en cada corte
     effects: bool = True  # lista animada, palabra gigante y zoom de énfasis
     watermark: bool = False  # reels de prueba sin licencia
+    brand: bool = True  # aplicar el kit de marca guardado (colores, logo y cierre)
 
 
 @dataclass
@@ -126,9 +127,11 @@ def run(
         plan.hook_title = ai.fallback_hook(kept)
     (workdir / "plan.json").write_text(json.dumps(plan.to_dict(), ensure_ascii=False, indent=1))
 
+    kit = brand.load() if opts.brand else None
+    style = brand.apply(STYLES[opts.style], kit) if kit else STYLES[opts.style]
+    end_lines, end_window = effects.end_card_events(kit, style, out_duration)
     ass_path = None
-    if opts.captions or opts.hook or opts.watermark:
-        style = STYLES[opts.style]
+    if opts.captions or opts.hook or opts.watermark or end_lines:
         emphasis_out = {j for j, i in enumerate(kept_idx) if i in set(plan.emphasis)}
         fx_lines, fx_windows = ([], [])
         if opts.effects:
@@ -138,8 +141,8 @@ def run(
         ass = build_ass(
             kept if opts.captions else [], style, out_duration,
             plan.hook_title if opts.hook else "", emphasis_out,
-            extra_events=fx_lines + ([WATERMARK.format(end=_ts(out_duration))] if opts.watermark else []),
-            hide=fx_windows,
+            extra_events=fx_lines + end_lines + ([WATERMARK.format(end=_ts(out_duration))] if opts.watermark else []),
+            hide=fx_windows + ([end_window] if end_window else []),
         )
         ass_path = workdir / "subs.ass"
         ass_path.write_text(ass, encoding="utf-8")
@@ -150,6 +153,7 @@ def run(
     if opts.effects:
         overlays = effects.video_ops(plan.effects, effects.WordClock(kept, kept_idx), out_duration,
                                      lambda t: _source_time(spans, t))
+    overlays += effects.brand_ops(kit, out_duration)
     clock = effects.WordClock(kept, kept_idx)
     segs = effects.seg_ops(plan.effects, clock, out_duration) if opts.effects else []
     if segs and segment.available():
@@ -159,8 +163,8 @@ def run(
         progress("Recortándote del fondo", 0.80)
         mask = segment.person_masks(base, workdir / "mask.mp4", [(o.start, o.end) for o in segs])
         behind = workdir / "behind.ass"
-        behind.write_text(build_ass([], STYLES[opts.style], out_duration,
-                                    extra_events=effects.behind_events(plan.effects, clock, STYLES[opts.style],
+        behind.write_text(build_ass([], style, out_duration,
+                                    extra_events=effects.behind_events(plan.effects, clock, style,
                                                                        out_duration)), encoding="utf-8")
         progress("Montando tu reel", 0.90)
         media.composite(base, mask, src, out, behind, ass_path, segs, overlays, opts.size)

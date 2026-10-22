@@ -95,7 +95,8 @@ def _filter_path(p: Path) -> str:
     return str(p).replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
 
 
-def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx]", src: str = "[0:v]") -> str:
+def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx]", src: str = "[0:v]",
+                    images: dict | None = None) -> str:
     """Efectos que mezclan vídeo sobre el reel ya montado (tiempos del reel, en segundos).
 
     - bruto: tarjeta inclinada con la toma original sin cortar, arriba a la derecha.
@@ -134,10 +135,34 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx
                          f"crop={pw}:{ph},setsar=1[pv{k}]")
             parts.append(f"[bgp{k}][pv{k}]overlay={(W - pw) // 2}:{int(560 * k_scale)}:eof_action=pass[pg{k}]")
             parts.append(f"[m{k}][pg{k}]overlay=0:0:{on}:eof_action=pass[o{k}]")
+        elif op.kind == "endcard":
+            parts.append(f"color=c=0x{op.color.lstrip('#')}:s={W}x{H}:r=30:d={b - a:.3f},"
+                         f"format=yuva420p,fade=t=in:st=0:d=0.25:alpha=1,setpts=PTS+{a:.3f}/TB[ec{k}]")
+            parts.append(f"{cur}[ec{k}]overlay=0:0:{on}:eof_action=pass[o{k}]")
+        elif op.kind in ("logo", "logo_end") and images and op.path in images:
+            # Logo de la marca: pequeño en la esquina (zona segura de Instagram) o grande en el cierre.
+            lw = int((150 if op.kind == "logo" else 420) * k_scale)
+            alpha = 0.92 if op.kind == "logo" else 1.0
+            fade = "" if op.kind == "logo" else f",fade=t=in:st={a:.3f}:d=0.35:alpha=1"
+            parts.append(f"{images[op.path]}scale={lw}:-1,format=rgba,colorchannelmixer=aa={alpha},"
+                         f"loop=-1:1,fps=30,setpts=N/30/TB{fade}[lg{k}]")
+            pos = f"x=W-w-{int(40 * k_scale)}:y={int(210 * k_scale)}" if op.kind == "logo" else \
+                f"x=(W-w)/2:y={int(860 * k_scale)}-h"
+            parts.append(f"{cur}[lg{k}]overlay={pos}:{on}:shortest=1[o{k}]")
         else:
             continue
         cur = f"[o{k}]"
     return cur
+
+
+def _image_inputs(ops: list, first_index: int) -> tuple[list[str], dict]:
+    """Entradas extra de ffmpeg para las imágenes de los efectos (logo de la marca)."""
+    args, labels = [], {}
+    for op in ops or []:
+        if op.path and op.path not in labels:
+            labels[op.path] = f"[{first_index + len(labels)}:v]"
+            args += ["-i", op.path]
+    return args, labels
 
 
 def build_filtergraph(
@@ -186,7 +211,8 @@ def build_filtergraph(
     else:
         parts.append(f"{chain}scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{H}[vf]")
     parts.append("[vf]fps=30,setsar=1[vx]")
-    cur = _video_overlays(parts, overlays or [], W, H)
+    _, images = _image_inputs(overlays, 1)
+    cur = _video_overlays(parts, overlays or [], W, H, images=images)
     tail = f"{cur}null"
     if ass_path is not None:
         tail += f",ass=filename='{_filter_path(ass_path)}':fontsdir='{_filter_path(FONTS_DIR)}'"
@@ -215,8 +241,9 @@ def render(
     graph = build_filtergraph(spans, info, ass_path, size, fit, voice, zooms, overlays)
     script = dst.with_suffix(".filters.txt")
     script.write_text(graph)
+    extra, _ = _image_inputs(overlays, 1)
     cmd = [
-        FFMPEG, "-y", "-v", "error", "-i", str(src),
+        FFMPEG, "-y", "-v", "error", "-i", str(src), *extra,
         "-filter_complex_script", str(script),
         "-map", "[vout]", "-map", "[aout]",
         "-c:v", "libx264", "-preset", preset, "-crf", "18", "-profile:v", "high",
@@ -261,7 +288,8 @@ def composite(
     parts.append(f"[1:v]scale={W}:{H}:flags=bicubic,format=gray,boxblur=2:1[mk]")
     parts.append("[fg][mk]alphamerge[person]")
     parts.append(f"{cur}[person]overlay=0:0[vx]")
-    cur = _video_overlays(parts, overlays or [], W, H, "[vx]", "[2:v]")
+    extra, images = _image_inputs(overlays, 3)
+    cur = _video_overlays(parts, overlays or [], W, H, "[vx]", "[2:v]", images)
     tail = f"{cur}null"
     if ass_path is not None:
         tail += f",ass=filename='{_filter_path(ass_path)}':fontsdir='{_filter_path(FONTS_DIR)}'"
@@ -269,7 +297,7 @@ def composite(
     script = dst.with_suffix(".composite.txt")
     script.write_text(";\n".join(parts))
     cmd = [
-        FFMPEG, "-y", "-v", "error", "-i", str(base), "-i", str(mask), "-i", str(raw),
+        FFMPEG, "-y", "-v", "error", "-i", str(base), "-i", str(mask), "-i", str(raw), *extra,
         "-filter_complex_script", str(script), "-map", "[vout]", "-map", "0:a",
         "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-profile:v", "high",
         "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
