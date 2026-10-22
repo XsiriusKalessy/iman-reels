@@ -132,6 +132,21 @@ def post(request: Request, body: PostIn, x_iman_license: str = Header(""), x_ima
     return ai.post_copy(_cfg(), body.transcript, body.hook, body.pack, body.cta, body.handle)
 
 
+class KitIn(BaseModel):
+    transcript: str = Field(..., max_length=6000)
+    hook: str = Field("", max_length=200)
+    pack: str = Field("", max_length=20)
+    cta: str = Field("", max_length=60)
+    current: dict = Field(default_factory=dict)
+    message: str = Field("", max_length=1000)
+
+
+@app.post("/v1/kit")
+def kit(request: Request, body: KitIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
+    _check(x_iman_license, x_iman_instance, request)
+    return ai.kit_copy_raw(_cfg(), body.transcript, body.hook, body.pack, body.cta, body.current, body.message)
+
+
 @app.get("/health")
 def health():
     return {"ok": True}

@@ -243,3 +243,9 @@ label.color input { width: 44px; height: 34px; padding: 2px; margin: 0; border-r
 .phrase .link { white-space: nowrap; font-size: 13px; }
 .memory { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
 .memory li { display: flex; gap: 8px; justify-content: space-between; align-items: center; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 14px; }
+
+/* carrusel e historias */
+.kit { display: grid; gap: 10px; }
+.kit-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.kit-strip img { height: 150px; border-radius: 8px; display: block; border: 1px solid var(--line); }
+.kit-strip.stories img { height: 190px; }

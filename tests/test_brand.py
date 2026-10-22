@@ -129,3 +129,20 @@ def test_memory_is_saved_and_reaches_new_reels(tmp_path, monkeypatch):
     mem = config.load()["memory"]
     assert len(mem) == 2
     assert "Pon mi web al final" in config.memory_prompt(config.load())
+
+
+def test_kit_copy_is_cleaned_and_revision_gets_current_kit(monkeypatch):
+    from iman import ai
+
+    seen = {}
+
+    def fake(cfg, system, user, schema):
+        seen["user"] = user
+        return {"carousel": [{"title": " Portada ", "body": ""}, {"title": "", "body": "sin título"}],
+                "stories": [{"text": "Hola", "sticker": "Nuevo"}], "reply": "Hecho"}
+
+    monkeypatch.setattr(ai, "_ask_json", fake)
+    cfg = ai.AIConfig(provider="claude", anthropic_key="x")
+    k = ai.kit_copy(cfg, "texto", "Gancho", "", "", {"carousel": [{"title": "A", "body": ""}]}, "en la diapositiva 1 pon B")
+    assert k["carousel"] == [{"title": "Portada", "body": ""}] and k["reply"] == "Hecho"
+    assert "KIT ACTUAL" in seen["user"] and "diapositiva 1" in seen["user"]

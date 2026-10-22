@@ -502,6 +502,56 @@ def post_copy(job_id: str):
     return data
 
 
+class KitIn(BaseModel):
+    message: str = ""
+    cover_t: float | None = None
+
+
+@app.post("/api/jobs/{job_id}/kit")
+def make_kit(job_id: str, body: KitIn):
+    """Portada, carrusel e historias del reel, con tu marca. Con `message` se cambia algo con una frase."""
+    from . import kit, media
+
+    job = _job(job_id)
+    if not job or job["status"] != "done":
+        raise HTTPException(404, "No encuentro ese reel")
+    workdir = JOBS_DIR / job_id
+    outdir = workdir / "kit"
+    words = [Word(**w) for w in json.loads((workdir / "transcript.json").read_text())]
+    hook = job["result"]["plan"].get("hook_title", "")
+    b = brand.load()
+    current = json.loads((outdir / "kit.json").read_text()) if (outdir / "kit.json").exists() else None
+    aicfg = config.ai_config(config.load())
+    if body.message.strip() and not aicfg.enabled:
+        raise HTTPException(400, "Activa la IA en Ajustes para cambiar el carrusel con una frase")
+    if aicfg.enabled:
+        try:
+            data = ai.kit_copy(aicfg, " ".join(w.text for w in words), hook, job["options"].get("pack", ""), b.cta,
+                               current, body.message)
+        except Exception as e:
+            raise HTTPException(502, f"La IA no ha podido preparar el carrusel: {e}")
+    else:
+        data = kit.fallback(words, hook, b.cta)
+    # Fotogramas limpios (sin subtítulos) de la toma original: la portada y unos cuantos más.
+    src = next(workdir.glob("original.*"))
+    dur = float(job["result"]["duration_in"])
+    first = words[0].start if words else 0.5
+    t0 = body.cover_t if body.cover_t is not None else first + 0.4
+    frames = [media.thumbnail(src, workdir / f"kit-frame-{k}.jpg", max(0.0, min(t, dur - 0.1)))
+              for k, t in enumerate([t0, dur * 0.25, dur * 0.45, dur * 0.65, dur * 0.85])]
+    names = kit.render(data, outdir, b, frames)
+    return {**names, "reply": data.get("reply", ""), "version": int(time.time())}
+
+
+@app.get("/api/jobs/{job_id}/kit/{name}")
+def kit_file(job_id: str, name: str):
+    p = JOBS_DIR / job_id / "kit" / name
+    if not job_id.isalnum() or "/" in name or ".." in name or not p.exists():
+        raise HTTPException(404)
+    media = "application/zip" if name.endswith(".zip") else "image/png"
+    return FileResponse(p, media_type=media, filename=f"{job_id}-{name}" if name.endswith(".zip") else None)
+
+
 @app.get("/api/jobs/{job_id}/cover.jpg")
 def get_cover(job_id: str, t: float = 0.5):
     """Fotograma del reel para usarlo de portada."""

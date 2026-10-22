@@ -484,6 +484,80 @@ def post_copy(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "", ct
     return {"caption": str(data.get("caption", "")).strip()[:2000], "hashtags": tags[:10]}
 
 
+# --- Kit de publicación: carrusel e historias ----------------------------------------
+
+KIT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "carousel": {
+            "type": "array",
+            "description": "De 5 a 8 diapositivas. La primera es la portada (gancho), la última la llamada a la acción.",
+            "items": {
+                "type": "object",
+                "properties": {"title": {"type": "string"}, "body": {"type": "string"}},
+                "required": ["title", "body"],
+                "additionalProperties": False,
+            },
+        },
+        "stories": {
+            "type": "array",
+            "description": "3 historias para anunciar el reel.",
+            "items": {
+                "type": "object",
+                "properties": {"text": {"type": "string"}, "sticker": {"type": "string"}},
+                "required": ["text", "sticker"],
+                "additionalProperties": False,
+            },
+        },
+        "reply": {"type": "string"},
+    },
+    "required": ["carousel", "stories", "reply"],
+    "additionalProperties": False,
+}
+
+KIT_SYSTEM = """Preparas, a partir de un reel ya editado, el resto de piezas para publicarlo con la voz del creador.
+CARRUSEL de Instagram (5 a 8 diapositivas): la 1 es la portada con un gancho fuerte (título de 3 a 8 palabras,
+body vacío o una línea); las del medio cuentan las ideas del vídeo, una por diapositiva (título corto de 2 a 7
+palabras y body de 1 a 3 frases, máximo 220 caracteres); la última invita a actuar (usa la llamada a la acción
+del creador si la hay). HISTORIAS (3): textos muy cortos para anunciar el reel (máx. 90 caracteres) y un sticker
+de 1 a 3 palabras ("Nuevo reel", "¿Te pasa?", "Link en bio"…). Nada de inventar datos que no diga el vídeo.
+Si te pasan un KIT ACTUAL y un CAMBIO, devuelve el kit completo con solo ese cambio aplicado
+("en la diapositiva 3…" = la tercera, contando desde 1). En reply, una frase corta con lo que has hecho."""
+
+
+def kit_copy(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "", cta: str = "",
+             current: dict | None = None, message: str = "") -> dict:
+    if cfg.provider == "iman":
+        from . import cloud
+
+        data = cloud.call(cfg, "kit", {"transcript": transcript[:6000], "hook": hook, "pack": pack, "cta": cta,
+                                       "current": current or {}, "message": message})
+    else:
+        data = kit_copy_raw(cfg, transcript, hook, pack, cta, current, message)
+    return clean_kit(data)
+
+
+def kit_copy_raw(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "", cta: str = "",
+                 current: dict | None = None, message: str = "") -> dict:
+    user = f"LO QUE DICE EL VÍDEO:\n{transcript[:6000]}\n\nTítulo del reel: {hook}"
+    if pack and pack != "general":
+        user += f"\nSector: {pack}"
+    if cta:
+        user += f"\nLlamada a la acción del creador: {cta}"
+    if current and message.strip():
+        user += ("\n\nKIT ACTUAL:\n" + json.dumps({k: current.get(k, []) for k in ("carousel", "stories")},
+                                                  ensure_ascii=False) + f"\n\nCAMBIO QUE PIDE:\n{message.strip()}")
+    return _ask_json(cfg, KIT_SYSTEM, user, KIT_SCHEMA)
+
+
+def clean_kit(data: dict) -> dict:
+    slides = [{"title": str(s.get("title", "")).strip()[:90], "body": str(s.get("body", "")).strip()[:260]}
+              for s in data.get("carousel", []) if str(s.get("title", "")).strip()][:10]
+    stories = [{"text": str(s.get("text", "")).strip()[:120], "sticker": str(s.get("sticker", "")).strip()[:30]}
+               for s in data.get("stories", []) if str(s.get("text", "")).strip()][:5]
+    return {"carousel": slides, "stories": stories, "reply": str(data.get("reply", "")).strip()[:300]}
+
+
 def fallback_hook(words: list[Word], max_words: int = 6) -> str:
     """Sin IA: usa la primera frase del vídeo como título."""
     out = []

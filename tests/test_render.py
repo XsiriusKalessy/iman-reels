@@ -167,6 +167,15 @@ def test_library_toggles_and_post(sample, tmp_path, monkeypatch):
     assert rows[0]["state"] == "dentro" and rows[-1]["state"] == "fuera"
     assert "gratis." in wait(jid)["result"]["removed_words"]
 
+    # Carrusel e historias, sin IA: salen de las frases del vídeo.
+    kit = c.post(f"/api/jobs/{jid}/kit", json={}).json()
+    assert len(kit["carousel"]) >= 2 and len(kit["stories"]) == 3
+    r = c.get(f"/api/jobs/{jid}/kit/{kit['carousel'][0]}")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+    assert c.get(f"/api/jobs/{jid}/kit/kit.zip").status_code == 200
+    assert c.get(f"/api/jobs/{jid}/kit/..%2Fplan.json").status_code == 404
+    assert c.post(f"/api/jobs/{jid}/kit", json={"message": "cambia la 3"}).status_code == 400
+
     # Sigue en la biblioteca aunque Imán se reinicie.
     server.JOBS.clear()
     lib = c.get("/api/reels").json()["reels"]

@@ -307,6 +307,29 @@ $("#library").onclick = async e => {
   showResult(state.job);
 };
 
+// ---------- carrusel e historias ----------
+function renderKit(k) {
+  const url = n => `/api/jobs/${state.job.id}/kit/${n}?v=${k.version}`;
+  $("#kit-carousel").innerHTML = k.carousel.map(n => `<a href="${url(n)}" target="_blank"><img src="${url(n)}" alt="" loading="lazy"></a>`).join("");
+  $("#kit-stories").innerHTML = k.stories.map(n => `<a href="${url(n)}" target="_blank"><img src="${url(n)}" alt="" loading="lazy"></a>`).join("");
+  $("#kit-dl").href = url("kit.zip");
+  $("#kit-reply").textContent = k.reply || "";
+  $("#kit-box").hidden = false;
+}
+async function makeKit(message = "") {
+  const btn = $("#kit-btn");
+  btn.disabled = true; btn.textContent = message ? "Cambiándolo…" : "Preparándolo…";
+  try { renderKit(await postJSON(`/api/jobs/${state.job.id}/kit`, { message })); }
+  catch (err) { $("#kit-reply").textContent = err.message; $("#kit-box").hidden = false; }
+  finally { btn.disabled = false; btn.textContent = "✦ Rehazlo"; }
+}
+$("#kit-btn").onclick = () => makeKit();
+$("#kit-form").onsubmit = e => {
+  e.preventDefault();
+  const m = $("#kit-input").value.trim();
+  if (m) { $("#kit-input").value = ""; makeKit(m); }
+};
+
 // ---------- revisa lo que dices ----------
 async function loadPhrases(j) {
   $("#phrases-apply").hidden = true;
@@ -354,6 +377,7 @@ loadMemory();
 
 function showResult(j) {
   renderChat(j);
+  $("#kit-box").hidden = true; $("#kit-btn").textContent = "✦ Hazme el carrusel y las historias";
   loadPhrases(j);
   renderEffects(j);
   $("#post-box").hidden = true;
