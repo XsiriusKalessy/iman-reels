@@ -220,3 +220,5 @@ label.color input { width: 44px; height: 34px; padding: 2px; margin: 0; border-r
 .cover img { width: 90px; aspect-ratio: 9/16; object-fit: cover; border-radius: 10px; background: #000; }
 .cover input[type=range] { padding: 0; accent-color: var(--accent); background: none; border: 0; }
 .cover a { display: inline-block; margin-top: 8px; font-size: 14px; }
+.result .phone { position: sticky; top: 90px; }
+@media (max-width: 760px) { .result .phone { position: relative; top: 0; } }
