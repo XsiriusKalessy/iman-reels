@@ -150,6 +150,8 @@ thead th { font-family: var(--mono); font-size: 12.5px; letter-spacing: .08em; t
 td.us, th.us { background: color-mix(in srgb, var(--norte) 8%, transparent); }
 th.us { color: var(--norte); }
 td.us { font-weight: 700; }
+.compare.after { margin-top: 32px; }
+.price .weekly { margin: -4px 0 18px; font-weight: 700; color: var(--norte-hover); }
 
 /* Precio */
 .pricing { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
@@ -292,8 +294,8 @@ summary::after { transition: transform .2s var(--ease-out); }
       </div>
       </div>
       <div class="toggle" role="group" aria-label="Comparar">
-        <button type="button" id="b-raw" aria-pressed="false">Toma en bruto</button>
-        <button type="button" id="b-edit" aria-pressed="true">Con Imán</button>
+        <button type="button" id="b-raw" aria-pressed="false">Reel normal</button>
+        <button type="button" id="b-edit" aria-pressed="true">Reel con Imán</button>
       </div>
     </div>
   </div>
@@ -302,7 +304,7 @@ summary::after { transition: transform .2s var(--ease-out); }
 <section class="band">
   <div class="inner narrow">
     <p class="eyebrow">¿Te suena?</p>
-    <h2>¿Te suena alguna?</h2>
+    <h2>Seamos sinceros: tu último reel te llevó la tarde entera y lo vieron tu madre y dos bots.</h2>
     <ul class="pains">
       <li>Grabas, te trabas en la segunda frase y vuelves a empezar. Así nueve veces.</li>
       <li>Abres CapCut, ves cuarenta botones y lo cierras. «Mañana.»</li>
@@ -319,6 +321,17 @@ summary::after { transition: transform .2s var(--ease-out); }
   <div class="inner narrow">
     <h2>Lo difícil nunca fue grabar.</h2>
     <p class="lead">Grabar es hablar a la cámara como hablas con un cliente. Lo que te frena es lo de después: cortar fallos, quitar silencios, poner subtítulos, buscar el gancho, que suene bien. Eso es justo lo que hace Imán. Tú solo grabas.</p>
+    <div class="compare after">
+      <table>
+        <thead><tr><th></th><th>A mano</th><th>Apps de plantillas</th><th class="us">Con Imán</th></tr></thead>
+        <tbody>
+          <tr><td>Tiempo</td><td>1 a 3 horas</td><td>20-40 min peleándote con capas</td><td class="us">Unos minutos</td></tr>
+          <tr><td>Qué haces tú</td><td>Todo</td><td>Elegir plantilla, cortar y ajustar</td><td class="us">Grabar y pulsar</td></tr>
+          <tr><td>Fallos y silencios</td><td>Los cortas tú</td><td>Los cortas tú</td><td class="us">Se van solos</td></tr>
+          <tr><td>Resultado</td><td>Depende de lo que sepas</td><td>Se nota la plantilla</td><td class="us">Tu cara, tu voz y tu marca</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </section>
 
@@ -399,6 +412,7 @@ summary::after { transition: transform .2s var(--ease-out); }
     <div class="price">
       <span class="badge">Precio fundador</span>
       <div class="amount"><b>79 €</b><span>/ año · precio fundador para los primeros</span></div>
+      <p class="weekly">Sale a 1,50 € a la semana: menos que un café.</p>
       <a class="btn" href="#precio" id="buy" data-buy>Quiero Imán · 79 €</a>
       <p class="fine" id="buy-soon" hidden>Abrimos las ventas muy pronto, con precio de lanzamiento para los primeros.</p>
       <div class="guarantee">
