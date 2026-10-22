@@ -199,16 +199,21 @@ class AIConfig:
         )
 
 
-def _ask_json(cfg: AIConfig, system: str, user: str, schema: dict) -> dict:
+def _ask_json(cfg: AIConfig, system: str, user: str, schema: dict, images: list[bytes] | None = None) -> dict:
+    """Pregunta a la IA y devuelve JSON con el esquema dado. `images` son JPEG (fotogramas)."""
+    import base64
+
+    b64 = [base64.b64encode(img).decode() for img in images or []]
     if cfg.provider == "claude":
         import anthropic
 
         client = anthropic.Anthropic(api_key=cfg.anthropic_key)
+        content = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": d}} for d in b64]
         resp = client.beta.messages.create(
             model=cfg.claude_model,
             max_tokens=16000,
             system=system,
-            messages=[{"role": "user", "content": user}],
+            messages=[{"role": "user", "content": [*content, {"type": "text", "text": user}] if b64 else user}],
             output_config={"effort": "medium", "format": {"type": "json_schema", "schema": schema}},
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
@@ -223,7 +228,10 @@ def _ask_json(cfg: AIConfig, system: str, user: str, schema: dict) -> dict:
         client = OpenAI(api_key=cfg.openai_key)
         resp = client.chat.completions.create(
             model=cfg.openai_model,
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": [
+                {"type": "text", "text": user},
+                *({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{d}"}} for d in b64)
+            ] if b64 else user}],
             response_format={"type": "json_schema", "json_schema": {"name": "respuesta", "schema": schema, "strict": True}},
         )
         return json.loads(resp.choices[0].message.content)
@@ -482,6 +490,51 @@ def post_copy(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "", ct
         if t and t.lower() not in (x.lower() for x in tags):
             tags.append(t)
     return {"caption": str(data.get("caption", "")).strip()[:2000], "hashtags": tags[:10]}
+
+
+# --- Copiar el estilo de un reel ------------------------------------------------------
+
+STYLE_FONTS = ["Moderna", "Impacto", "Condensada", "Elegante", "Manuscrita"]
+STYLE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string", "description": "Nombre corto para el estilo (2 o 3 palabras)."},
+        "font": {"type": "string", "enum": STYLE_FONTS},
+        "uppercase": {"type": "boolean"},
+        "words_per_line": {"type": "integer", "description": "Palabras que se ven a la vez en los subtítulos (1 a 7)."},
+        "position": {"type": "string", "enum": ["arriba", "centro", "abajo"]},
+        "size": {"type": "string", "enum": ["pequeño", "mediano", "grande"]},
+        "text_color": {"type": "string", "description": "#RRGGBB"},
+        "highlight_color": {"type": "string", "description": "#RRGGBB de la palabra que se está diciendo"},
+        "outline": {"type": "boolean", "description": "borde o sombra oscura alrededor de las letras"},
+        "box": {"type": "boolean", "description": "caja de color detrás del texto"},
+        "box_color": {"type": "string", "description": "#RRGGBB o vacío"},
+        "pop": {"type": "boolean", "description": "la palabra que se dice crece o salta"},
+        "notes": {"type": "string", "description": "En una frase: cómo es el estilo (letra, colores, ritmo, efectos)."},
+    },
+    "required": ["name", "font", "uppercase", "words_per_line", "position", "size", "text_color",
+                 "highlight_color", "outline", "box", "box_color", "pop", "notes"],
+    "additionalProperties": False,
+}
+
+STYLE_SYSTEM = """Eres diseñador de reels. Te paso fotogramas de un reel que le gusta al creador. Fíjate SOLO en el
+estilo de los subtítulos y los textos en pantalla, no en el contenido ni en la persona: qué tipo de letra es
+(Moderna = sans limpia; Impacto = sans muy gruesa; Condensada = alta y estrecha; Elegante = con serifa;
+Manuscrita = a mano), si va en mayúsculas, cuántas palabras se ven a la vez, dónde está, de qué tamaño, los
+colores (texto y palabra destacada), si lleva borde o caja detrás y si la palabra activa salta. Inspírate en el
+estilo; no copies logotipos ni marcas. Si no hay subtítulos visibles, deduce un estilo limpio que encaje."""
+
+
+def style_from_frames(cfg: AIConfig, frames: list[bytes], extra: str = "") -> dict:
+    if cfg.provider == "iman":
+        import base64
+
+        from . import cloud
+
+        return cloud.call(cfg, "style", {"frames": [base64.b64encode(f).decode() for f in frames[:8]],
+                                         "extra": extra})
+    return _ask_json(cfg, STYLE_SYSTEM, "Fotogramas del reel, en orden." + (f"\n{extra}" if extra else ""),
+                     STYLE_SCHEMA, images=frames[:8])
 
 
 # --- Kit de publicación: carrusel e historias ----------------------------------------

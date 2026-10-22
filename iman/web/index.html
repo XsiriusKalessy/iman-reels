@@ -79,6 +79,16 @@
           <div id="rhythms" class="choices"></div>
           <h3>Estilo de subtítulos</h3>
           <div id="styles" class="choices inline"></div>
+          <div class="copy-style">
+            <button class="ghost" type="button" id="copy-style-btn">✦ Copiar el estilo de un reel que te gusta</button>
+            <div id="copy-style-box" class="stack" hidden>
+              <p class="hint">Sube el reel (guárdalo o grábalo con la pantalla del móvil) o una captura. Imán saca la letra, los colores, cuántas palabras salen y el ritmo. No copia el contenido de nadie.</p>
+              <input type="file" id="copy-style-file" accept="video/*,image/*">
+              <input id="copy-style-name" placeholder="Nombre para el estilo (opcional)">
+              <button class="primary" type="button" id="copy-style-go">Sacar el estilo</button>
+              <p class="hint" id="copy-style-msg"></p>
+            </div>
+          </div>
           <h3>Encuadre</h3>
           <div class="choices inline">
             <label class="choice"><input type="radio" name="fit" value="recortar" checked><span>Recortar a vertical</span></label>

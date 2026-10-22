@@ -30,8 +30,7 @@ async function loadOptions() {
   $("#rhythms").innerHTML = o.rhythms.map((r, i) => `
     <label class="choice"><input type="radio" name="rhythm" value="${r.key}" ${i === 0 ? "checked" : ""}>
     <span>${esc(r.label)}${i === 0 ? '<b class="tag">recomendado</b>' : ""}<small>${esc(r.description)}</small></span></label>`).join("");
-  $("#styles").innerHTML = o.styles.map((s, i) => `
-    <label class="choice"><input type="radio" name="style" value="${s.key}" ${i === 0 ? "checked" : ""}><span>${esc(s.label)}</span></label>`).join("");
+  renderStyles(o.styles);
   state.options = o;
   $("#packs").innerHTML = o.packs.map(p => `
     <label class="choice"><input type="radio" name="pack" value="${p.key}" ${p.key === "general" ? "checked" : ""}>
@@ -40,6 +39,41 @@ async function loadOptions() {
   $("#packs").onchange = () => applyPack(false);
   renderHooks(o.hook_templates);
 }
+function renderStyles(list, select) {
+  const cur = select || $("input[name=style]:checked")?.value;
+  $("#styles").innerHTML = list.map((s, i) => `
+    <label class="choice ${s.mine ? "mine" : ""}" ${s.notes ? `title="${esc(s.notes)}"` : ""}>
+      <input type="radio" name="style" value="${s.key}" data-rhythm="${s.rhythm || ""}" ${(cur ? s.key === cur : i === 0) ? "checked" : ""}>
+      <span>${esc(s.label)}${s.mine ? `<small>Copiado de un reel</small><button type="button" class="link forget" data-style-del="${s.key}" title="Borrar">✕</button>` : ""}</span></label>`).join("");
+}
+$("#styles").onclick = async e => {
+  const del = e.target.closest("[data-style-del]");
+  if (!del) return;
+  e.preventDefault();
+  if (!confirm("¿Borrar este estilo?")) return;
+  renderStyles((await api(`/api/styles/${del.dataset.styleDel}`, { method: "DELETE" })).styles);
+};
+$("#styles").onchange = e => {
+  const r = e.target.dataset.rhythm && $(`input[name=rhythm][value="${e.target.dataset.rhythm}"]`);
+  if (r) r.checked = true;  // el estilo copiado trae su ritmo
+};
+$("#copy-style-btn").onclick = () => { $("#copy-style-box").hidden = !$("#copy-style-box").hidden; };
+$("#copy-style-go").onclick = async () => {
+  const f = $("#copy-style-file").files[0];
+  if (!f) return $("#copy-style-file").click();
+  const btn = $("#copy-style-go"), msg = $("#copy-style-msg");
+  btn.disabled = true; btn.textContent = "Mirando el reel…"; msg.textContent = "";
+  const fd = new FormData();
+  fd.append("file", f); fd.append("name", $("#copy-style-name").value);
+  try {
+    const r = await api("/api/styles/copy", { method: "POST", body: fd });
+    renderStyles(r.styles, r.key);
+    const rh = $(`input[name=rhythm][value="${r.rhythm}"]`); if (rh) rh.checked = true;
+    msg.textContent = `Listo: «${r.label}». ${r.notes}`;
+    $("#copy-style-file").value = ""; $("#copy-style-name").value = "";
+  } catch (err) { msg.textContent = err.message; }
+  finally { btn.disabled = false; btn.textContent = "Sacar el estilo"; }
+};
 function renderHooks(list) {
   $("#hook-template").innerHTML = `<option value="">Plantilla de gancho (opcional)</option>` + list.map(t => `<option>${esc(t)}</option>`).join("");
 }

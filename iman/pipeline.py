@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import ai, brand, effects, media, segment
+from . import ai, brand, copystyle, effects, media, segment
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Word
@@ -102,6 +102,9 @@ def run(
     plan: EditPlan | None = None,
 ) -> EditResult:
     workdir.mkdir(parents=True, exist_ok=True)
+    copystyle.register()  # los estilos copiados de otros reels
+    if opts.style not in STYLES:
+        opts.style = "impacto"
     progress("Preparando tu vídeo", 0.03)
     info = media.probe(src)
     if not info.has_audio:

@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ai, brand, config, license, packs, pipeline, updates
+from . import ai, brand, config, copystyle, license, packs, pipeline, updates
 from .captions import STYLES
 from .models import EditPlan, Word
 from .rhythm import RHYTHMS
@@ -86,7 +86,7 @@ def delete_job(job_id: str):
 def options():
     return {
         "rhythms": [{"key": r.key, "label": r.label, "description": r.description} for r in RHYTHMS.values()],
-        "styles": [{"key": s.key, "label": s.label} for s in STYLES.values()],
+        "styles": _styles(),
         "hook_templates": HOOK_TEMPLATES,
         "packs": [{"key": p.key, "label": p.label, "description": p.description, "style": p.style,
                    "hooks": list(p.hooks)} for p in packs.PACKS.values()],
@@ -109,6 +109,53 @@ def update_install():
         raise HTTPException(402, "Esta versión salió después de que caducara tu licencia. Renueva para tenerla.")
     updates.start_install(info)
     return updates.install_status()
+
+
+def _styles() -> list[dict]:
+    copystyle.register()
+    mine = copystyle.custom()
+    return [{"key": s.key, "label": s.label, "mine": s.key in mine, "rhythm": mine.get(s.key, {}).get("rhythm", ""),
+             "notes": mine.get(s.key, {}).get("notes", "")} for s in STYLES.values()]
+
+
+@app.post("/api/styles/copy")
+async def copy_style(file: UploadFile = File(...), name: str = Form("")):
+    """Copiar el estilo de un reel: letra, colores, cuántas palabras y ritmo. Nunca el contenido."""
+    aicfg = config.ai_config(config.load())
+    if not aicfg.enabled:
+        raise HTTPException(400, "Activa la IA en Ajustes para copiar el estilo de un reel")
+    suffix = Path(file.filename or "reel.mp4").suffix.lower() or ".mp4"
+    if suffix not in (".mp4", ".mov", ".m4v", ".webm", ".jpg", ".jpeg", ".png", ".webp"):
+        raise HTTPException(400, "Sube el reel en vídeo (MP4, MOV) o una captura")
+    tmp = config.HOME / "tmp"
+    tmp.mkdir(parents=True, exist_ok=True)
+    src = tmp / f"estilo-{uuid.uuid4().hex[:8]}{suffix}"
+    try:
+        with src.open("wb") as f:
+            shutil.copyfileobj(file.file, f)
+        try:
+            shots = copystyle.frames(src)
+            rate = copystyle.cut_rate(src)
+        except Exception:
+            raise HTTPException(400, "No he podido leer ese archivo. Prueba con el vídeo del reel en MP4.")
+        try:
+            analysis = ai.style_from_frames(aicfg, shots)
+        except Exception as e:
+            raise HTTPException(502, f"La IA no ha podido analizar el reel: {e}")
+        saved = copystyle.save(name.strip() or analysis.get("name") or "Mi estilo", analysis,
+                               copystyle.rhythm_for(rate))
+    finally:
+        src.unlink(missing_ok=True)
+    return {"key": saved["key"], "label": saved["style"]["label"], "rhythm": saved["rhythm"], "notes": saved["notes"],
+            "styles": _styles()}
+
+
+@app.delete("/api/styles/{key}")
+def delete_style(key: str):
+    if not key.startswith("mio-"):
+        raise HTTPException(400, "Solo puedes borrar tus estilos")
+    copystyle.remove(key)
+    return {"styles": _styles()}
 
 
 HOOK_TEMPLATES = [
@@ -318,6 +365,7 @@ async def create_job(
 ):
     if pack and pack not in packs.PACKS:
         raise HTTPException(400, "Opción no válida")
+    copystyle.register()
     if rhythm not in RHYTHMS or style not in STYLES or size not in ("1080", "4k") or fit not in ("recortar", "fondo"):
         raise HTTPException(400, "Opción no válida")
     allowed, watermark = license.can_edit(_refresh_license())

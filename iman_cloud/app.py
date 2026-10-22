@@ -147,6 +147,22 @@ def kit(request: Request, body: KitIn, x_iman_license: str = Header(""), x_iman_
     return ai.kit_copy_raw(_cfg(), body.transcript, body.hook, body.pack, body.cta, body.current, body.message)
 
 
+class StyleIn(BaseModel):
+    frames: list[str] = Field(..., max_length=8)
+    extra: str = Field("", max_length=300)
+
+
+@app.post("/v1/style")
+def style(request: Request, body: StyleIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
+    import base64
+
+    _check(x_iman_license, x_iman_instance, request)
+    frames = [base64.b64decode(f) for f in body.frames]
+    if any(len(f) > 600_000 for f in frames):
+        raise HTTPException(413, "Fotogramas demasiado grandes")
+    return ai.style_from_frames(_cfg(), frames, body.extra)
+
+
 @app.get("/health")
 def health():
     return {"ok": True}

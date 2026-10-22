@@ -190,3 +190,53 @@ def test_library_toggles_and_post(sample, tmp_path, monkeypatch):
     assert c.delete(f"/api/jobs/{jid}").json()["ok"]
     assert c.get("/api/reels").json()["reels"] == []
     assert c.get("/api/jobs/a..b").status_code == 404
+
+
+def test_copy_style_from_a_reel(sample, tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from iman import ai, config, copystyle, server
+    from iman.captions import STYLES, rgb
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(config, "HOME", tmp_path)
+    seen = {}
+
+    def fake(cfg, frames, extra=""):
+        seen["n"] = len(frames)
+        assert all(f[:2] == b"\xff\xd8" for f in frames)  # JPEG
+        return {"name": "Amarillo grande", "font": "Condensada", "uppercase": True, "words_per_line": 2,
+                "position": "centro", "size": "grande", "text_color": "#ffffff", "highlight_color": "#FFD400",
+                "outline": True, "box": False, "box_color": "", "pop": True, "notes": "Letra alta y amarilla."}
+
+    monkeypatch.setattr(ai, "style_from_frames", fake)
+    c = TestClient(server.app)
+    config.save({"provider": "none"})
+    with sample.open("rb") as f:
+        assert c.post("/api/styles/copy", files={"file": ("r.mp4", f, "video/mp4")}).status_code == 400  # sin IA
+    config.save({"provider": "iman"})
+    with sample.open("rb") as f:
+        r = c.post("/api/styles/copy", files={"file": ("r.mp4", f, "video/mp4")}, data={"name": ""}).json()
+    assert seen["n"] >= 3 and r["key"] == "mio-amarillo-grande" and r["rhythm"] in ("rapido", "dinamico", "natural")
+    st = STYLES[r["key"]]
+    assert st.font == "Anton" and st.uppercase and st.max_words == 2 and st.accent == rgb("#FFD400") and st.y == 1000
+    assert any(s["key"] == r["key"] and s["mine"] for s in c.get("/api/options").json()["styles"])
+
+    # Se usa como cualquier otro estilo.
+    real_run = pipeline.run
+    monkeypatch.setattr(pipeline, "run", lambda *a, **k: real_run(*a, **{**k, "words": k.get("words") or TAKE}))
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    config.save({"provider": "none"})
+    with sample.open("rb") as f:
+        job = c.post("/api/jobs", files={"video": ("toma.mp4", f, "video/mp4")}, data={"style": r["key"]}).json()
+    for _ in range(120):
+        j = c.get(f"/api/jobs/{job['id']}").json()
+        if j["status"] != "working":
+            break
+        time.sleep(0.5)
+    assert j["status"] == "done", j
+    assert "Anton" in (tmp_path / "jobs" / job["id"] / "subs.ass").read_text()
+
+    assert c.delete(f"/api/styles/{r['key']}").status_code == 200 and r["key"] not in STYLES
+    assert c.delete("/api/styles/impacto").status_code == 400
+    copystyle.register()

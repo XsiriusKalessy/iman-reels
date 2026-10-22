@@ -249,3 +249,8 @@ label.color input { width: 44px; height: 34px; padding: 2px; margin: 0; border-r
 .kit-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
 .kit-strip img { height: 150px; border-radius: 8px; display: block; border: 1px solid var(--line); }
 .kit-strip.stories img { height: 190px; }
+
+/* estilos copiados */
+.choice.mine span { position: relative; padding-right: 28px; }
+.choice .forget { position: absolute; top: 6px; right: 8px; text-decoration: none; }
+.copy-style { margin-top: 8px; }
