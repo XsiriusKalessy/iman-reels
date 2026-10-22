@@ -55,7 +55,7 @@
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
-body { background: var(--bg); color: var(--fg); font: 18px/1.6 var(--body); }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 18px/1.6 var(--body); }
 a { color: var(--link); }
 h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; letter-spacing: -0.025em; }
 h2 { font-size: clamp(32px, 4.6vw, 52px); font-weight: 800; line-height: 1.05; }
@@ -94,10 +94,10 @@ nav.top .inner { display: flex; align-items: center; justify-content: space-betw
 .hero .lead { margin-top: 22px; }
 .hero .ctas { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 30px; }
 .hero .note { margin-top: 14px; color: var(--muted); font-size: 15px; }
-@media (max-width: 880px) { .hero .inner { grid-template-columns: 1fr; } }
+@media (max-width: 880px) { .hero .inner { grid-template-columns: minmax(0, 1fr); } }
 
 /* Reel de demostración */
-.demo { display: grid; justify-items: center; gap: 14px; }
+.demo { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 14px; min-width: 0; }
 .phone { width: min(320px, 100%); aspect-ratio: 9/16; border-radius: 34px; padding: 10px; background: #0B0C0E; box-shadow: 0 30px 60px -30px rgba(20,21,24,.55); }
 .screen { position: relative; width: 100%; height: 100%; border-radius: 26px; overflow: hidden; background: radial-gradient(120% 80% at 50% 0%, #4b4f58 0%, #24262b 55%, #141518 100%); }
 .screen .person { position: absolute; left: 50%; bottom: -6%; width: 78%; aspect-ratio: 3/4; transform: translateX(-50%); }
@@ -255,7 +255,7 @@ nav.top .inner { display: flex; align-items: center; justify-content: space-betw
 
 /* Comparativa */
 .compare { margin-top: 40px; overflow-x: auto; }
-table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 17px; font-variant-numeric: tabular-nums; }
+table { width: 100%; min-width: 0; border-collapse: collapse; font-size: 17px; font-variant-numeric: tabular-nums; }
 th, td { padding: 14px 16px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 thead th { font-family: var(--mono); font-size: 12.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
 td.us, th.us { background: color-mix(in srgb, var(--norte) 8%, transparent); }
@@ -284,7 +284,8 @@ td.us { font-weight: 700; }
 .price li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; }
 .price li::before { content: ""; width: 14px; height: 8px; margin-top: 8px; border-left: 2.5px solid var(--sur-text); border-bottom: 2.5px solid var(--sur-text); transform: rotate(-45deg); }
 .price .fine { color: var(--muted); font-size: 14.5px; }
-@media (max-width: 820px) { .pricing { grid-template-columns: 1fr; } }
+@media (max-width: 820px) { .pricing { grid-template-columns: minmax(0, 1fr); } }
+.pricing > *, .calc > *, .profiles > *, .steps > * { min-width: 0; }
 
 /* Preguntas */
 .faq { display: grid; gap: 0; margin-top: 36px; border-top: 1px solid var(--line); }
@@ -384,6 +385,26 @@ summary::after { transition: transform .2s var(--ease-out); }
 .screen .clip { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .has-video .person, .has-video .hookcard, .has-video .caption, .has-video .rawtext { display: none; }
 .has-video .rawlayer { background: #141518; }
+/* En el móvil las tablas pasan a tarjetas apiladas: nada de deslizar de lado. */
+@media (max-width: 719px) {
+  .compare { overflow: visible; }
+  .compare table, .compare tbody, .compare tr, .compare td { display: block; width: 100%; }
+  .compare thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .compare tr { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+  .compare td { border: 0; padding: 4px 0; }
+  .compare td.us { background: none; }
+  .cmp td:first-child { font-family: var(--display); font-weight: 800; font-size: 19px; padding-bottom: 8px; }
+  .cmp td[data-label] { display: flex; justify-content: space-between; gap: 16px; text-align: right; }
+  .cmp td[data-label]::before { content: attr(data-label); color: var(--muted); font-weight: 400; text-align: left; flex: 0 0 auto; max-width: 50%; }
+  .cmp td.us[data-label] { color: var(--norte); }
+  .cmp tr:has(td:first-child.us) { border-color: transparent;
+    background: linear-gradient(var(--card), var(--card)) padding-box, linear-gradient(135deg, var(--norte), var(--sur)) border-box; }
+  .cmp td:first-child.us { color: var(--norte); }
+  .benefits td:nth-child(1) { font-family: var(--mono); font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .benefits td:nth-child(2) { font-weight: 700; font-size: 17px; }
+  .benefits td:nth-child(3) { color: var(--sur-text); font-weight: 400; }
+  .calc input[type=number] { max-width: 100%; }
+}
 [hidden] { display: none !important; }
 </style>
 <script>document.documentElement.classList.add("js");</script>
@@ -505,13 +526,13 @@ summary::after { transition: transform .2s var(--ease-out); }
     <h2>Lo difícil nunca fue grabar.</h2>
     <p class="lead">Grabar es hablar a la cámara como hablas con un cliente. Lo que te frena es lo de después: cortar fallos, quitar silencios, poner subtítulos, buscar el gancho, que suene bien. Eso es justo lo que hace Imán. Tú solo grabas.</p>
     <div class="compare after">
-      <table>
+      <table class="cmp">
         <thead><tr><th></th><th>A mano</th><th>Apps de plantillas</th><th class="us">Con Imán</th></tr></thead>
         <tbody>
-          <tr><td>Tiempo</td><td>1 a 3 horas</td><td>20-40 min peleándote con capas</td><td class="us">Unos minutos</td></tr>
-          <tr><td>Qué haces tú</td><td>Todo</td><td>Elegir plantilla, cortar y ajustar</td><td class="us">Grabar y pulsar</td></tr>
-          <tr><td>Fallos y silencios</td><td>Los cortas tú</td><td>Los cortas tú</td><td class="us">Se van solos</td></tr>
-          <tr><td>Resultado</td><td>Depende de lo que sepas</td><td>Se nota la plantilla</td><td class="us">Tu cara, tu voz y tu marca</td></tr>
+          <tr><td>Tiempo</td><td data-label="A mano">1 a 3 horas</td><td data-label="Apps de plantillas">20-40 min peleándote con capas</td><td class="us" data-label="Con Imán">Unos minutos</td></tr>
+          <tr><td>Qué haces tú</td><td data-label="A mano">Todo</td><td data-label="Apps de plantillas">Elegir plantilla, cortar y ajustar</td><td class="us" data-label="Con Imán">Grabar y pulsar</td></tr>
+          <tr><td>Fallos y silencios</td><td data-label="A mano">Los cortas tú</td><td data-label="Apps de plantillas">Los cortas tú</td><td class="us" data-label="Con Imán">Se van solos</td></tr>
+          <tr><td>Resultado</td><td data-label="A mano">Depende de lo que sepas</td><td data-label="Apps de plantillas">Se nota la plantilla</td><td class="us" data-label="Con Imán">Tu cara, tu voz y tu marca</td></tr>
         </tbody>
       </table>
     </div>
@@ -535,16 +556,16 @@ summary::after { transition: transform .2s var(--ease-out); }
     <p class="eyebrow">Qué te da</p>
     <h2>Lo que hace por ti, y cómo se nota.</h2>
     <div class="compare">
-      <table>
+      <table class="benefits">
         <thead><tr><th>Lo que hace</th><th>Lo que te da</th><th class="us">Cómo te sientes</th></tr></thead>
         <tbody>
-          <tr><td>Quita fallos y repeticiones</td><td>Te equivocas sin miedo. Repites la frase y sigue.</td><td class="us">Grabas tranquilo a la primera.</td></tr>
-          <tr><td>Corta silencios y muletillas</td><td>Reels con ritmo, sin «ehh» ni pausas raras.</td><td class="us">Pareces más seguro de lo que estabas.</td></tr>
-          <tr><td>Escribe el gancho</td><td>Los 3 primeros segundos que paran el dedo.</td><td class="us">Ya no te quedas en blanco.</td></tr>
-          <tr><td>Subtítulos animados</td><td>Se entiende sin sonido, que es como lo ve casi todo el mundo.</td><td class="us">Profesional sin pagar a nadie.</td></tr>
-          <tr><td>Limpia la voz</td><td>Suena como con micro aunque grabes en la cocina.</td><td class="us">Te escuchas y no te da vergüenza.</td></tr>
-          <tr><td>Pone tu marca sola</td><td>Tus colores y tu logo en cada reel.</td><td class="us">Tu perfil parece de empresa seria.</td></tr>
-          <tr><td>Texto y hashtags</td><td>Publicas sin pensar qué poner.</td><td class="us">Del móvil a Instagram en un minuto.</td></tr>
+          <tr><td data-label="Lo que hace">Quita fallos y repeticiones</td><td data-label="Lo que te da">Te equivocas sin miedo. Repites la frase y sigue.</td><td class="us" data-label="Cómo te sientes">Grabas tranquilo a la primera.</td></tr>
+          <tr><td data-label="Lo que hace">Corta silencios y muletillas</td><td data-label="Lo que te da">Reels con ritmo, sin «ehh» ni pausas raras.</td><td class="us" data-label="Cómo te sientes">Pareces más seguro de lo que estabas.</td></tr>
+          <tr><td data-label="Lo que hace">Escribe el gancho</td><td data-label="Lo que te da">Los 3 primeros segundos que paran el dedo.</td><td class="us" data-label="Cómo te sientes">Ya no te quedas en blanco.</td></tr>
+          <tr><td data-label="Lo que hace">Subtítulos animados</td><td data-label="Lo que te da">Se entiende sin sonido, que es como lo ve casi todo el mundo.</td><td class="us" data-label="Cómo te sientes">Profesional sin pagar a nadie.</td></tr>
+          <tr><td data-label="Lo que hace">Limpia la voz</td><td data-label="Lo que te da">Suena como con micro aunque grabes en la cocina.</td><td class="us" data-label="Cómo te sientes">Te escuchas y no te da vergüenza.</td></tr>
+          <tr><td data-label="Lo que hace">Pone tu marca sola</td><td data-label="Lo que te da">Tus colores y tu logo en cada reel.</td><td class="us" data-label="Cómo te sientes">Tu perfil parece de empresa seria.</td></tr>
+          <tr><td data-label="Lo que hace">Texto y hashtags</td><td data-label="Lo que te da">Publicas sin pensar qué poner.</td><td class="us" data-label="Cómo te sientes">Del móvil a Instagram en un minuto.</td></tr>
         </tbody>
       </table>
     </div>
@@ -567,12 +588,12 @@ summary::after { transition: transform .2s var(--ease-out); }
     <p class="eyebrow">Las cuentas</p>
     <h2>3 reels a la semana durante un año.</h2>
     <div class="compare">
-      <table>
+      <table class="cmp">
         <thead><tr><th></th><th>Tiempo</th><th>Dinero</th></tr></thead>
         <tbody>
-          <tr><td>Editarlos tú</td><td>150 a 450 h</td><td>Tus tardes</td></tr>
-          <tr><td>Un editor (unos 25 € por reel)</td><td>Esperar días</td><td>≈ 3.900 €</td></tr>
-          <tr><td class="us">Imán</td><td class="us">≈ 8 h</td><td class="us">79 €</td></tr>
+          <tr><td>Editarlos tú</td><td data-label="Tiempo">150 a 450 h</td><td data-label="Dinero">Tus tardes</td></tr>
+          <tr><td>Un editor (unos 25 € por reel)</td><td data-label="Tiempo">Esperar días</td><td data-label="Dinero">≈ 3.900 €</td></tr>
+          <tr><td class="us">Imán</td><td class="us" data-label="Tiempo">≈ 8 h</td><td class="us" data-label="Dinero">79 €</td></tr>
         </tbody>
       </table>
     </div>
