@@ -95,7 +95,7 @@ def _filter_path(p: Path) -> str:
     return str(p).replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
 
 
-def _video_overlays(parts: list[str], ops: list, W: int, H: int) -> str:
+def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx]", src: str = "[0:v]") -> str:
     """Efectos que mezclan vídeo sobre el reel ya montado (tiempos del reel, en segundos).
 
     - bruto: tarjeta inclinada con la toma original sin cortar, arriba a la derecha.
@@ -103,7 +103,6 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int) -> str:
     - pagina: el reel encogido sobre una hoja de revista color crema.
     """
     k_scale = W / 1080
-    cur = "[vx]"
     for k, op in enumerate(ops):
         a, b = op.start, op.end
         if b - a < 0.2:
@@ -113,7 +112,7 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int) -> str:
             cw, ch = int(380 * k_scale) // 2 * 2, int(676 * k_scale) // 2 * 2
             brd = int(12 * k_scale)
             parts.append(
-                f"[0:v]trim=start={op.src_start:.3f}:duration={b - a:.3f},setpts=PTS-STARTPTS+{a:.3f}/TB,fps=30,"
+                f"{src}trim=start={op.src_start:.3f}:duration={b - a:.3f},setpts=PTS-STARTPTS+{a:.3f}/TB,fps=30,"
                 f"scale={cw}:{ch}:force_original_aspect_ratio=increase,crop={cw}:{ch},setsar=1,"
                 f"pad={cw + 2 * brd}:{ch + 2 * brd}:{brd}:{brd}:white,format=rgba,"
                 f"rotate=-0.07:c=none:ow=rotw(-0.07):oh=roth(-0.07)[ov{k}]"
@@ -223,6 +222,58 @@ def render(
         "-c:v", "libx264", "-preset", preset, "-crf", "18", "-profile:v", "high",
         "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(dst),
+    ]
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    if res.returncode != 0:
+        raise RuntimeError(f"ffmpeg falló:\n{res.stderr[-2000:]}")
+    return dst
+
+
+def composite(
+    base: Path, mask: Path, raw: Path, dst: Path, behind_ass: Path | None, ass_path: Path | None,
+    seg_ops: list, overlays: list | None = None, size: str = "1080",
+) -> Path:
+    """Segunda pasada para los efectos que van detrás de la persona.
+
+    `base` es el reel ya cortado y encuadrado (sin textos), `mask` su máscara de persona.
+    Capas, de atrás adelante: fondo (con color o desenfoque), textos de detrás, la persona,
+    efectos de vídeo, subtítulos y textos de delante.
+    """
+    W, H = SIZES[size]
+    parts = ["[0:v]split=2[bg0][fg]"]
+    cur = "[bg0]"
+    for k, op in enumerate(seg_ops):
+        a, b = op.start, op.end
+        on = f"enable='between(t,{a:.3f},{b:.3f})'"
+        if op.kind == "fondo":
+            parts.append(f"color=c=0x{op.color.lstrip('#')}:s={W}x{H}:r=30:d={b - a:.3f},setpts=PTS+{a:.3f}/TB[c{k}]")
+            parts.append(f"{cur}[c{k}]overlay=0:0:{on}:eof_action=pass[b{k}]")
+        elif op.kind == "desenfoque":
+            parts.append(f"{cur}split[x{k}][y{k}]")
+            parts.append(f"[y{k}]boxblur=22:2,eq=brightness=-0.04[yb{k}]")
+            parts.append(f"[x{k}][yb{k}]overlay=0:0:{on}[b{k}]")
+        else:
+            continue
+        cur = f"[b{k}]"
+    if behind_ass is not None:
+        parts.append(f"{cur}ass=filename='{_filter_path(behind_ass)}':fontsdir='{_filter_path(FONTS_DIR)}'[bt]")
+        cur = "[bt]"
+    parts.append(f"[1:v]scale={W}:{H}:flags=bicubic,format=gray,boxblur=2:1[mk]")
+    parts.append("[fg][mk]alphamerge[person]")
+    parts.append(f"{cur}[person]overlay=0:0[vx]")
+    cur = _video_overlays(parts, overlays or [], W, H, "[vx]", "[2:v]")
+    tail = f"{cur}null"
+    if ass_path is not None:
+        tail += f",ass=filename='{_filter_path(ass_path)}':fontsdir='{_filter_path(FONTS_DIR)}'"
+    parts.append(tail + ",format=yuv420p[vout]")
+    script = dst.with_suffix(".composite.txt")
+    script.write_text(";\n".join(parts))
+    cmd = [
+        FFMPEG, "-y", "-v", "error", "-i", str(base), "-i", str(mask), "-i", str(raw),
+        "-filter_complex_script", str(script), "-map", "[vout]", "-map", "0:a",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-profile:v", "high",
+        "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
+        "-c:a", "copy", "-movflags", "+faststart", str(dst),
     ]
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0:

@@ -15,9 +15,9 @@ CLAUDE_MODEL = "claude-opus-5-5"
 OPENAI_MODEL = "gpt-4o"
 
 EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "color", "comentario",
-                "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina"]
+                "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque"]
 FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
-                   "bruto", "fantasma", "pagina")
+                   "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque")
 TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
 LOOK_ENUM = ["", *TITULAR_LOOKS, "checklist", "capitulos", "enfoque", *COLORS]
@@ -121,6 +121,13 @@ Tu trabajo:
      (text: "-"). Muy de vez en cuando.
    - "pagina": el vídeo encogido dentro de una hoja de revista (text: titular de la hoja, 2 a 6 palabras;
      subtitle: remate a mano o vacío).
+   - "detras": una palabra gigante DETRÁS del creador, que le tapa parte de las letras (text: 1 palabra,
+     la marca o el concepto clave; subtitle: 1 a 3 palabras encima o vacío; look: color o vacío). Es el efecto
+     más llamativo: úsalo en el gancho o en el momento clave, una vez.
+   - "fondo": el fondo cambia a un color liso detrás del creador (look: el color; text: palabra blanca
+     detrás o "-"). Para un remate o un cambio de tema.
+   - "desenfoque": el fondo se desenfoca y el creador queda nítido, para una frase íntima o importante
+     (text: "-").
    - "cta": al final, si el creador pide comentar una palabra para recibir algo (text: esa palabra;
      subtitle: el aviso, p. ej. "Te envío el enlace por privado").
    - "tecleo": una caja que se escribe sola con una petición o mensaje que el creador cuenta que escribe
@@ -230,6 +237,8 @@ def _look(kind: str, look: str) -> str:
         return look if look in TITULAR_LOOKS else "revista"
     if kind == "color":
         return look if look in COLORS else "rosa"
+    if kind in ("detras", "fondo"):
+        return look if look in COLORS else ""
     if kind == "frase" and look == "enfoque":
         return look
     return ""

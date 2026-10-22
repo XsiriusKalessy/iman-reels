@@ -7,16 +7,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import ai, effects, media
+from . import ai, effects, media, segment
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
+from .models import EditPlan, Word
+from .rhythm import RHYTHMS, keep_spans, remap_words
 
 WATERMARK = (
     "Dialogue: 9,0:00:00.00,{end},Sub,,0,0,0,,"
     "{{\\an2\\pos(540,1840)\\fs40\\bord2\\shad0\\alpha&H40&}}Hecho con Imán · prueba gratis"
 )
-from .models import EditPlan, Word
-from .rhythm import RHYTHMS, keep_spans, remap_words
 
 
 @dataclass
@@ -150,7 +150,22 @@ def run(
     if opts.effects:
         overlays = effects.video_ops(plan.effects, effects.WordClock(kept, kept_idx), out_duration,
                                      lambda t: _source_time(spans, t))
-    media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice, zoom, overlays=overlays)
+    clock = effects.WordClock(kept, kept_idx)
+    segs = effects.seg_ops(plan.effects, clock, out_duration) if opts.effects else []
+    if segs and segment.available():
+        # Dos pasadas: primero el reel limpio, luego la persona recortada encima de lo que va detrás.
+        base = media.render(src, workdir / "base.mp4", spans, info, None, opts.size, opts.fit, opts.voice, zoom,
+                            preset="veryfast")
+        progress("Recortándote del fondo", 0.80)
+        mask = segment.person_masks(base, workdir / "mask.mp4", [(o.start, o.end) for o in segs])
+        behind = workdir / "behind.ass"
+        behind.write_text(build_ass([], STYLES[opts.style], out_duration,
+                                    extra_events=effects.behind_events(plan.effects, clock, STYLES[opts.style],
+                                                                       out_duration)), encoding="utf-8")
+        progress("Montando tu reel", 0.90)
+        media.composite(base, mask, src, out, behind, ass_path, segs, overlays, opts.size)
+    else:
+        media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice, zoom, overlays=overlays)
     media.thumbnail(out, workdir / "reel.jpg", min(0.6, out_duration / 2))
     progress("Listo", 1.0)
     return EditResult(

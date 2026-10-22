@@ -16,6 +16,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "httpx>=0.27"]
+# Recorte de la persona (texto detrás, fondo liso o desenfocado). La app de escritorio lo lleva siempre.
+recorte = ["mediapipe>=0.10.14", "numpy>=1.26"]
 
 [project.scripts]
 iman = "iman.cli:main"
@@ -28,4 +30,4 @@ build-backend = "setuptools.build_meta"
 include = ["iman*"]
 
 [tool.setuptools.package-data]
-iman = ["web/*", "assets/fonts/*"]
+iman = ["web/*", "assets/fonts/*", "assets/models/*"]

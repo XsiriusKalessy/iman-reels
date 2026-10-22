@@ -154,3 +154,15 @@ def test_video_effects_become_ffmpeg_overlays():
     info = media.MediaInfo(width=1280, height=720, duration=12.0, fps=30.0, has_audio=True, hdr=False)
     graph = media.build_filtergraph([Span(0, 5)], info, None, overlays=ops)
     assert "rotate=" in graph and "colorchannelmixer=aa=" in graph and "color=c=0xF4ECDF" in graph
+
+
+def test_segmentation_effects_are_split_out():
+    clock, dur = _clock()
+    fx = [{"type": "detras", "word": 6, "text": "Imán", "subtitle": "hoy", "look": "rosa", "until_word": 10},
+          {"type": "fondo", "word": 11, "text": "-", "look": "amarillo"}, {"type": "desenfoque", "word": 15, "text": "-"}]
+    ops = effects.seg_ops(fx, clock, dur)
+    assert [(o.kind, o.color) for o in ops] == [("detras", "#FF4F7B"), ("fondo", "#F5D90A"), ("desenfoque", "#123A35")]
+    behind = effects.behind_events(fx, clock, STYLES["impacto"], dur)
+    assert len(behind) == 2 and "IMÁN" in behind[0]
+    # Nada de esto se pinta en la capa de delante.
+    assert effects.build_effects(fx, clock, STYLES["impacto"], dur) == ([], [])

@@ -637,6 +637,61 @@ def frase_events(effect: dict, clock: WordClock, style: Style, duration: float) 
     return lines, Window(start, end)
 
 
+SEG_KINDS = {"detras": (2.2, 1.2), "fondo": (2.5, 1.2), "desenfoque": (2.5, 1.2)}
+# Colores de texto gigante detrás y de fondo liso.
+SEG_COLORS = {"rosa": "#FF4F7B", "amarillo": "#F5D90A", "negro": "#141518", "azul": "#2B59E6", "rojo": "#E63A2E",
+              "verde": "#1F7A55"}
+
+
+@dataclass
+class SegOp:
+    kind: str
+    start: float
+    end: float
+    color: str = ""
+
+
+def _seg_spans(effects: list[dict], clock: WordClock, duration: float):
+    starts = [clock.at(int(fx.get("word", -1))) for fx in effects or []]
+    for i, fx in enumerate(effects or []):
+        kind = fx.get("type")
+        if kind not in SEG_KINDS:
+            continue
+        later = [t for j, t in enumerate(starts) if j != i and t is not None and starts[i] is not None and t > starts[i]]
+        span = _span({**fx, "_next": min(later) if later else None}, clock, duration, *SEG_KINDS[kind])
+        if span:
+            yield fx, span
+
+
+def seg_ops(effects: list[dict], clock: WordClock, duration: float) -> list[SegOp]:
+    """Efectos que necesitan recortar a la persona, en tiempos del reel."""
+    return [SegOp(fx["type"], a, b, SEG_COLORS.get(fx.get("look", ""), "#123A35"))
+            for fx, (a, b) in _seg_spans(effects, clock, duration)]
+
+
+def behind_events(effects: list[dict], clock: WordClock, style: Style, duration: float) -> list[str]:
+    """Textos que van detrás de la persona: la palabra gigante de "detras" y el texto de "fondo"."""
+    lines = []
+    for fx, (start, end) in _seg_spans(effects, clock, duration):
+        text = str(fx.get("text", "")).strip()
+        if fx["type"] == "desenfoque" or not text or text == "-":
+            continue
+        text = text.upper()[:14]
+        color = rgb(SEG_COLORS[fx["look"]]) if fx.get("look") in SEG_COLORS else _accent(style)
+        if fx["type"] == "fondo":
+            color = "&H00FFFFFF"
+        size = textfit.fit(text, "Anton", 420, 1020)
+        t = f"{_ts(start)},{_ts(end)}"
+        # A la altura de la cabeza y los hombros, para que la persona tape parte de las letras.
+        lines.append(f"Dialogue: 2,{t},Sub,,0,0,0,,{{\\an5\\pos(540,760)\\fnAnton\\fs{size:.0f}\\bord0\\shad0"
+                     f"\\c{color}&\\fscx80\\fscy80\\t(0,180,\\fscx100\\fscy100)\\fad(120,200)}}{_esc(text)}")
+        sub = str(fx.get("subtitle", "")).strip()
+        if sub:
+            lines.append(f"Dialogue: 2,{t},Sub,,0,0,0,,{{\\an2\\pos(540,{760 - size * 0.46:.0f})\\fnFigtree ExtraBold"
+                         f"\\fs64\\bord0\\shad2\\4a&H80&\\c&H00FFFFFF&\\fad(120,200)}}{_esc(sub.upper()[:30])}")
+    return lines
+
+
 VIDEO_KINDS = {"bruto": (3.0, 2.0), "fantasma": (1.6, 0.8), "pagina": (2.6, 1.6)}
 
 

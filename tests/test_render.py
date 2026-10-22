@@ -102,3 +102,18 @@ def test_chat_applies_revised_plan(sample, tmp_path, monkeypatch):
     assert j["status"] == "done", j
     assert j["options"]["style"] == "neon"
     assert j["result"]["plan"]["hook_title"] == "Nuevo gancho"
+
+
+def test_text_behind_person_two_pass(sample, tmp_path):
+    from iman import segment
+    from iman.models import EditPlan
+
+    if not segment.available():
+        pytest.skip("sin el modelo de recorte")
+    fx = [{"type": "detras", "word": 7, "text": "Imán", "until_word": 12}, {"type": "fondo", "word": 15, "text": "-",
+                                                                         "look": "rosa"}]
+    cfg = {"provider": "none", "anthropic_key": "", "openai_key": "", "claude_model": "", "openai_model": ""}
+    res = pipeline.run(sample, tmp_path / "w", pipeline.EditOptions(), cfg, words=TAKE, plan=EditPlan(effects=fx))
+    assert (tmp_path / "w" / "mask.mp4").exists() and (tmp_path / "w" / "behind.ass").exists()
+    info = media.probe(res.video)
+    assert (info.width, info.height) == (1080, 1920) and abs(info.duration - res.duration_out) < 0.3
