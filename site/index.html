@@ -67,7 +67,8 @@ nav.top .inner { display: flex; align-items: center; justify-content: space-betw
 .navlinks a:not(.btn) { color: var(--fg); text-decoration: none; font-size: 16px; }
 @media (max-width: 720px) { .navlinks a:not(.btn) { display: none; } }
 
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 99px; padding: 14px 24px; font-weight: 700; font-size: 17px; text-decoration: none; background: var(--norte); color: var(--ink-on-red); border: 0; cursor: pointer; transition: background .15s; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 99px; padding: 14px 24px; font-weight: 700; font-size: 17px; text-decoration: none; background: var(--norte); color: var(--ink-on-red); border: 0; cursor: pointer; transform: translate(var(--mx, 0px), var(--my, 0px)) scale(var(--press, 1)); transition: background .15s var(--ease-out), transform .25s var(--ease-out); }
+.btn:active { --press: .97; transition: background .15s var(--ease-out), transform .12s var(--ease-out); }
 .btn:hover { background: var(--norte-hover); }
 .btn:focus-visible { outline: 3px solid var(--sur); outline-offset: 3px; }
 .btn.small { padding: 9px 16px; font-size: 15px; }
@@ -183,8 +184,49 @@ footer .inner { display: flex; justify-content: space-between; gap: 16px; flex-w
 .guarantee p { color: var(--muted); font-size: 15px; }
 .final h2.closing { font-size: clamp(28px, 4.4vw, 48px); max-width: 22ch; }
 .final .ps { color: var(--muted); max-width: 56ch; }
+/* 3D: el móvil flota con perspectiva; los polos del imán van detrás, a otra profundidad. */
+.stage { position: relative; isolation: isolate; perspective: 1200px; display: grid; justify-items: center; width: 100%; }
+.stage .phone { --rx: 4deg; --ry: -10deg; transform: rotateX(var(--rx)) rotateY(var(--ry)); transform-style: preserve-3d;
+  will-change: transform; box-shadow: 0 30px 60px -30px rgba(20,21,24,.55), 14px 0 0 -2px #1d1f24; }
+.pole { position: absolute; top: 18%; width: 92px; height: 92px; border-radius: 22px; z-index: -1; opacity: .9;
+  transform: translate(var(--px, 0px), var(--py, 0px)); will-change: transform; }
+.pole-n { left: calc(50% - 200px); background: var(--norte); }
+.pole-s { right: calc(50% - 200px); top: 52%; background: var(--sur); }
+@media (max-width: 520px) { .pole { width: 64px; height: 64px; } .pole-n { left: 2%; } .pole-s { right: 2%; } }
+/* Tarjetas que se inclinan hacia el cursor, con un brillo que lo sigue. */
+.tilt { position: relative; transform-style: preserve-3d; }
+.tilt::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0;
+  background: radial-gradient(240px circle at var(--gx, 50%) var(--gy, 50%), rgba(255,255,255,.35), transparent 60%);
+  transition: opacity .2s var(--ease-out); }
+.tilt:hover::after { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .tilt::after { display: none; } }
+
+/* Movimiento: una sola curva de salida, duraciones cortas y solo transform, opacity y filter. */
+:root { --ease-out: cubic-bezier(.23, 1, .32, 1); }
+.js .reveal { opacity: .01; transform: translateY(8px); filter: blur(4px); }
+.js .reveal.in { opacity: 1; transform: none; filter: none;
+  transition: opacity .25s var(--ease-out), transform .25s var(--ease-out), filter .25s var(--ease-out); transition-delay: var(--d, 0ms); }
+.js .hero h1 .w { display: inline-block; opacity: .01; transform: translateY(10px); filter: blur(4px); }
+.js .hero h1.in .w { opacity: 1; transform: none; filter: none;
+  transition: opacity .5s var(--ease-out), transform .5s var(--ease-out), filter .5s var(--ease-out); transition-delay: var(--d, 0ms); }
+.js .hero .demo { opacity: .01; transform: scale(.98); }
+.js .hero .demo.in { opacity: 1; transform: none; transition: opacity .5s var(--ease-out) .15s, transform .5s var(--ease-out) .15s; }
+/* Preguntas: la respuesta se abre con altura animada y desde arriba, nunca desde cero. */
+.ans { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .2s var(--ease-out); }
+.ans > div { overflow: hidden; }
+.ans p { opacity: 0; transform: scale(.95); transform-origin: top left; transition: opacity .2s var(--ease-out), transform .2s var(--ease-out); }
+details.is-open .ans { grid-template-rows: 1fr; }
+details.is-open .ans p { opacity: 1; transform: none; }
+summary::after { transition: transform .2s var(--ease-out); }
+@media (prefers-reduced-motion: reduce) {
+  .js .reveal, .js .hero h1 .w { transform: none; filter: none; }
+  .js .hero .demo { transform: none; }
+  .ans p { transform: none; }
+  .btn, .btn:active { transform: none; }
+}
 [hidden] { display: none !important; }
 </style>
+<script>document.documentElement.classList.add("js");</script>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
@@ -221,6 +263,8 @@ footer .inner { display: flex; justify-content: space-between; gap: 16px; flex-w
       <p class="note">Sin tarjeta. Tus 3 reels con marca de agua, para que veas tu propia cara editada.</p>
     </div>
     <div class="demo">
+      <div class="stage" id="stage">
+        <i class="pole pole-n" aria-hidden="true"></i><i class="pole pole-s" aria-hidden="true"></i>
       <div class="phone" id="phone">
         <div class="screen" role="img" aria-label="Ejemplo de reel editado por Imán, con título de gancho y subtítulos animados">
           <span class="tag" id="tag">Editado con Imán</span>
@@ -230,6 +274,7 @@ footer .inner { display: flex; justify-content: space-between; gap: 16px; flex-w
           <div class="rawtext">"Eh… hoy os cuento… espera, lo repito. Hoy te cuento el error que…"</div>
           <div class="timeline"><i id="bar"></i></div>
         </div>
+      </div>
       </div>
       <div class="toggle" role="group" aria-label="Comparar">
         <button type="button" id="b-raw" aria-pressed="false">Toma en bruto</button>
@@ -355,16 +400,16 @@ footer .inner { display: flex; justify-content: space-between; gap: 16px; flex-w
     <p class="eyebrow">Preguntas</p>
     <h2>Lo que te puede estar frenando.</h2>
     <div class="faq">
-      <details><summary>«No sé editar.»</summary><p>Perfecto, no hace falta. Si sabes mandar un audio de WhatsApp, sabes usar Imán.</p></details>
-      <details><summary>«Me da corte salir en vídeo.»</summary><p>Normal. Por eso quita los fallos: puedes equivocarte diez veces y solo se ve la buena.</p></details>
-      <details><summary>«Seguro que se nota que es IA.»</summary><p>Haz la prueba gratis y enséñaselo a alguien sin decírselo.</p></details>
-      <details><summary>«No tengo tiempo.»</summary><p>Justo por eso. Grabas 2 minutos y en lo que te tomas el café está listo.</p></details>
-      <details><summary>«Ya tengo CapCut.»</summary><p>CapCut te da las herramientas. Imán hace el trabajo. Puedes seguir usando los dos.</p></details>
-      <details><summary>«79 € es mucho.»</summary><p>Es menos que un reel al mes con un editor. Y si en 10 reels no te ahorra tiempo, te lo devolvemos.</p></details>
-      <details><summary>«¿Y si no me sirve para mi sector?»</summary><p>Tiene packs para viajes, cursos, productos y negocio local. Pruébalo gratis con tus vídeos antes de pagar.</p></details>
-      <details><summary>¿Necesito una cuenta de ChatGPT o Claude?</summary><p>No. La IA va incluida en la licencia. Si ya tienes tu propia clave de Claude o de OpenAI, también puedes usarla.</p></details>
-      <details><summary>¿Mi vídeo se sube a algún sitio?</summary><p>El montaje se hace en tu ordenador. Para decidir los cortes y el gancho, Imán envía a la IA el texto de lo que dices, no el vídeo.</p></details>
-      <details><summary>¿Qué pasa al acabar el año?</summary><p>Te avisamos antes. Si renuevas, sigues con las mejoras nuevas. Si no, los reels que ya hiciste son tuyos para siempre.</p></details>
+      <details><summary>«No sé editar.»</summary><div class="ans"><div><p>Perfecto, no hace falta. Si sabes mandar un audio de WhatsApp, sabes usar Imán.</p></div></div></details>
+      <details><summary>«Me da corte salir en vídeo.»</summary><div class="ans"><div><p>Normal. Por eso quita los fallos: puedes equivocarte diez veces y solo se ve la buena.</p></div></div></details>
+      <details><summary>«Seguro que se nota que es IA.»</summary><div class="ans"><div><p>Haz la prueba gratis y enséñaselo a alguien sin decírselo.</p></div></div></details>
+      <details><summary>«No tengo tiempo.»</summary><div class="ans"><div><p>Justo por eso. Grabas 2 minutos y en lo que te tomas el café está listo.</p></div></div></details>
+      <details><summary>«Ya tengo CapCut.»</summary><div class="ans"><div><p>CapCut te da las herramientas. Imán hace el trabajo. Puedes seguir usando los dos.</p></div></div></details>
+      <details><summary>«79 € es mucho.»</summary><div class="ans"><div><p>Es menos que un reel al mes con un editor. Y si en 10 reels no te ahorra tiempo, te lo devolvemos.</p></div></div></details>
+      <details><summary>«¿Y si no me sirve para mi sector?»</summary><div class="ans"><div><p>Tiene packs para viajes, cursos, productos y negocio local. Pruébalo gratis con tus vídeos antes de pagar.</p></div></div></details>
+      <details><summary>¿Necesito una cuenta de ChatGPT o Claude?</summary><div class="ans"><div><p>No. La IA va incluida en la licencia. Si ya tienes tu propia clave de Claude o de OpenAI, también puedes usarla.</p></div></div></details>
+      <details><summary>¿Mi vídeo se sube a algún sitio?</summary><div class="ans"><div><p>El montaje se hace en tu ordenador. Para decidir los cortes y el gancho, Imán envía a la IA el texto de lo que dices, no el vídeo.</p></div></div></details>
+      <details><summary>¿Qué pasa al acabar el año?</summary><div class="ans"><div><p>Te avisamos antes. Si renuevas, sigues con las mejoras nuevas. Si no, los reels que ya hiciste son tuyos para siempre.</p></div></div></details>
     </div>
   </div>
 </section>
@@ -401,6 +446,123 @@ const CHECKOUT_URL = "";
   s.defer = true;
   s.onload = () => window.createLemonSqueezy && window.createLemonSqueezy();
   document.head.appendChild(s);
+})();
+// Movimiento de la página (ver estilos "Movimiento").
+(() => {
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // Titular por palabras, sin romper el <em> ni el salto de línea.
+  const h1 = document.querySelector(".hero h1");
+  let i = 0;
+  const split = node => [...node.childNodes].forEach(n => {
+    if (n.nodeType === 3) {
+      const frag = document.createDocumentFragment();
+      n.textContent.split(/(\s+)/).forEach(part => {
+        if (!part) return;
+        if (/^\s+$/.test(part)) { frag.append(part); return; }
+        const w = document.createElement("span");
+        w.className = "w"; w.textContent = part; w.style.setProperty("--d", (i++ * 30) + "ms");
+        frag.append(w);
+      });
+      n.replaceWith(frag);
+    } else if (n.nodeName === "EM") {
+      split(n);
+    }
+  });
+  split(h1);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    h1.classList.add("in");
+    document.querySelector(".hero .demo").classList.add("in");
+  }));
+
+  // Aparición al hacer scroll, con un pequeño escalonado entre hermanos.
+  const targets = document.querySelectorAll(
+    ".band .eyebrow, .band h2, .band .lead, .pains li, .punch, .step, .profile, .compare tbody tr, " +
+    ".takeaways li, .price, .faq details, .final .btn, .final .ps");
+  targets.forEach(el => {
+    const sibs = [...el.parentElement.children].filter(c => c.matches(el.tagName));
+    el.style.setProperty("--d", Math.min(sibs.indexOf(el), 6) * 50 + "ms");
+    el.classList.add("reveal");
+  });
+  const io = new IntersectionObserver(entries => entries.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+  }), { rootMargin: "0px 0px -8% 0px" });
+  targets.forEach(el => io.observe(el));
+
+  // Preguntas: abrir y cerrar con animación (el cierre espera a que acabe).
+  document.querySelectorAll(".faq details").forEach(d => {
+    d.querySelector("summary").addEventListener("click", e => {
+      e.preventDefault();
+      if (d.open) {
+        d.classList.remove("is-open");
+        setTimeout(() => { if (!d.classList.contains("is-open")) d.open = false; }, reduce ? 0 : 200);
+      } else {
+        d.open = true;
+        requestAnimationFrame(() => d.classList.add("is-open"));
+      }
+    });
+  });
+
+  // 3D: el móvil sigue al ratón con un muelle suave (en móvil, al scroll). Quieto si se pide menos movimiento.
+  const phone = document.getElementById("phone");
+  const poles = document.querySelectorAll(".pole");
+  const fine = matchMedia("(pointer: fine)").matches;
+  const weak = !fine && (navigator.hardwareConcurrency || 8) <= 4;
+  if (!reduce && !weak) {
+    const base = { rx: 4, ry: -10 };
+    const target = { rx: base.rx, ry: base.ry, px: 0, py: 0 };
+    const cur = { ...target };
+    if (fine) {
+      addEventListener("pointermove", e => {
+        const dx = e.clientX / innerWidth - .5, dy = e.clientY / innerHeight - .5;
+        target.ry = base.ry + dx * 16; target.rx = base.rx - dy * 16;   // ±8°
+        target.px = dx * -14; target.py = dy * -10;
+      }, { passive: true });
+    } else {
+      addEventListener("scroll", () => {
+        const k = Math.min(1, scrollY / innerHeight);
+        target.ry = base.ry + k * 14; target.rx = base.rx - k * 4; target.py = k * -20;
+      }, { passive: true });
+    }
+    const tick = () => {
+      for (const k in cur) cur[k] += (target[k] - cur[k]) * .08;
+      phone.style.setProperty("--rx", cur.rx.toFixed(2) + "deg");
+      phone.style.setProperty("--ry", cur.ry.toFixed(2) + "deg");
+      poles[0].style.setProperty("--px", cur.px.toFixed(1) + "px"); poles[0].style.setProperty("--py", cur.py.toFixed(1) + "px");
+      poles[1].style.setProperty("--px", (-cur.px * .6).toFixed(1) + "px"); poles[1].style.setProperty("--py", (-cur.py * .6).toFixed(1) + "px");
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  // Tarjetas que se inclinan hasta 6° hacia el cursor.
+  if (!reduce && fine) {
+    document.querySelectorAll(".profile, .step, .price, .pains li").forEach(c => {
+      c.classList.add("tilt");
+      c.addEventListener("pointermove", e => {
+        const r = c.getBoundingClientRect();
+        const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+        c.style.setProperty("--d", "0ms");
+        c.style.transform = `perspective(900px) rotateX(${((.5 - y) * 12).toFixed(2)}deg) rotateY(${((x - .5) * 12).toFixed(2)}deg)`;
+        c.style.setProperty("--gx", (x * 100).toFixed(1) + "%"); c.style.setProperty("--gy", (y * 100).toFixed(1) + "%");
+      });
+      c.addEventListener("pointerleave", () => { c.style.transform = ""; });
+    });
+  }
+
+  // Imán en el botón principal: se acerca 2-4 px al cursor. Solo con ratón.
+  if (!reduce && matchMedia("(pointer: fine)").matches) {
+    document.querySelectorAll(".hero .btn:not(.ghost), #buy, .final .btn").forEach(b => {
+      b.addEventListener("pointermove", e => {
+        const r = b.getBoundingClientRect();
+        const dx = (e.clientX - r.left - r.width / 2) / (r.width / 2);
+        const dy = (e.clientY - r.top - r.height / 2) / (r.height / 2);
+        b.style.setProperty("--mx", (dx * 4).toFixed(1) + "px");
+        b.style.setProperty("--my", (dy * 3).toFixed(1) + "px");
+      });
+      b.addEventListener("pointerleave", () => { b.style.removeProperty("--mx"); b.style.removeProperty("--my"); });
+    });
+  }
 })();
 (() => {
   const words = ["Hoy", "te", "cuento", "el", "error", "que", "comete", "el", "90%", "al", "grabar", "reels", "y", "arreglarlo", "es", "gratis"];
