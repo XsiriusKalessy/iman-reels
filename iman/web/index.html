@@ -12,6 +12,7 @@
   <header class="top">
     <div class="brand"><img class="logo" src="iman-logo-oscuro.svg" alt=""> Imán <small>beta</small></div>
     <nav class="steps" id="steps">
+      <button data-step="home"><b>⌂</b> Mis reels</button>
       <button data-step="idea"><b>0</b> Idea</button>
       <button data-step="upload"><b>1</b> Sube tu vídeo</button>
       <button data-step="edit"><b>2</b> Cómo lo editas</button>
@@ -23,6 +24,15 @@
   </header>
 
   <main>
+    <!-- BIBLIOTECA -->
+    <section class="panel" data-panel="home">
+      <div class="row between top-row">
+        <div><h1>Mis reels</h1><p class="lead">Todo lo que has editado con Imán, listo para volver a tocar o publicar.</p></div>
+        <button class="primary" data-goto="upload">+ Nuevo reel</button>
+      </div>
+      <div id="library" class="library"></div>
+    </section>
+
     <!-- 0. IDEA -->
     <section class="panel" data-panel="idea">
       <h1>¿Sobre qué grabas hoy?</h1>
@@ -98,8 +108,9 @@
     <!-- 3. RESULT -->
     <section class="panel" data-panel="result">
       <div class="result">
-        <div class="phone">
+        <div class="phone" id="phone">
           <video id="out" controls playsinline hidden></video>
+          <div class="safe" aria-hidden="true"><i class="s-top"></i><i class="s-bottom"></i><i class="s-right"></i></div>
           <div id="working" class="working">
             <div class="spinner"></div>
             <strong id="step">Preparando tu vídeo</strong>
@@ -112,6 +123,12 @@
           <div id="stats" class="stats"></div>
           <div id="hook-box"></div>
           <details id="cuts-box"><summary>Qué he quitado</summary><div id="cuts"></div></details>
+          <label class="check small"><input type="checkbox" id="safe-toggle"> Ver zonas que tapan Instagram y TikTok</label>
+          <div id="fx-box" hidden>
+            <h3>Efectos</h3>
+            <div id="fx-list" class="fx-list"></div>
+            <button class="ghost" id="fx-apply" hidden>Aplicar cambios</button>
+          </div>
           <h3>Dímelo como a tu editor</h3>
           <div id="chat" class="chat"></div>
           <form id="chat-form" class="chat-form">
@@ -131,6 +148,21 @@
             <input id="new-hook" placeholder="Cambiar el gancho por…">
             <button class="ghost" type="submit">Aplicar</button>
           </form>
+          <h3>Publicar</h3>
+          <div class="publish">
+            <button class="ghost" id="post-btn">✦ Escríbeme el texto y los hashtags</button>
+            <div id="post-box" hidden>
+              <textarea id="post-text" rows="7"></textarea>
+              <button class="ghost" id="post-copy">Copiar texto</button>
+            </div>
+            <div class="cover">
+              <img id="cover-img" alt="Portada">
+              <div>
+                <label>Portada: elige el momento<input type="range" id="cover-t" min="0" max="10" step="0.1" value="0.5"></label>
+                <a class="ghost" id="cover-dl" href="#" download>Descargar portada</a>
+              </div>
+            </div>
+          </div>
           <div class="row">
             <a class="primary" id="download" href="#" download>Descargar reel</a>
             <button class="ghost" data-goto="upload">Editar un nuevo reel</button>

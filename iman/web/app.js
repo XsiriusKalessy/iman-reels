@@ -3,6 +3,7 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const state = { file: null, job: null, settings: null, poll: null };
 
 function go(step) {
+  if (step === "home") loadLibrary();
   $$(".panel").forEach(p => p.classList.toggle("show", p.dataset.panel === step));
   $$("#steps button").forEach(b => b.classList.toggle("active", b.dataset.step === step));
   window.scrollTo({ top: 0 });
@@ -20,6 +21,7 @@ async function api(path, opts = {}) {
   if (!r.ok) throw Object.assign(new Error(data.detail || `Error ${r.status}`), { status: r.status });
   return data;
 }
+const postJSON = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 // ---------- opciones ----------
@@ -230,8 +232,86 @@ $("#chat-form").onsubmit = async e => {
     if (state.job.result) showResult(state.job); else showError(err.message);
   }
 };
+const FX_NAMES = { lista: "Lista", palabra: "Palabra gigante", titular: "Titular", cifra: "Cifra", frase: "Frase", tecleo: "Texto que se escribe",
+  color: "Golpe de color", comentario: "Comentario", contador: "Contador", portada: "Portada de revista", cta: "Llamada a la acción",
+  dato: "Dato", bruto: "Toma en bruto", fantasma: "Eco", pagina: "Página de revista", detras: "Texto detrás de ti",
+  fondo: "Fondo de color", desenfoque: "Fondo desenfocado", ubicacion: "Ubicación", oferta: "Oferta", ruta: "Ruta",
+  testimonio: "Testimonio", plazas: "Plazas", precio: "Precio" };
+function renderEffects(j) {
+  const list = j.result.plan.effects || [];
+  $("#fx-box").hidden = !list.length;
+  $("#fx-apply").hidden = true;
+  $("#fx-list").innerHTML = list.map((fx, i) => {
+    const name = fx.type === "lista" && fx.look === "itinerario" ? "Itinerario" : FX_NAMES[fx.type] || fx.type;
+    const detail = fx.type === "lista" ? fx.items.map(it => it.text).join(" · ") : [fx.text, fx.subtitle].filter(x => x && x !== "-").join(" · ");
+    return `<label class="fx ${fx.off ? "off" : ""}"><input type="checkbox" class="switch" data-i="${i}" ${fx.off ? "" : "checked"}>
+      <span class="grow">${esc(name)}<small>${esc(detail)}</small></span></label>`;
+  }).join("");
+}
+$("#fx-list").onchange = e => {
+  e.target.closest(".fx").classList.toggle("off", !e.target.checked);
+  $("#fx-apply").hidden = false;
+};
+$("#fx-apply").onclick = async () => {
+  const off = $$("#fx-list .switch").filter(s => !s.checked).map(s => +s.dataset.i);
+  showWorking("Aplicando cambios", 0.02);
+  try { state.job = await postJSON(`/api/jobs/${state.job.id}/plan`, { effects_off: off }); poll(); }
+  catch (err) { showError(err.message); }
+};
+$("#safe-toggle").onchange = e => $("#phone").classList.toggle("show-safe", e.target.checked);
+$("#post-btn").onclick = async () => {
+  const btn = $("#post-btn");
+  btn.disabled = true; btn.textContent = "Escribiendo…";
+  try {
+    const p = await api(`/api/jobs/${state.job.id}/post`, { method: "POST" });
+    $("#post-text").value = `${p.caption}\n\n${p.hashtags.map(h => "#" + h).join(" ")}`;
+    $("#post-box").hidden = false;
+  } catch (err) { $("#post-text").value = err.message; $("#post-box").hidden = false; }
+  finally { btn.disabled = false; btn.textContent = "✦ Escríbeme el texto y los hashtags"; }
+};
+$("#post-copy").onclick = async () => {
+  await navigator.clipboard.writeText($("#post-text").value).catch(() => $("#post-text").select());
+  $("#post-copy").textContent = "Copiado ✓";
+  setTimeout(() => $("#post-copy").textContent = "Copiar texto", 1500);
+};
+function setCover(t) {
+  const url = `/api/jobs/${state.job.id}/cover.jpg?t=${(+t).toFixed(1)}`;
+  $("#cover-img").src = url; $("#cover-dl").href = url;
+}
+let coverTimer;
+$("#cover-t").oninput = e => { clearTimeout(coverTimer); coverTimer = setTimeout(() => setCover(e.target.value), 150); };
+
+async function loadLibrary() {
+  const { reels } = await api("/api/reels");
+  $("#library").innerHTML = reels.map(r => `
+    <div class="reel-card" data-open="${r.id}" role="button" tabindex="0">
+      <img src="/api/jobs/${r.id}/reel.jpg" alt="" loading="lazy">
+      <button class="del" data-del="${r.id}" title="Borrar">✕</button>
+      <div><strong>${esc(r.title || "Sin título")}</strong><span>${fmt(r.duration)} · ${new Date(r.created * 1000).toLocaleDateString("es-ES")}</span></div>
+    </div>`).join("");
+}
+$("#library").onclick = async e => {
+  const del = e.target.closest("[data-del]");
+  if (del) {
+    e.stopPropagation();
+    if (!confirm("¿Borrar este reel? No se puede deshacer.")) return;
+    await api(`/api/jobs/${del.dataset.del}`, { method: "DELETE" });
+    return loadLibrary();
+  }
+  const card = e.target.closest("[data-open]");
+  if (!card) return;
+  state.job = await api(`/api/jobs/${card.dataset.open}`);
+  go("result");
+  showResult(state.job);
+};
+
 function showResult(j) {
   renderChat(j);
+  renderEffects(j);
+  $("#post-box").hidden = true;
+  $("#cover-t").max = j.result.duration_out.toFixed(1);
+  $("#cover-t").value = Math.min(0.5, j.result.duration_out / 2);
+  setCover($("#cover-t").value);
   const r = j.result, bust = `?t=${Date.now()}`;
   const v = $("#out");
   v.src = `/api/jobs/${j.id}/reel.mp4${bust}`; v.hidden = false; $("#working").hidden = true;
@@ -330,7 +410,6 @@ function brandBody() {
     font: f.querySelector("input[name=font]:checked")?.value || "", sector: f.sector.value === "general" ? "" : f.sector.value,
     logo_corner: f.logo_corner.checked, end_card: f.end_card.checked };
 }
-const postJSON = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 $("#brand-auto").onclick = async () => {
   const d = brandForm.description.value.trim();
   if (!d) return brandForm.description.focus();
@@ -349,4 +428,5 @@ $("#brand-save").onclick = async e => {
 };
 $("#open-brand").onclick = () => { brandError(""); $("#brand").showModal(); };
 $("#brand-edit-link").onclick = e => { e.preventDefault(); $("#brand").showModal(); };
-loadOptions().then(() => api("/api/brand").then(renderBrand)); loadSettings(); go("upload");
+loadOptions().then(() => api("/api/brand").then(renderBrand)); loadSettings();
+api("/api/reels").then(r => go(r.reels.length ? "home" : "upload"));
