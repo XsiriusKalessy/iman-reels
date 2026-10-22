@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -31,6 +33,23 @@ def _tool(name: str) -> str:
 
 FFMPEG = _tool("ffmpeg")
 FFPROBE = _tool("ffprobe")
+
+
+@functools.cache
+def _ffmpeg_major() -> int:
+    try:
+        out = subprocess.run([FFMPEG, "-hide_banner", "-version"], capture_output=True, text=True).stdout
+        m = re.search(r"version n?(\d+)\.", out)
+        return int(m.group(1)) if m else 99  # las compilaciones "master" no llevan número: son las más nuevas
+    except OSError:
+        return 99
+
+
+def filter_script_args(script: Path) -> list[str]:
+    """ffmpeg 7 cambió cómo se pasa el filtro desde un archivo; ffmpeg 8 quitó la forma antigua."""
+    if _ffmpeg_major() >= 7:
+        return ["-/filter_complex", str(script)]
+    return ["-filter_complex_script", str(script)]
 
 
 @dataclass
@@ -252,7 +271,7 @@ def render(
     extra, _ = _image_inputs(overlays, 1)
     cmd = [
         FFMPEG, "-y", "-v", "error", "-i", str(src), *extra,
-        "-filter_complex_script", str(script),
+        *filter_script_args(script),
         "-map", "[vout]", "-map", "[aout]",
         "-c:v", "libx264", "-preset", preset, "-crf", "18", "-profile:v", "high",
         "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
@@ -306,7 +325,7 @@ def composite(
     script.write_text(";\n".join(parts))
     cmd = [
         FFMPEG, "-y", "-v", "error", "-i", str(base), "-i", str(mask), "-i", str(raw), *extra,
-        "-filter_complex_script", str(script), "-map", "[vout]", "-map", "0:a",
+        *filter_script_args(script), "-map", "[vout]", "-map", "0:a",
         "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-profile:v", "high",
         "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
         "-c:a", "copy", "-movflags", "+faststart", str(dst),
