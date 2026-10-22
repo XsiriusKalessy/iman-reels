@@ -15,12 +15,15 @@ CLAUDE_MODEL = "claude-opus-5-5"
 OPENAI_MODEL = "gpt-4o"
 
 EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "color", "comentario",
-                "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque"]
+                "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
+                "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio"]
 FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
-                   "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque")
+                   "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
+                   "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio")
+LISTA_LOOKS = ("checklist", "capitulos", "itinerario")
 TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
-LOOK_ENUM = ["", *TITULAR_LOOKS, "checklist", "capitulos", "enfoque", *COLORS]
+LOOK_ENUM = ["", *TITULAR_LOOKS, *LISTA_LOOKS, "enfoque", *COLORS]
 
 EDIT_SCHEMA = {
     "type": "object",
@@ -137,7 +140,13 @@ Tu trabajo:
      seguidos, uno por palabra, si el creador enumera.
    - "comentario": burbuja de un comentario de un seguidor al principio, solo si el creador responde a un
      comentario (text: el comentario; title: nombre de usuario o vacío). word suele ser 0.
-   En "lista", look "capitulos" muestra un índice numerado que se ilumina por partes; look "checklist" muestra casillas arriba que se marcan al decir cada punto (bueno para
+   - "ubicacion": chincheta con el nombre de un lugar (text: el lugar; subtitle: país o zona).
+   - "oferta": tarjeta de oferta (text: qué se vende o el destino; subtitle: el precio; title: lo que incluye).
+   - "ruta": avión de un sitio a otro (text: origen; subtitle: destino; title: duración o vacío).
+   - "testimonio": reseña con cinco estrellas (text: lo que dijo el cliente o alumno; subtitle: quién lo dijo).
+   - "plazas": aviso rojo de escasez arriba (text: "Solo 7 plazas", "Acaba el domingo").
+   - "precio": etiqueta de precio (text: precio nuevo; subtitle: precio anterior tachado o vacío; title: "-30%" o vacío).
+   En "lista", look "itinerario" muestra los días de un viaje en una línea de tiempo; look "capitulos" muestra un índice numerado que se ilumina por partes; look "checklist" muestra casillas arriba que se marcan al decir cada punto (bueno para
    "lo que hace" o "lo que no necesitas"); vacío muestra la lista grande en el centro.
    Rellena siempre todos los campos: los que no use el tipo van vacíos, [] o -1. Como mucho uno de cada
    tipo y nunca dos efectos a la vez.
@@ -213,18 +222,24 @@ def _ask_json(cfg: AIConfig, system: str, user: str, schema: dict) -> dict:
     raise RuntimeError("No hay proveedor de IA configurado")
 
 
-def plan_edit(cfg: AIConfig, words: list[Word], instructions: str = "", hook_template: str = "") -> EditPlan:
+def plan_edit(cfg: AIConfig, words: list[Word], instructions: str = "", hook_template: str = "",
+              pack: str = "") -> EditPlan:
     if cfg.provider == "iman":
         from . import cloud
 
-        data = cloud.call(cfg, "plan", {"words": [w.__dict__ for w in words],
-                                        "instructions": instructions, "hook_template": hook_template})
+        data = cloud.call(cfg, "plan", {"words": [w.__dict__ for w in words], "instructions": instructions,
+                                        "hook_template": hook_template, "pack": pack})
         return _plan_from(data, len(words), "iman")
-    return _plan_from(plan_edit_raw(cfg, words, instructions, hook_template), len(words), cfg.provider)
+    return _plan_from(plan_edit_raw(cfg, words, instructions, hook_template, pack), len(words), cfg.provider)
 
 
-def plan_edit_raw(cfg: AIConfig, words: list[Word], instructions: str = "", hook_template: str = "") -> dict:
+def plan_edit_raw(cfg: AIConfig, words: list[Word], instructions: str = "", hook_template: str = "",
+                  pack: str = "") -> dict:
+    from . import packs
+
     user = "TRANSCRIPCIÓN:\n" + transcript_for_prompt(words)
+    if packs.get(pack).guide:
+        user += "\n\n" + packs.get(pack).guide
     if hook_template:
         user += f"\n\nPLANTILLA DE GANCHO elegida por el creador (adáptala a lo que dice el vídeo): {hook_template}"
     if instructions.strip():
@@ -259,7 +274,7 @@ def _plan_from(data: dict, n: int, source: str) -> EditPlan:
                 until = int(fx.get("until_word", -1))
                 effects.append({"type": "lista", "title": fx.get("title", ""), "items": items,
                                 "until_word": until if 0 <= until < n else None,
-                                "look": fx.get("look") if fx.get("look") in ("checklist", "capitulos") else ""})
+                                "look": fx.get("look") if fx.get("look") in LISTA_LOOKS else ""})
         elif fx.get("type") == "palabra" and 0 <= int(fx.get("word", -1)) < n:
             effects.append({"type": "palabra", "word": int(fx["word"]), "text": fx.get("text", "")})
         elif fx.get("type") in FREE_TEXT_TYPES and 0 <= int(fx.get("word", -1)) < n \
@@ -391,8 +406,9 @@ BRAND_SCHEMA = {
         "name": {"type": "string"},
         "cta": {"type": "string"},
         "font": {"type": "string", "enum": ["Moderna", "Impacto", "Condensada", "Elegante", "Manuscrita"]},
+        "sector": {"type": "string", "enum": ["general", "viajes", "cursos", "productos", "empresas"]},
     },
-    "required": ["name", "cta", "font"],
+    "required": ["name", "cta", "font", "sector"],
     "additionalProperties": False,
 }
 
@@ -401,7 +417,8 @@ Te describen el negocio en una frase. Devuelve: el nombre de la marca tal cual l
 dicen), una llamada a la acción para el cierre del reel (máximo 5 palabras, en imperativo, concreta para ese
 negocio, p. ej. "Reserva tu viaje por WhatsApp", "Apúntate al curso", "Pide el tuyo hoy") y la fuente que mejor
 encaja: Moderna (limpia, versátil), Impacto (fuerte, ventas), Condensada (titulares, deporte), Elegante (lujo,
-moda, viajes premium) o Manuscrita (cercana, artesanal)."""
+moda, viajes premium) o Manuscrita (cercana, artesanal). Y el sector: viajes, cursos (formación, coaching),
+productos (tienda, marca de producto), empresas (servicios, negocio local) o general."""
 
 
 def brand_copy(cfg: AIConfig, description: str) -> dict:
@@ -410,7 +427,8 @@ def brand_copy(cfg: AIConfig, description: str) -> dict:
 
         return cloud.call(cfg, "brand", {"description": description})
     data = _ask_json(cfg, BRAND_SYSTEM, f"Negocio: {description}", BRAND_SCHEMA)
-    return {"name": data.get("name", "")[:40], "cta": data.get("cta", "")[:40], "font": data.get("font", "")}
+    return {"name": data.get("name", "")[:40], "cta": data.get("cta", "")[:40], "font": data.get("font", ""),
+            "sector": data.get("sector", "")}
 
 
 def fallback_hook(words: list[Word], max_words: int = 6) -> str:

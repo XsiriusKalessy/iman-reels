@@ -71,6 +71,7 @@ class PlanIn(BaseModel):
     words: list[dict]
     instructions: str = Field("", max_length=2000)
     hook_template: str = Field("", max_length=200)
+    pack: str = Field("", max_length=20)
 
 
 class ReviseIn(BaseModel):
@@ -91,7 +92,7 @@ class IdeasIn(BaseModel):
 @app.post("/v1/plan")
 def plan(request: Request, body: PlanIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
     _check(x_iman_license, x_iman_instance, request)
-    return ai.plan_edit_raw(_cfg(), _words(body.words), body.instructions, body.hook_template)
+    return ai.plan_edit_raw(_cfg(), _words(body.words), body.instructions, body.hook_template, body.pack)
 
 
 @app.post("/v1/revise")

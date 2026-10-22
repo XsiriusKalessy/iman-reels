@@ -32,6 +32,7 @@ class Brand:
     handle: str = ""  # @usuario
     cta: str = ""  # texto del cierre, p. ej. "Reserva por WhatsApp"
     contact: str = ""  # web, teléfono…
+    sector: str = ""  # pack por defecto: viajes, cursos, productos, empresas
     logo_corner: bool = True  # logo pequeño arriba a la derecha todo el reel
     end_card: bool = True  # cierre con logo y llamada a la acción
     palette: list[str] = field(default_factory=list)  # colores sacados del logo, para elegir

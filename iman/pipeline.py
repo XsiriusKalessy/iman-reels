@@ -35,6 +35,7 @@ class EditOptions:
     effects: bool = True  # lista animada, palabra gigante y zoom de énfasis
     watermark: bool = False  # reels de prueba sin licencia
     brand: bool = True  # aplicar el kit de marca guardado (colores, logo y cierre)
+    pack: str = ""  # sector: viajes, cursos, productos, empresas (vacío = general)
 
 
 @dataclass
@@ -107,7 +108,7 @@ def run(
     elif aicfg.enabled and words:
         plan = EditPlan()
         try:
-            plan = ai.plan_edit(aicfg, words, opts.instructions, opts.hook_template)
+            plan = ai.plan_edit(aicfg, words, opts.instructions, opts.hook_template, opts.pack)
         except Exception as e:  # la IA es un extra: si falla, seguimos
             plan.drop_reasons.append(f"IA no disponible: {e}")
     else:

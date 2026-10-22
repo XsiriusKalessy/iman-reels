@@ -82,6 +82,10 @@ def _dim(start: float, end: float, alpha: str = "60") -> str:
 def lista_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
     if effect.get("look") in ("checklist", "capitulos"):
         return checklist_events(effect, clock, style, duration)
+    if effect.get("look") == "itinerario":
+        from .packfx import itinerario_events
+
+        return itinerario_events(effect, clock, style, duration)
     items = [it for it in effect.get("items", []) if it.get("text")][:5]
     if not items:
         return [], None
@@ -759,6 +763,12 @@ BUILDERS = {"bruto": bruto_events, "pagina": pagina_events, LISTA: lista_events,
             "contador": contador_events, "portada": portada_events, "cta": cta_events, "dato": dato_events}
 
 
+def _pack_builders() -> dict:
+    from .packfx import PACK_BUILDERS
+
+    return PACK_BUILDERS
+
+
 def build_effects(effects: list[dict], clock: WordClock, style: Style, duration: float, source_duration: float = 0.0) -> tuple[list[str], list[Window]]:
     lines: list[str] = []
     windows: list[Window] = []
@@ -767,7 +777,7 @@ def build_effects(effects: list[dict], clock: WordClock, style: Style, duration:
     for i, fx in enumerate(effects or []):
         later = [t for j, t in enumerate(starts) if j != i and t is not None and starts[i] is not None and t > starts[i]]
         fx = {**fx, "_next": min(later) if later else None, "_from": source_duration}
-        builder = BUILDERS.get(fx.get("type"))
+        builder = BUILDERS.get(fx.get("type")) or _pack_builders().get(fx.get("type"))
         if not builder:
             continue
         ev, win = builder(fx, clock, style, duration)

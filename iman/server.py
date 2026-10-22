@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai, brand, config, license, pipeline
+from . import ai, brand, config, license, packs, pipeline
 from .captions import STYLES
 from .models import EditPlan, Word
 from .rhythm import RHYTHMS
@@ -39,6 +39,8 @@ def options():
         "rhythms": [{"key": r.key, "label": r.label, "description": r.description} for r in RHYTHMS.values()],
         "styles": [{"key": s.key, "label": s.label} for s in STYLES.values()],
         "hook_templates": HOOK_TEMPLATES,
+        "packs": [{"key": p.key, "label": p.label, "description": p.description, "style": p.style,
+                   "hooks": list(p.hooks)} for p in packs.PACKS.values()],
     }
 
 
@@ -115,6 +117,7 @@ class BrandIn(BaseModel):
     handle: str | None = None
     cta: str | None = None
     contact: str | None = None
+    sector: str | None = None
     logo_corner: bool | None = None
     end_card: bool | None = None
 
@@ -127,6 +130,8 @@ def set_brand(body: BrandIn):
             continue
         if k in ("primary", "secondary") and v and not brand.is_hex(v):
             raise HTTPException(400, "El color tiene que ser tipo #FF5547")
+        if k == "sector" and v and v not in packs.PACKS:
+            raise HTTPException(400, "Sector no válido")
         if k == "font" and v and v not in brand.FONTS:
             raise HTTPException(400, "Fuente no válida")
         setattr(b, k, v.strip() if isinstance(v, str) else v)
@@ -176,6 +181,8 @@ def brand_auto(body: BrandAutoIn):
     b.cta = data.get("cta") or b.cta
     if data.get("font") in brand.FONTS:
         b.font = data["font"]
+    if data.get("sector") in packs.PACKS:
+        b.sector = data["sector"]
     return _brand_out(brand.save(b))
 
 
@@ -214,7 +221,10 @@ async def create_job(
     instructions: str = Form(""),
     voice: bool = Form(True),
     use_brand: bool = Form(True),
+    pack: str = Form(""),
 ):
+    if pack and pack not in packs.PACKS:
+        raise HTTPException(400, "Opción no válida")
     if rhythm not in RHYTHMS or style not in STYLES or size not in ("1080", "4k") or fit not in ("recortar", "fondo"):
         raise HTTPException(400, "Opción no válida")
     allowed, watermark = license.can_edit(_refresh_license())
@@ -228,7 +238,7 @@ async def create_job(
     with src.open("wb") as f:
         shutil.copyfileobj(video.file, f)
     opts = pipeline.EditOptions(rhythm, style, size, fit, hook, hook_title, hook_template, instructions,
-                                voice=voice, watermark=watermark, brand=use_brand)
+                                voice=voice, watermark=watermark, brand=use_brand, pack=pack)
     JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0,
                     "options": asdict(opts), "created": time.time(), "trial": watermark}
     threading.Thread(target=_work, args=(job_id, src, workdir, opts), daemon=True).start()

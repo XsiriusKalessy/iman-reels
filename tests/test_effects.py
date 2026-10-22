@@ -95,6 +95,15 @@ NEW_EFFECTS = [
      "items": [{"text": "Corta", "at_word": 6}, {"text": "Limpia", "at_word": 11}], "until_word": 15},
     {"type": "lista", "look": "capitulos", "title": "",
      "items": [{"text": "Uno", "at_word": 6}, {"text": "Dos", "at_word": 11}], "until_word": 15},
+    # Packs por sector
+    {"type": "lista", "look": "itinerario", "title": "Italia en 3 días",
+     "items": [{"text": "Roma", "at_word": 6}, {"text": "Día 2 · Florencia", "at_word": 11}], "until_word": 15},
+    {"type": "ubicacion", "word": 6, "text": "Positano", "subtitle": "Costa Amalfitana"},
+    {"type": "oferta", "word": 6, "text": "Japón en primavera", "subtitle": "desde 1.890 €", "title": "10 noches · vuelo + hotel"},
+    {"type": "ruta", "word": 6, "text": "Madrid", "subtitle": "Tokio", "title": "14 h de vuelo"},
+    {"type": "testimonio", "word": 6, "text": "En dos semanas ya tenía mis primeros clientes", "subtitle": "Laura, alumna"},
+    {"type": "plazas", "word": 6, "text": "Solo 7 plazas"},
+    {"type": "precio", "word": 6, "text": "39 €", "subtitle": "59 €", "title": "-30%"},
 ]
 
 
@@ -166,3 +175,30 @@ def test_segmentation_effects_are_split_out():
     assert len(behind) == 2 and "IMÁN" in behind[0]
     # Nada de esto se pinta en la capa de delante.
     assert effects.build_effects(fx, clock, STYLES["impacto"], dur) == ([], [])
+
+
+def test_packs_reach_the_ai_and_validate():
+    from iman import packs
+
+    assert packs.get("nada").key == "general" and packs.get("viajes").guide
+    data = {"hook_title": "x", "hook_line": "", "drop": [], "emphasis": [], "zooms": [], "effects": [
+        {"type": "lista", "title": "", "items": [{"text": "Roma", "at_word": 1}, {"text": "Florencia", "at_word": 3}],
+         "until_word": 5, "word": -1, "text": "", "subtitle": "", "look": "itinerario"},
+        {"type": "oferta", "title": "7 noches", "items": [], "until_word": -1, "word": 2, "text": "Roma",
+         "subtitle": "899 €", "look": ""},
+    ]}
+    plan = ai._plan_from(data, 10, "claude")
+    assert plan.effects[0]["look"] == "itinerario" and plan.effects[1]["subtitle"] == "899 €"
+
+    seen = {}
+    def fake(cfg, system, user, schema):
+        seen["user"] = user
+        return {**data, "effects": []}
+    import pytest as _p
+    mp = _p.MonkeyPatch()
+    mp.setattr(ai, "_ask_json", fake)
+    try:
+        ai.plan_edit(ai.AIConfig(provider="claude", anthropic_key="k"), TAKE, pack="viajes")
+    finally:
+        mp.undo()
+    assert "PACK VIAJES" in seen["user"]

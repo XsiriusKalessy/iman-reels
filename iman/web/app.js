@@ -30,7 +30,30 @@ async function loadOptions() {
     <span>${esc(r.label)}${i === 0 ? '<b class="tag">recomendado</b>' : ""}<small>${esc(r.description)}</small></span></label>`).join("");
   $("#styles").innerHTML = o.styles.map((s, i) => `
     <label class="choice"><input type="radio" name="style" value="${s.key}" ${i === 0 ? "checked" : ""}><span>${esc(s.label)}</span></label>`).join("");
-  $("#hook-template").innerHTML += o.hook_templates.map(t => `<option>${esc(t)}</option>`).join("");
+  state.options = o;
+  $("#packs").innerHTML = o.packs.map(p => `
+    <label class="choice"><input type="radio" name="pack" value="${p.key}" ${p.key === "general" ? "checked" : ""}>
+    <span>${esc(p.label)}<small>${esc(p.description)}</small></span></label>`).join("");
+  $("#brand-sector").innerHTML = o.packs.map(p => `<option value="${p.key}">${esc(p.label)}</option>`).join("");
+  $("#packs").onchange = () => applyPack(false);
+  renderHooks(o.hook_templates);
+}
+function renderHooks(list) {
+  $("#hook-template").innerHTML = `<option value="">Plantilla de gancho (opcional)</option>` + list.map(t => `<option>${esc(t)}</option>`).join("");
+}
+// Cada sector trae su estilo recomendado y sus ganchos.
+function applyPack(fromBrand) {
+  const o = state.options;
+  if (!o) return;
+  if (fromBrand && state.brand?.sector) {
+    const r = $(`input[name=pack][value="${state.brand.sector}"]`);
+    if (r) r.checked = true;
+  }
+  const p = o.packs.find(x => x.key === $("input[name=pack]:checked")?.value);
+  if (!p) return;
+  renderHooks([...p.hooks, ...o.hook_templates]);
+  const st = p.style && $(`input[name=style][value="${p.style}"]`);
+  if (st) st.checked = true;
 }
 
 const NAMES = { iman: "la IA de Imán", claude: "tu Claude", openai: "tu ChatGPT" };
@@ -149,6 +172,7 @@ $("#go").onclick = async () => {
   fd.append("size", $("input[name=size]:checked").value);
   fd.append("hook", $("#hook").checked);
   fd.append("voice", $("#voice").checked);
+  fd.append("pack", $("input[name=pack]:checked")?.value === "general" ? "" : $("input[name=pack]:checked")?.value || "");
   fd.append("use_brand", $("#use-brand").checked && !$("#use-brand-row").hidden);
   fd.append("hook_title", $("#hook-title").value);
   fd.append("hook_template", $("#hook-template").value);
@@ -250,6 +274,7 @@ function renderBrand(b) {
   for (const k of ["name", "cta", "contact", "handle"]) f[k].value = b[k] || "";
   f.primary.value = b.primary || "#FF5547"; f.secondary.value = b.secondary || "#141518";
   f.logo_corner.checked = b.logo_corner; f.end_card.checked = b.end_card;
+  f.sector.value = b.sector || "general";
   $("#brand-fonts").innerHTML = ["", ...b.fonts].map(n => `
     <label class="choice"><input type="radio" name="font" value="${n}" ${n === (b.font || "") ? "checked" : ""}>
     <span style="font-family:${FONT_CSS[n] || "inherit"}">${n || "La del estilo"}</span></label>`).join("");
@@ -259,6 +284,7 @@ function renderBrand(b) {
   const active = b.has_logo || !!b.primary;
   $("#brand-dot").style.background = b.primary || (active ? "var(--accent)" : "var(--line)");
   $("#use-brand-row").hidden = !active;
+  applyPack(true);
   previewBrand();
 }
 function previewBrand() {
@@ -301,7 +327,8 @@ function brandBody() {
   const f = brandForm;
   return { name: f.name.value, cta: f.cta.value, contact: f.contact.value, handle: f.handle.value,
     primary: f.primary.value.toUpperCase(), secondary: f.secondary.value.toUpperCase(),
-    font: f.querySelector("input[name=font]:checked")?.value || "", logo_corner: f.logo_corner.checked, end_card: f.end_card.checked };
+    font: f.querySelector("input[name=font]:checked")?.value || "", sector: f.sector.value === "general" ? "" : f.sector.value,
+    logo_corner: f.logo_corner.checked, end_card: f.end_card.checked };
 }
 const postJSON = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 $("#brand-auto").onclick = async () => {
@@ -322,6 +349,4 @@ $("#brand-save").onclick = async e => {
 };
 $("#open-brand").onclick = () => { brandError(""); $("#brand").showModal(); };
 $("#brand-edit-link").onclick = e => { e.preventDefault(); $("#brand").showModal(); };
-api("/api/brand").then(renderBrand);
-
-loadOptions(); loadSettings(); go("upload");
+loadOptions().then(() => api("/api/brand").then(renderBrand)); loadSettings(); go("upload");
