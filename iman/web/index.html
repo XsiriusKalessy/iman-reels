@@ -18,6 +18,7 @@
       <button data-step="result"><b>3</b> Tu reel</button>
     </nav>
     <a href="#" class="pill" id="trial-pill" hidden></a>
+    <button class="ghost" id="open-brand"><i class="dot" id="brand-dot"></i> Mi marca</button>
     <button class="ghost" id="open-settings">Ajustes</button>
   </header>
 
@@ -63,6 +64,10 @@
           <div class="choices inline">
             <label class="choice"><input type="radio" name="fit" value="recortar" checked><span>Recortar a vertical</span></label>
             <label class="choice"><input type="radio" name="fit" value="fondo"><span>Fondo desenfocado</span></label>
+          </div>
+          <div id="use-brand-row" hidden>
+            <h3>Marca</h3>
+            <label class="check"><input type="checkbox" id="use-brand" checked> Con mi marca (colores, logo y cierre) · <a href="#" id="brand-edit-link">cambiar</a></label>
           </div>
           <h3>Sonido</h3>
           <label class="check"><input type="checkbox" id="voice" checked> Mejorar la voz (menos ruido, volumen estable)</label>
@@ -165,6 +170,63 @@
       </div>
       <label>Idioma del vídeo<select name="language"><option value="es">Español</option><option value="en">Inglés</option><option value="pt">Portugués</option><option value="">Detectar</option></select></label>
       <div class="row end"><button class="ghost" value="cancel">Cerrar</button><button class="primary" id="save-settings" value="default">Guardar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="brand" class="wide">
+    <form method="dialog" id="brand-form">
+      <h2>Mi marca</h2>
+      <p class="hint">Se configura una vez y se aplica sola en todos tus reels.</p>
+      <div class="brand-grid">
+        <div class="stack">
+          <label>Cuéntame tu negocio en una frase
+            <div class="row tight"><input name="description" placeholder="Ej.: agencia de viajes a medida en Valencia"><button class="ghost" id="brand-auto" type="button">✦ Rellénalo tú</button></div>
+          </label>
+          <label class="logo-drop" id="logo-drop">
+            <input type="file" id="logo-file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden>
+            <img id="logo-img" alt="" hidden>
+            <span id="logo-empty"><strong>Sube tu logo</strong><br>PNG con fondo transparente, mejor. Saco tus colores de él.</span>
+          </label>
+          <button class="link" id="logo-remove" type="button" hidden>Quitar logo</button>
+          <div>
+            <h3>Colores</h3>
+            <div class="swatches" id="swatches"></div>
+            <div class="row tight">
+              <label class="color">Principal<input type="color" name="primary"></label>
+              <label class="color">Secundario<input type="color" name="secondary"></label>
+            </div>
+          </div>
+          <div>
+            <h3>Letra</h3>
+            <div class="choices inline" id="brand-fonts"></div>
+          </div>
+          <div>
+            <h3>Cierre del reel</h3>
+            <label>Llamada a la acción<input name="cta" maxlength="40" placeholder="Reserva por WhatsApp"></label>
+            <label>Web o teléfono<input name="contact" maxlength="40" placeholder="tuweb.com"></label>
+            <label>Usuario<input name="handle" maxlength="40" placeholder="@tumarca"></label>
+            <label>Nombre (si no tienes logo)<input name="name" maxlength="40"></label>
+          </div>
+          <label class="check"><input type="checkbox" name="logo_corner"> Logo pequeño en la esquina</label>
+          <label class="check"><input type="checkbox" name="end_card"> Cierre con mi marca al final</label>
+        </div>
+        <div class="brand-preview">
+          <div class="mock" id="mock-reel">
+            <img class="mock-corner" id="mock-corner" alt="">
+            <div class="mock-hook" id="mock-hook">El error que comete el 90%</div>
+            <div class="mock-sub">el <b id="mock-accent">error</b> que</div>
+          </div>
+          <div class="mock" id="mock-end">
+            <div class="mock-card" id="mock-card"><img id="mock-logo" alt=""><strong id="mock-name"></strong></div>
+            <div class="mock-cta" id="mock-cta"></div>
+            <div class="mock-small" id="mock-contact"></div>
+            <div class="mock-small" id="mock-handle"></div>
+          </div>
+          <p class="hint">Durante el reel · Cierre</p>
+        </div>
+      </div>
+      <p class="hint error" id="brand-error" hidden></p>
+      <div class="row end"><button class="ghost" value="cancel">Cerrar</button><button class="primary" id="brand-save" value="default">Guardar mi marca</button></div>
     </form>
   </dialog>
 

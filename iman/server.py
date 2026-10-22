@@ -323,4 +323,5 @@ def get_thumb(job_id: str):
     return FileResponse(p, media_type="image/jpeg")
 
 
+app.mount("/fonts", StaticFiles(directory=Path(__file__).parent / "assets" / "fonts"), name="fonts")
 app.mount("/", StaticFiles(directory=WEB, html=True), name="web")

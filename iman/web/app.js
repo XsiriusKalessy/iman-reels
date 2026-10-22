@@ -149,6 +149,7 @@ $("#go").onclick = async () => {
   fd.append("size", $("input[name=size]:checked").value);
   fd.append("hook", $("#hook").checked);
   fd.append("voice", $("#voice").checked);
+  fd.append("use_brand", $("#use-brand").checked && !$("#use-brand-row").hidden);
   fd.append("hook_title", $("#hook-title").value);
   fd.append("hook_template", $("#hook-template").value);
   fd.append("instructions", $("#instructions").value);
@@ -235,5 +236,92 @@ $("#reedit-form").onsubmit = e => {
   const h = $("#new-hook").value.trim();
   if (h) reedit({ hook_title: h, hook: true });
 };
+
+// ---------- mi marca ----------
+const brandForm = $("#brand-form");
+function ink(hex) {
+  const n = parseInt((hex || "#141518").slice(1), 16), r = (n >> 16) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.6 ? "#141518" : "#FFFFFF";
+}
+const FONT_CSS = Object.fromEntries(["Moderna", "Impacto", "Condensada", "Elegante", "Manuscrita"].map(n => [n, `"Iman ${n}"`]));
+function renderBrand(b) {
+  state.brand = b;
+  const f = brandForm;
+  for (const k of ["name", "cta", "contact", "handle"]) f[k].value = b[k] || "";
+  f.primary.value = b.primary || "#FF5547"; f.secondary.value = b.secondary || "#141518";
+  f.logo_corner.checked = b.logo_corner; f.end_card.checked = b.end_card;
+  $("#brand-fonts").innerHTML = ["", ...b.fonts].map(n => `
+    <label class="choice"><input type="radio" name="font" value="${n}" ${n === (b.font || "") ? "checked" : ""}>
+    <span style="font-family:${FONT_CSS[n] || "inherit"}">${n || "La del estilo"}</span></label>`).join("");
+  const logo = b.has_logo ? `/api/brand/logo.png?t=${Date.now()}` : "";
+  $("#logo-img").src = logo; $("#logo-img").hidden = !logo; $("#logo-empty").hidden = !!logo; $("#logo-remove").hidden = !logo;
+  $("#swatches").innerHTML = (b.palette || []).map(c => `<button type="button" style="background:${c}" data-color="${c}" title="Usar ${c}"></button>`).join("");
+  const active = b.has_logo || !!b.primary;
+  $("#brand-dot").style.background = b.primary || (active ? "var(--accent)" : "var(--line)");
+  $("#use-brand-row").hidden = !active;
+  previewBrand();
+}
+function previewBrand() {
+  const f = brandForm, p = f.primary.value, font = FONT_CSS[f.querySelector("input[name=font]:checked")?.value] || "Iman Impacto";
+  const logo = state.brand?.has_logo ? $("#logo-img").src : "";
+  $("#mock-corner").src = f.logo_corner.checked ? logo : "";
+  Object.assign($("#mock-hook").style, { background: p, color: ink(p), fontFamily: font });
+  $("#mock-accent").style.color = p;
+  $("#mock-end").style.display = f.end_card.checked ? "" : "none";
+  Object.assign($("#mock-end").style, { background: p, color: ink(p) });
+  $("#mock-logo").src = logo; $("#mock-name").textContent = logo ? "" : f.name.value;
+  $("#mock-cta").textContent = f.cta.value || "Tu llamada a la acción";
+  $("#mock-contact").textContent = f.contact.value; $("#mock-handle").textContent = f.handle.value;
+}
+brandForm.addEventListener("input", previewBrand);
+$("#swatches").onclick = e => {
+  const c = e.target.dataset.color;
+  if (!c) return;
+  // Clic: principal. Mayúsculas + clic: secundario.
+  brandForm[e.shiftKey ? "secondary" : "primary"].value = c;
+  previewBrand();
+};
+function brandError(msg) { $("#brand-error").textContent = msg || ""; $("#brand-error").hidden = !msg; }
+async function uploadLogo(file) {
+  if (!file) return;
+  brandError("");
+  const fd = new FormData(); fd.append("logo", file);
+  try {
+    // Guardamos antes lo escrito para que el logo no pise los colores elegidos a mano.
+    renderBrand(await api("/api/brand/logo", { method: "POST", body: fd }));
+  } catch (err) { brandError(err.message); }
+}
+$("#logo-file").onchange = e => uploadLogo(e.target.files[0]);
+const logoDrop = $("#logo-drop");
+logoDrop.ondragover = e => { e.preventDefault(); logoDrop.classList.add("over"); };
+logoDrop.ondragleave = () => logoDrop.classList.remove("over");
+logoDrop.ondrop = e => { e.preventDefault(); logoDrop.classList.remove("over"); uploadLogo(e.dataTransfer.files[0]); };
+$("#logo-remove").onclick = async () => renderBrand(await api("/api/brand/logo", { method: "DELETE" }));
+function brandBody() {
+  const f = brandForm;
+  return { name: f.name.value, cta: f.cta.value, contact: f.contact.value, handle: f.handle.value,
+    primary: f.primary.value.toUpperCase(), secondary: f.secondary.value.toUpperCase(),
+    font: f.querySelector("input[name=font]:checked")?.value || "", logo_corner: f.logo_corner.checked, end_card: f.end_card.checked };
+}
+const postJSON = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+$("#brand-auto").onclick = async () => {
+  const d = brandForm.description.value.trim();
+  if (!d) return brandForm.description.focus();
+  const btn = $("#brand-auto");
+  btn.disabled = true; btn.textContent = "Pensando…"; brandError("");
+  try {
+    await postJSON("/api/brand", brandBody());
+    renderBrand(await postJSON("/api/brand/auto", { description: d }));
+  } catch (err) { brandError(err.message); }
+  finally { btn.disabled = false; btn.textContent = "✦ Rellénalo tú"; }
+};
+$("#brand-save").onclick = async e => {
+  e.preventDefault();
+  try { renderBrand(await postJSON("/api/brand", brandBody())); $("#brand").close(); }
+  catch (err) { brandError(err.message); }
+};
+$("#open-brand").onclick = () => { brandError(""); $("#brand").showModal(); };
+$("#brand-edit-link").onclick = e => { e.preventDefault(); $("#brand").showModal(); };
+api("/api/brand").then(renderBrand);
 
 loadOptions(); loadSettings(); go("upload");

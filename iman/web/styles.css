@@ -131,3 +131,45 @@ dialog::backdrop { background: rgba(0,0,0,.6); }
 details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
 details[open] summary { margin-bottom: 8px; }
 [hidden] { display: none !important; }
+
+/* mi marca: las mismas fuentes que salen en el reel */
+@font-face { font-family: "Iman Impacto"; src: url(/fonts/Montserrat-Black.ttf); }
+@font-face { font-family: "Iman Condensada"; src: url(/fonts/Anton-Regular.ttf); }
+@font-face { font-family: "Iman Elegante"; src: url(/fonts/PlayfairDisplay-ExtraBold.ttf); }
+@font-face { font-family: "Iman Manuscrita"; src: url(/fonts/Caveat-Bold.ttf); }
+@font-face { font-family: "Iman Moderna"; src: url(/fonts/Figtree-ExtraBold.ttf); }
+dialog.wide { width: min(880px, 94vw); }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 99px; background: var(--line); vertical-align: -1px; margin-right: 4px; }
+.brand-grid { display: grid; grid-template-columns: 1fr 300px; gap: 28px; margin-top: 14px; }
+@media (max-width: 760px) { .brand-grid { grid-template-columns: 1fr; } }
+.row.tight { margin-top: 6px; flex-wrap: nowrap; }
+.row.tight input { flex: 1; min-width: 0; margin-top: 0; }
+.logo-drop { border: 1.5px dashed var(--line); border-radius: 12px; min-height: 110px; display: grid; place-items: center;
+  text-align: center; padding: 14px; cursor: pointer; background: var(--panel); }
+.logo-drop:hover, .logo-drop.over { border-color: var(--accent); }
+.logo-drop strong { color: var(--text); }
+.logo-drop img { max-height: 90px; max-width: 100%; }
+.link { background: none; border: 0; color: var(--muted); text-decoration: underline; padding: 0; justify-self: start; font-size: 13px; }
+.swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.swatches:empty { display: none; }
+.swatches button { width: 34px; height: 34px; border-radius: 99px; border: 2px solid var(--line); cursor: pointer; }
+.swatches button:hover { transform: scale(1.08); }
+label.color { display: flex; align-items: center; gap: 8px; color: var(--text); }
+label.color input { width: 44px; height: 34px; padding: 2px; margin: 0; border-radius: 8px; }
+.brand-preview { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-content: start; position: sticky; top: 0; }
+.brand-preview .hint { grid-column: 1 / -1; text-align: center; margin: 0; }
+.mock { aspect-ratio: 9/16; border-radius: 14px; overflow: hidden; position: relative; display: grid; place-items: center;
+  background: linear-gradient(160deg, #6b7a8c, #2f3b4a); font-family: Figtree, sans-serif; text-align: center; }
+.mock-corner { position: absolute; top: 11%; right: 4%; width: 15%; }
+.mock-corner[src=""] { display: none; }
+.mock-hook { position: absolute; top: 24%; left: 8%; right: 8%; padding: 6px; font-weight: 800; font-size: 11px; text-transform: uppercase; }
+.mock-sub { position: absolute; top: 66%; left: 0; right: 0; color: #fff; font-weight: 800; font-size: 12px; text-transform: uppercase;
+  text-shadow: 0 0 3px #000, 0 0 3px #000; }
+#mock-end { align-content: center; gap: 4px; padding: 10px; }
+.mock-card { background: #fff; border-radius: 8px; padding: 6px 8px; max-width: 70%; margin-bottom: 12px; }
+.mock-card img { max-width: 100%; max-height: 50px; display: block; }
+.mock-card:has(img[src=""]) { background: none; }
+.mock-card img[src=""] { display: none; }
+.mock-card strong { font-size: 16px; }
+.mock-cta { font-weight: 800; font-size: 12px; }
+.mock-small { font-size: 9px; opacity: .8; }
