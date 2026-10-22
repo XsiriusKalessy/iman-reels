@@ -448,6 +448,10 @@ def contador_events(effect: dict, clock: WordClock, style: Style, duration: floa
     """Contador: la duración de la toma en bruto baja hasta la del reel ya editado."""
     span = _span(effect, clock, duration, 2.6, 1.8)
     src = effect.get("_from")
+    # Si la IA da una duración ("1:20"), manda sobre la del archivo.
+    m, _, sec = str(effect.get("text", "")).partition(":")
+    if m.isdigit() and sec.isdigit():
+        src = int(m) * 60 + int(sec)
     if not span or not src:
         return [], None
     start, end = span
