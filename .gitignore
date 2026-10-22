@@ -6,3 +6,8 @@ __pycache__/
 *.mov
 !tests/fixtures/*.mp4
 .pytest_cache/
+packaging/bin/
+packaging/Output/
+build/
+dist/
+*.dmg
