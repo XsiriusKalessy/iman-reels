@@ -158,12 +158,35 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx
             parts.append(f"color=c=0x{op.color.lstrip('#')}:s={W}x{H}:r=30:d={b - a:.3f},"
                          f"format=yuva420p,fade=t=in:st=0:d=0.25:alpha=1,setpts=PTS+{a:.3f}/TB[ec{k}]")
             parts.append(f"{cur}[ec{k}]overlay=0:0:{on}:eof_action=pass[o{k}]")
-        elif op.kind in ("logo", "logo_end") and images and op.path in images:
+        elif op.kind == "apoyo" and images and id(op) in images:
+            # Vídeo de apoyo a pantalla completa y el creador, que sigue hablando, en un círculo arriba (los subtítulos van abajo).
+            d = b - a
+            still = Path(op.path).suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")
+            feed = (f"loop=-1:1,fps=30,trim=duration={d:.3f},setpts=PTS-STARTPTS+{a:.3f}/TB" if still else
+                    f"trim=duration={d:.3f},setpts=PTS-STARTPTS,fps=30,tpad=stop_mode=clone:stop_duration={d:.3f},"
+                    f"trim=duration={d:.3f},setpts=PTS+{a:.3f}/TB")
+            # Un toque de zoom lento para que las fotos no se vean quietas.
+            zoom = (f",scale={int(W * 1.08)}:{int(H * 1.08)},crop={W}:{H}:'(iw-ow)/2*(1-(t-{a:.3f})/{d:.3f})':"
+                    f"'(ih-oh)/2'") if still else ""
+            parts.append(f"{images[id(op)]}{feed},scale={W}:{H}:force_original_aspect_ratio=increase,"
+                         f"crop={W}:{H}{zoom},setsar=1,format=yuv420p,fade=t=in:st={a:.3f}:d=0.15[br{k}]")
+            dd = int(340 * k_scale) // 2 * 2
+            ring = int(10 * k_scale)
+            circle = "if(lt(hypot(X-W/2,Y-H/2),W/2-1),255,0)"
+            parts.append(f"{cur}split[m{k}][f{k}]")
+            parts.append(f"[f{k}]trim=start={a:.3f}:end={b:.3f},crop=iw*0.62:iw*0.62:(iw-ow)/2:ih*0.10,scale={dd}:{dd},format=rgba,"
+                         f"geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='{circle}'[fc{k}]")
+            parts.append(f"color=c=white:s={dd + 2 * ring}x{dd + 2 * ring}:r=30,format=rgba,"
+                         f"geq=r=255:g=255:b=255:a='{circle}'[rg{k}]")
+            parts.append(f"[rg{k}][fc{k}]overlay={ring}:{ring}:shortest=1[bb{k}]")
+            parts.append(f"[m{k}][br{k}]overlay=0:0:{on}:eof_action=pass[t{k}]")
+            parts.append(f"[t{k}][bb{k}]overlay=x=W-w-{int(48 * k_scale)}:y={int(250 * k_scale)}:{on}:eof_action=pass[o{k}]")
+        elif op.kind in ("logo", "logo_end") and images and id(op) in images:
             # Logo de la marca: pequeño en la esquina (zona segura de Instagram) o grande en el cierre.
             lw = int((150 if op.kind == "logo" else 420) * k_scale)
             alpha = 0.92 if op.kind == "logo" else 1.0
             fade = "" if op.kind == "logo" else f",fade=t=in:st={a:.3f}:d=0.35:alpha=1"
-            parts.append(f"{images[op.path]}scale={lw}:-1,format=rgba,colorchannelmixer=aa={alpha},"
+            parts.append(f"{images[id(op)]}scale={lw}:-1,format=rgba,colorchannelmixer=aa={alpha},"
                          f"loop=-1:1,fps=30,setpts=N/30/TB{fade}[lg{k}]")
             pos = f"x=W-w-{int(40 * k_scale)}:y={int(210 * k_scale)}" if op.kind == "logo" else \
                 f"x=(W-w)/2:y={int(860 * k_scale)}-h"
@@ -175,11 +198,11 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx
 
 
 def _image_inputs(ops: list, first_index: int) -> tuple[list[str], dict]:
-    """Entradas extra de ffmpeg para las imágenes de los efectos (logo de la marca)."""
+    """Entradas extra de ffmpeg para los efectos con archivo (logo, vídeos de apoyo): una por efecto."""
     args, labels = [], {}
     for op in ops or []:
-        if op.path and op.path not in labels:
-            labels[op.path] = f"[{first_index + len(labels)}:v]"
+        if op.path:
+            labels[id(op)] = f"[{first_index + len(labels)}:v]"
             args += ["-i", op.path]
     return args, labels
 
@@ -341,4 +364,72 @@ def thumbnail(src: Path, dst: Path, t: float = 0.5) -> Path:
         [FFMPEG, "-y", "-v", "error", "-ss", f"{t:.2f}", "-i", str(src), "-frames:v", "1", "-q:v", "3", str(dst)],
         check=True,
     )
+    return dst
+
+
+STILL_EXT = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def duration_of(path: Path) -> float:
+    """Duración de cualquier archivo (también audio solo o una foto, que da 0)."""
+    out = subprocess.run([FFPROBE, "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+                         capture_output=True, text=True).stdout.strip()
+    try:
+        return float(out)
+    except ValueError:
+        return 0.0
+
+
+def voice_canvas(audio: Path, dst: Path, cuts: list[float], clips: list[Path], color: str = "#141518") -> Path:
+    """Para reels sin cámara: tu voz sobre tus vídeos y fotos, cambiando de plano en `cuts` (segundos).
+
+    Sin vídeos, un fondo liso con un brillo suave; los subtítulos grandes hacen el resto.
+    """
+    W, H = SIZES["1080"]
+    total = duration_of(audio)
+    bounds = [0.0, *[c for c in cuts if 0 < c < total], total]
+    parts, inputs = [], ["-i", str(audio)]
+    if not clips:
+        c = color.lstrip("#")
+        parts.append(f"color=c=0x{c}:s={W}x{H}:r=30:d={total:.3f},vignette=PI/4,format=yuv420p[vout]")
+    else:
+        lens = {p: (0.0 if p.suffix.lower() in STILL_EXT else duration_of(p)) for p in clips}
+        pos = {p: 0.0 for p in clips}
+        labels = []
+        for i, (a, b) in enumerate(zip(bounds, bounds[1:])):
+            d, p = b - a, clips[i % len(clips)]
+            inputs += ["-i", str(p)]
+            if p.suffix.lower() in STILL_EXT:
+                feed = (f"loop=-1:1,fps=30,trim=duration={d:.3f},setpts=PTS-STARTPTS,"
+                        f"scale={int(W * 1.1)}:{int(H * 1.1)}:force_original_aspect_ratio=increase,"
+                        f"crop={W}:{H}:'(iw-ow)/2*(1-t/{d:.3f})':'(ih-oh)/2'")
+            else:
+                if pos[p] + d > lens[p]:
+                    pos[p] = 0.0
+                feed = (f"trim=start={pos[p]:.3f},setpts=PTS-STARTPTS,fps=30,"
+                        f"tpad=stop_mode=clone:stop_duration={d:.3f},trim=duration={d:.3f},"
+                        f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H}")
+                pos[p] += d
+            parts.append(f"[{i + 1}:v]{feed},setsar=1,format=yuv420p[c{i}]")
+            labels.append(f"[c{i}]")
+        parts.append(f"{''.join(labels)}concat=n={len(labels)}:v=1:a=0[vout]")
+    script = dst.with_suffix(".canvas.txt")
+    script.write_text(";\n".join(parts))
+    cmd = [FFMPEG, "-y", "-v", "error", *inputs, *filter_script_args(script), "-map", "[vout]", "-map", "0:a",
+           "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
+           "-c:a", "aac", "-b:a", "192k", "-t", f"{total:.3f}", str(dst)]
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    if res.returncode != 0:
+        raise RuntimeError(f"ffmpeg falló:\n{res.stderr[-2000:]}")
+    return dst
+
+
+def cut(src: Path, dst: Path, start: float, end: float) -> Path:
+    """Un trozo de un vídeo largo, recodificado para que el corte sea exacto."""
+    cmd = [FFMPEG, "-y", "-v", "error", "-ss", f"{max(0.0, start):.3f}", "-i", str(src), "-t", f"{end - start:.3f}",
+           "-c:v", "libx264", "-preset", "veryfast", "-crf", "17", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
+           str(dst)]
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    if res.returncode != 0:
+        raise RuntimeError(f"ffmpeg falló:\n{res.stderr[-2000:]}")
     return dst

@@ -36,6 +36,7 @@ class EditOptions:
     watermark: bool = False  # reels de prueba sin licencia
     brand: bool = True  # aplicar el kit de marca guardado (colores, logo y cierre)
     pack: str = ""  # sector: viajes, cursos, productos, empresas (vacío = general)
+    mode: str = "camara"  # camara (hablas a cámara) | voz (solo tu voz, sobre tus vídeos o un fondo)
 
 
 @dataclass
@@ -69,6 +70,74 @@ def _source_time(spans, t: float) -> float:
             return sp.start + (t - acc)
         acc += sp.duration
     return spans[-1].end if spans else 0.0
+
+
+def broll_files(workdir: Path) -> list[Path]:
+    """Vídeos y fotos de apoyo que el creador ha subido con su toma (1, 2, 3…)."""
+    d = workdir / "apoyo"
+    return sorted(p for p in d.glob("*") if p.suffix.lower() in effects.MEDIA_EXT) if d.exists() else []
+
+
+def broll_prompt(names: list[str]) -> str:
+    if not names:
+        return ""
+    lines = "\n".join(f"{i + 1}: {n}" for i, n in enumerate(names))
+    return f"VÍDEOS DE APOYO que ha subido el creador (úsalos con el efecto \"apoyo\"):\n{lines}"
+
+
+def visual_cuts(words: list[Word], every: float = 3.0) -> list[float]:
+    """Dónde cambiar de plano en un reel de solo voz: cada ~3 s, mejor en una pausa o fin de frase."""
+    cuts, last = [], 0.0
+    for prev, w in zip(words, words[1:]):
+        since = w.start - last
+        natural = prev.text.rstrip()[-1:] in ".,;:?!" or w.start - prev.end > 0.25
+        if (since >= every * 0.8 and natural) or since >= every * 1.4:
+            last = max(prev.end, w.start - 0.08)
+            cuts.append(round(last, 3))
+    return cuts
+
+
+def _transcribe(src: Path, workdir: Path, cfg: dict, progress: Progress) -> list[Word]:
+    transcript_file = workdir / "transcript.json"
+    if transcript_file.exists():
+        return [Word(**w) for w in json.loads(transcript_file.read_text())]
+    progress("Escuchando lo que dices", 0.10)
+    from .transcribe import transcribe
+
+    audio = media.extract_audio(src, workdir / "audio.wav")
+    words = transcribe(
+        audio, cfg.get("transcriber", "local"), cfg.get("language") or None,
+        cfg.get("whisper_model", "small"), cfg.get("openai_key") or None,
+    )
+    transcript_file.write_text(json.dumps([w.__dict__ for w in words], ensure_ascii=False, indent=1))
+    return words
+
+
+def long_video_clips(src: Path, workdir: Path, cfg: dict, progress: Progress = lambda m, p: None,
+                     n: int = 4) -> tuple[list[Word], list[dict]]:
+    """Vídeo largo → los mejores momentos para reels (la IA los elige; sin IA, trozos de ~40 s)."""
+    workdir.mkdir(parents=True, exist_ok=True)
+    words = _transcribe(src, workdir, cfg, progress)
+    progress("Buscando los mejores momentos", 0.5)
+    picks: list[dict] = []
+    aicfg = ai_config(cfg)
+    if aicfg.enabled and words:
+        try:
+            picks = ai.pick_clips(aicfg, words, n)
+        except Exception:  # la IA es un extra: si falla, cortamos por frases
+            picks = []
+    return words, picks or ai.fallback_clips(words, n)
+
+
+def clip_source(src: Path, words: list[Word], pick: dict, workdir: Path) -> tuple[Path, list[Word]]:
+    """Recorta el trozo elegido del vídeo largo y deja sus palabras con los tiempos del trozo."""
+    workdir.mkdir(parents=True, exist_ok=True)
+    a, b = pick["from"], pick["to"]
+    t0, t1 = max(0.0, words[a].start - 0.25), words[b].end + 0.4
+    dst = media.cut(src, workdir / "original.mp4", t0, t1)
+    sub = [Word(w.text, round(w.start - t0, 3), round(w.end - t0, 3)) for w in words[a:b + 1]]
+    (workdir / "transcript.json").write_text(json.dumps([w.__dict__ for w in sub], ensure_ascii=False, indent=1))
+    return dst, sub
 
 
 def review(words: list[Word], plan: EditPlan, rhythm_key: str) -> list[dict]:
@@ -106,22 +175,25 @@ def run(
     if opts.style not in STYLES:
         opts.style = "impacto"
     progress("Preparando tu vídeo", 0.03)
+    voice_only = opts.mode == "voz"
+    clips = broll_files(workdir)
+    if voice_only:
+        # Sin cámara: primero te escucho y luego monto tu voz sobre tus vídeos (o un fondo) cambiando de plano.
+        if words is None:
+            words = _transcribe(src, workdir, cfg, progress)
+        canvas = workdir / "lienzo.mp4"
+        if not canvas.exists():
+            progress("Montando tus vídeos con tu voz", 0.25)
+            kit0 = brand.load() if opts.brand else None
+            bg = kit0.primary if kit0 is not None and kit0.active and brand.is_hex(kit0.primary or "") else "#141518"
+            media.voice_canvas(src, canvas, visual_cuts(words), clips, bg)
+        src = canvas
     info = media.probe(src)
     if not info.has_audio:
         raise ValueError("El vídeo no tiene audio: Imán necesita oírte para editar")
-
-    transcript_file = workdir / "transcript.json"
-    if words is None and transcript_file.exists():
-        words = [Word(**w) for w in json.loads(transcript_file.read_text())]
     if words is None:
-        progress("Escuchando lo que dices", 0.10)
-        from .transcribe import transcribe
-
-        audio = media.extract_audio(src, workdir / "audio.wav")
-        words = transcribe(
-            audio, cfg.get("transcriber", "local"), cfg.get("language") or None,
-            cfg.get("whisper_model", "small"), cfg.get("openai_key") or None,
-        )
+        words = _transcribe(src, workdir, cfg, progress)
+    transcript_file = workdir / "transcript.json"
     if not transcript_file.exists():
         transcript_file.write_text(json.dumps([w.__dict__ for w in words], ensure_ascii=False, indent=1))
 
@@ -150,6 +222,10 @@ def run(
     out_duration = sum(s.duration for s in spans)
     if not plan.hook_title and kept:
         plan.hook_title = ai.fallback_hook(kept)
+    if voice_only:  # no hay cara que poner en el círculo ni persona que recortar
+        plan.effects = [fx for fx in plan.effects if fx.get("type") not in effects.PERSON_TYPES]
+    else:
+        plan.effects = effects.auto_broll(plan.effects, kept_idx, len(clips))
     (workdir / "plan.json").write_text(json.dumps(plan.to_dict(), ensure_ascii=False, indent=1))
 
     active = [fx for fx in plan.effects if not fx.get("off")]  # los que el creador ha apagado no salen
@@ -181,7 +257,8 @@ def run(
     overlays = []
     if opts.effects:
         overlays = effects.video_ops(active, effects.WordClock(kept, kept_idx), out_duration,
-                                     lambda t: _source_time(spans, t))
+                                     lambda t: _source_time(spans, t),
+                                     {str(i + 1): str(p) for i, p in enumerate(clips)})
     overlays += effects.brand_ops(kit, total)
     clock = effects.WordClock(kept, kept_idx)
     segs = effects.seg_ops(active, clock, out_duration) if opts.effects else []

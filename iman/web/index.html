@@ -56,15 +56,30 @@
     <section class="panel" data-panel="upload">
       <h1>Sube tu vídeo</h1>
       <p class="lead">Una toma en bruto, en vertical u horizontal. Imán quita los fallos, pone los subtítulos y el gancho.</p>
+      <div class="choices inline modes" id="modes">
+        <label class="choice"><input type="radio" name="mode" value="camara" checked><span>🎥 Hablo a cámara<small>Tu toma de siempre</small></span></label>
+        <label class="choice"><input type="radio" name="mode" value="voz"><span>🎙 Solo mi voz<small>Sin salir en cámara</small></span></label>
+        <label class="choice"><input type="radio" name="mode" value="vozclips"><span>🎞 Mi voz sobre mis vídeos<small>Tus clips con tu voz encima</small></span></label>
+        <label class="choice"><input type="radio" name="mode" value="largo"><span>✂️ Vídeo largo → varios reels<small>Un directo, una clase, un podcast</small></span></label>
+      </div>
       <label class="drop" id="drop">
         <input type="file" id="file" accept="video/*" hidden>
         <div class="drop-inner">
           <div class="drop-icon">⬆</div>
-          <strong>Arrastra tu vídeo aquí</strong>
-          <span>o pulsa para elegirlo · MP4, MOV</span>
+          <strong id="drop-title">Arrastra tu vídeo aquí</strong>
+          <span id="drop-hint">o pulsa para elegirlo · MP4, MOV</span>
         </div>
         <video id="preview" muted playsinline hidden></video>
+        <div id="audio-picked" class="audio-picked" hidden></div>
       </label>
+      <div class="broll" id="broll-box">
+        <label class="broll-pick">
+          <input type="file" id="broll" accept="video/*,image/*" multiple hidden>
+          <strong id="broll-title">＋ Vídeos o fotos de apoyo</strong>
+          <span class="hint" id="broll-hint">Opcional. Imán los pone a pantalla completa en el momento justo, con tu cara en un círculo.</span>
+        </label>
+        <div id="broll-list" class="broll-list"></div>
+      </div>
       <div class="row end"><button class="primary" id="to-edit" disabled>Siguiente: cómo lo editas →</button></div>
     </section>
 
@@ -139,6 +154,8 @@
         </div>
         <div class="side">
           <h1>Tu reel</h1>
+          <div id="clips" class="clips" hidden></div>
+          <div id="result-tools">
           <div id="stats" class="stats"></div>
           <div id="hook-box"></div>
           <details id="review-box" open>
@@ -204,6 +221,7 @@
               <p class="hint" id="kit-reply"></p>
               <a class="ghost" id="kit-dl" href="#" download>Descargar todo (.zip)</a>
             </div>
+          </div>
           </div>
           <div class="row">
             <a class="primary" id="download" href="#" download>Descargar reel</a>

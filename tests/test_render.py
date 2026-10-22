@@ -240,3 +240,113 @@ def test_copy_style_from_a_reel(sample, tmp_path, monkeypatch):
     assert c.delete(f"/api/styles/{r['key']}").status_code == 200 and r["key"] not in STYLES
     assert c.delete("/api/styles/impacto").status_code == 400
     copystyle.register()
+
+
+def test_broll_with_face_bubble(sample, tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from iman import config, server
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    real_run = pipeline.run
+    monkeypatch.setattr(pipeline, "run", lambda *a, **k: real_run(*a, **{**k, "words": TAKE}))
+    foto, clip = tmp_path / "playa.jpg", tmp_path / "barco.mp4"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=0x2a7fd4:s=1600x900", "-frames:v", "1",
+                    str(foto)], check=True)
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=1920x1080:rate=25:duration=1",
+                    "-pix_fmt", "yuv420p", str(clip)], check=True)
+
+    c = TestClient(server.app)
+    c.post("/api/settings", json={"provider": "none"})
+    with sample.open("rb") as v, foto.open("rb") as a, clip.open("rb") as b:
+        job = c.post("/api/jobs", data={"rhythm": "natural"}, files=[
+            ("video", ("toma.mp4", v, "video/mp4")), ("broll", ("playa.jpg", a, "image/jpeg")),
+            ("broll", ("barco.mp4", b, "video/mp4")), ("broll", ("notas.txt", b"hola", "text/plain"))]).json()
+    for _ in range(240):
+        job = c.get(f"/api/jobs/{job['id']}").json()
+        if job["status"] != "working":
+            break
+        time.sleep(0.25)
+    assert job["status"] == "done", job.get("error")
+    work = tmp_path / "jobs" / job["id"]
+    assert sorted(p.name for p in (work / "apoyo").iterdir()) == ["01.jpg", "02.mp4"]
+    fx = [e for e in job["result"]["plan"]["effects"] if e["type"] == "apoyo"]
+    assert [e["text"] for e in fx] == ["1", "2"]
+    assert "playa" in job["options"]["instructions"]
+
+
+def _api(tmp_path, monkeypatch, words):
+    from fastapi.testclient import TestClient
+
+    from iman import config, server
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    monkeypatch.setattr(pipeline, "_transcribe", lambda *a, **k: list(words))
+    c = TestClient(server.app)
+    c.post("/api/settings", json={"provider": "none"})
+    return c, server
+
+
+def _wait(c, job):
+    for _ in range(400):
+        job = c.get(f"/api/jobs/{job['id']}").json()
+        if job["status"] != "working":
+            return job
+        time.sleep(0.25)
+    return job
+
+
+def test_voice_only_over_my_clips(tmp_path, monkeypatch):
+    voz, clip = tmp_path / "voz.m4a", tmp_path / "playa.mp4"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=200:duration=11",
+                    "-c:a", "aac", str(voz)], check=True)
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=1920x1080:rate=25:duration=2",
+                    "-pix_fmt", "yuv420p", str(clip)], check=True)
+    c, _ = _api(tmp_path, monkeypatch, TAKE)
+    with voz.open("rb") as v, clip.open("rb") as b:
+        job = c.post("/api/jobs", data={"mode": "voz", "rhythm": "natural"}, files=[
+            ("video", ("voz.m4a", v, "audio/mp4")), ("broll", ("playa.mp4", b, "video/mp4"))]).json()
+    job = _wait(c, job)
+    assert job["status"] == "done", job.get("error")
+    work = tmp_path / "jobs" / job["id"]
+    assert (work / "lienzo.mp4").exists()
+    info = media.probe(work / "reel.mp4")
+    assert (info.width, info.height) == (1080, 1920) and info.has_audio
+    assert not any(e["type"] == "apoyo" for e in job["result"]["plan"]["effects"])
+    # Solo voz y sin vídeos: fondo liso con tu voz.
+    with voz.open("rb") as v:
+        job = _wait(c, c.post("/api/jobs", data={"mode": "voz"}, files={"video": ("voz.m4a", v, "audio/mp4")}).json())
+    assert job["status"] == "done", job.get("error")
+
+
+def test_visual_cuts_every_few_seconds():
+    from .test_core import W
+
+    words = W([(f"p{i}{'.' if i % 5 == 4 else ''}", i * 0.5, i * 0.5 + 0.4) for i in range(40)])
+    cuts = pipeline.visual_cuts(words)
+    assert cuts and all(2.0 <= b - a <= 4.5 for a, b in zip([0.0, *cuts], cuts))
+
+
+def test_long_video_to_several_reels(tmp_path, monkeypatch):
+    from .test_core import W
+
+    largo = tmp_path / "directo.mp4"
+    subprocess.run([
+        "ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30:duration=95",
+        "-f", "lavfi", "-i", "sine=frequency=220:duration=95", "-c:v", "libx264", "-preset", "ultrafast",
+        "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(largo)], check=True)
+    words = W([(f"palabra{i}{'.' if i % 12 == 11 else ''}", i * 0.6 + 0.3, i * 0.6 + 0.8) for i in range(155)])
+    c, server = _api(tmp_path, monkeypatch, words)
+    with largo.open("rb") as v:
+        job = _wait(c, c.post("/api/jobs", data={"mode": "largo", "rhythm": "natural"},
+                              files={"video": ("directo.mp4", v, "video/mp4")}).json())
+    assert job["status"] == "done", job.get("error")
+    clips = job["result"]["clips"]
+    assert len(clips) >= 2
+    for cl in clips:
+        assert 10 < cl["duration"] < 70
+        assert media.probe(tmp_path / "jobs" / cl["id"] / "reel.mp4").duration > 10
+    lib = c.get("/api/reels").json()["reels"]
+    assert {r["id"] for r in lib} == {cl["id"] for cl in clips}

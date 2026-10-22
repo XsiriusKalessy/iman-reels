@@ -254,3 +254,16 @@ label.color input { width: 44px; height: 34px; padding: 2px; margin: 0; border-r
 .choice.mine span { position: relative; padding-right: 28px; }
 .choice .forget { position: absolute; top: 6px; right: 8px; text-decoration: none; }
 .copy-style { margin-top: 8px; }
+
+/* Formas de crear y vídeos de apoyo */
+.modes { margin-bottom: 14px; }
+.audio-picked { font-weight: 600; padding: 28px; text-align: center; }
+.broll { margin-top: 14px; }
+.broll-pick { display: grid; gap: 4px; padding: 14px 16px; border: 1px dashed var(--line); border-radius: 12px; cursor: pointer; }
+.broll-pick:hover { border-color: var(--accent); }
+.broll-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.broll-list figure { position: relative; margin: 0; width: 72px; height: 96px; border-radius: 10px; overflow: hidden; background: var(--line); }
+.broll-list img, .broll-list video { width: 100%; height: 100%; object-fit: cover; }
+.broll-list figcaption { position: absolute; left: 6px; bottom: 4px; color: #fff; font-weight: 700; font-size: 12px; text-shadow: 0 1px 3px #000; }
+.broll-list button { position: absolute; top: 4px; right: 4px; border: 0; border-radius: 99px; width: 22px; height: 22px; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; font-size: 11px; }
+.clips .library { margin: 10px 0; }

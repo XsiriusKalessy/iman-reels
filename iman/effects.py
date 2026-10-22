@@ -698,7 +698,22 @@ def behind_events(effects: list[dict], clock: WordClock, style: Style, duration:
     return lines
 
 
-VIDEO_KINDS = {"bruto": (3.0, 2.0), "fantasma": (1.6, 0.8), "pagina": (2.6, 1.6)}
+VIDEO_KINDS = {"bruto": (3.0, 2.0), "fantasma": (1.6, 0.8), "pagina": (2.6, 1.6), "apoyo": (3.0, 1.5)}
+PERSON_TYPES = (*SEG_KINDS, "apoyo")  # necesitan a alguien delante de la cámara
+MEDIA_EXT = (".mp4", ".mov", ".m4v", ".webm", ".jpg", ".jpeg", ".png", ".webp")
+
+
+def auto_broll(effects: list[dict], kept_idx: list[int], clips: int) -> list[dict]:
+    """Sin IA (o si no los ha usado): reparte los vídeos de apoyo por el reel, lejos del gancho."""
+    if not clips or any(fx.get("type") == "apoyo" for fx in effects) or len(kept_idx) < 12:
+        return effects
+    out = list(effects)
+    n = len(kept_idx)
+    for k in range(clips):
+        at = int(n * (0.2 + 0.65 * (k + 0.5) / clips))
+        out.append({"type": "apoyo", "word": kept_idx[at], "text": str(k + 1),
+                    "until_word": kept_idx[min(n - 1, at + 8)], "auto": True})
+    return out
 
 
 def bruto_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
@@ -740,8 +755,10 @@ def pagina_events(effect: dict, clock: WordClock, style: Style, duration: float)
     return lines, Window(start, end)
 
 
-def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=None) -> list[VideoOp]:
-    """Los efectos de vídeo de un plan, en tiempos del reel. `src_of(t)` da el segundo de la toma original."""
+def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=None,
+              assets: dict[str, str] | None = None) -> list[VideoOp]:
+    """Los efectos de vídeo de un plan, en tiempos del reel. `src_of(t)` da el segundo de la toma original.
+    `assets`: número de vídeo de apoyo ("1", "2"…) -> archivo."""
     ops = []
     starts = [clock.at(int(fx.get("word", -1))) for fx in effects or []]
     for i, fx in enumerate(effects or []):
@@ -754,7 +771,12 @@ def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=Non
             continue
         # La tarjeta "bruto" enseña la toma sin cortar desde el principio de lo que se dice ahí.
         src = src_of(span[0]) if (src_of and kind == "bruto") else 0.0
-        ops.append(VideoOp(kind, span[0], span[1], max(0.0, src - 0.5)))
+        path = ""
+        if kind == "apoyo":
+            path = (assets or {}).get(str(fx.get("text", "")).strip(), "")
+            if not path:
+                continue
+        ops.append(VideoOp(kind, span[0], span[1], max(0.0, src - 0.5), path=path))
     return ops
 
 

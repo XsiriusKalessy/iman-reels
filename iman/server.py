@@ -7,7 +7,7 @@ import shutil
 import threading
 import time
 import uuid
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ai, brand, config, copystyle, license, packs, pipeline, updates
+from . import ai, brand, config, copystyle, effects, license, packs, pipeline, updates
 from .captions import STYLES
 from .models import EditPlan, Word
 from .rhythm import RHYTHMS
@@ -64,7 +64,7 @@ def reels():
     out = []
     for f in JOBS_DIR.glob("*/job.json") if JOBS_DIR.exists() else []:
         job = _job(f.parent.name)
-        if not job or job.get("status") != "done":
+        if not job or job.get("status") != "done" or "clips" in (job.get("result") or {}):
             continue
         r = job.get("result") or {}
         out.append({"id": job["id"], "created": job.get("created", 0), "title": (r.get("plan") or {}).get("hook_title", ""),
@@ -362,8 +362,10 @@ async def create_job(
     use_brand: bool = Form(True),
     pack: str = Form(""),
     remember: bool = Form(False),
+    broll: list[UploadFile] | None = File(None),
+    mode: str = Form("camara"),
 ):
-    if pack and pack not in packs.PACKS:
+    if (pack and pack not in packs.PACKS) or mode not in ("camara", "voz", "largo"):
         raise HTTPException(400, "Opción no válida")
     copystyle.register()
     if rhythm not in RHYTHMS or style not in STYLES or size not in ("1080", "4k") or fit not in ("recortar", "fondo"):
@@ -384,12 +386,62 @@ async def create_job(
     src = workdir / f"original{suffix}"
     with src.open("wb") as f:
         shutil.copyfileobj(video.file, f)
+    names = _save_broll(workdir, broll or [])
+    if names and mode == "camara":  # en "solo voz" los vídeos ya son la imagen de todo el reel
+        instructions = f"{instructions}\n\n{pipeline.broll_prompt(names)}".strip()
     opts = pipeline.EditOptions(rhythm, style, size, fit, hook, hook_title, hook_template, instructions,
-                                voice=voice, watermark=watermark, brand=use_brand, pack=pack)
-    JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0,
-                    "options": asdict(opts), "created": time.time(), "trial": watermark}
-    threading.Thread(target=_work, args=(job_id, src, workdir, opts), daemon=True).start()
+                                voice=voice, watermark=watermark, brand=use_brand, pack=pack,
+                                mode="voz" if mode == "voz" else "camara")
+    JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0, "mode": mode,
+                    "options": asdict(opts), "created": time.time(), "trial": watermark and mode != "largo"}
+    target = _work_long if mode == "largo" else _work
+    threading.Thread(target=target, args=(job_id, src, workdir, opts), daemon=True).start()
     return JOBS[job_id]
+
+
+def _work_long(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions) -> None:
+    """Vídeo largo → varios reels: cada momento elegido es un reel normal que aparece en la biblioteca."""
+    try:
+        cfg = config.load()
+        words, picks = pipeline.long_video_clips(src, workdir, cfg,
+                                                 lambda msg, pct: _set(job_id, step=msg, progress=pct * 0.3))
+        if not picks:
+            raise ValueError("No he encontrado momentos de al menos 12 segundos en los que hables")
+        made = []
+        for k, pick in enumerate(picks):
+            _set(job_id, step=f"Editando el reel {k + 1} de {len(picks)}", progress=0.3 + 0.7 * k / len(picks))
+            cid = uuid.uuid4().hex[:10]
+            cdir = JOBS_DIR / cid
+            csrc, sub = pipeline.clip_source(src, words, pick, cdir)
+            copts = replace(opts, hook_title=opts.hook_title or pick["title"])
+            JOBS[cid] = {"id": cid, "status": "working", "step": "En cola", "progress": 0.0, "from_long": job_id,
+                         "options": asdict(copts), "created": time.time(), "trial": opts.watermark}
+            _work(cid, csrc, cdir, copts)
+            if JOBS[cid]["status"] == "done":
+                r = JOBS[cid]["result"]
+                made.append({"id": cid, "title": r["plan"].get("hook_title", ""), "why": pick["why"],
+                             "duration": r["duration_out"]})
+        if not made:
+            raise ValueError(next((JOBS[c]["error"] for c in JOBS if JOBS[c].get("from_long") == job_id
+                                   and JOBS[c].get("error")), "No he podido editar ningún reel"))
+        _set(job_id, status="done", progress=1.0, result={"clips": made})
+    except Exception as e:
+        _set(job_id, status="error", error=str(e))
+
+
+def _save_broll(workdir: Path, files: list[UploadFile]) -> list[str]:
+    """Guarda los vídeos y fotos de apoyo como apoyo/01.mp4, 02.jpg… y devuelve sus nombres originales."""
+    names = []
+    for up in files[:12]:
+        ext = Path(up.filename or "").suffix.lower()
+        if not up.filename or ext not in effects.MEDIA_EXT:
+            continue
+        d = workdir / "apoyo"
+        d.mkdir(exist_ok=True)
+        with (d / f"{len(names) + 1:02d}{ext}").open("wb") as f:
+            shutil.copyfileobj(up.file, f)
+        names.append(Path(up.filename).stem[:60])
+    return names
 
 
 def _work(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions, plan=None) -> None:
@@ -581,7 +633,7 @@ def make_kit(job_id: str, body: KitIn):
     else:
         data = kit.fallback(words, hook, b.cta)
     # Fotogramas limpios (sin subtítulos) de la toma original: la portada y unos cuantos más.
-    src = next(workdir.glob("original.*"))
+    src = workdir / "lienzo.mp4" if (workdir / "lienzo.mp4").exists() else next(workdir.glob("original.*"))
     dur = float(job["result"]["duration_in"])
     first = words[0].start if words else 0.5
     t0 = body.cover_t if body.cover_t is not None else first + 0.4

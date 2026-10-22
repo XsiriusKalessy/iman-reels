@@ -183,14 +183,58 @@ document.addEventListener("click", e => {
 
 // ---------- 1. subir ----------
 const drop = $("#drop");
+state.broll = [];
+const MODES = {
+  camara: { title: "Arrastra tu vídeo aquí", hint: "o pulsa para elegirlo · MP4, MOV", accept: "video/*",
+    broll: "＋ Vídeos o fotos de apoyo", brollHint: "Opcional. Imán los pone a pantalla completa en el momento justo, con tu cara en un círculo." },
+  voz: { title: "Arrastra tu audio aquí", hint: "una nota de voz o un vídeo del que solo quieres la voz · M4A, MP3, WAV, MP4", accept: "audio/*,video/*",
+    broll: "＋ Fotos o vídeos para acompañar (opcional)", brollHint: "Sin ellos, tu voz va sobre un fondo con tus colores y subtítulos grandes." },
+  vozclips: { title: "Arrastra tu voz aquí", hint: "una nota de voz o un vídeo del que solo quieres la voz", accept: "audio/*,video/*",
+    broll: "＋ Tus vídeos y fotos", brollHint: "Imán va cambiando de plano al ritmo de lo que dices." },
+  largo: { title: "Arrastra tu vídeo largo aquí", hint: "un directo, una clase o un podcast · Imán saca los mejores momentos", accept: "video/*" },
+};
+const mode = () => $("input[name=mode]:checked").value;
+function canGo() {
+  $("#to-edit").disabled = !state.file || (mode() === "vozclips" && !state.broll.length);
+}
+function setMode() {
+  const m = MODES[mode()];
+  $("#drop-title").textContent = m.title; $("#drop-hint").textContent = m.hint;
+  $("#file").accept = m.accept;
+  $("#broll-box").hidden = !m.broll;
+  if (m.broll) { $("#broll-title").textContent = m.broll; $("#broll-hint").textContent = m.brollHint; }
+  canGo();
+}
+$("#modes").onchange = setMode;
 function pick(file) {
-  if (!file || !file.type.startsWith("video")) return;
+  if (!file || !(file.type.startsWith("video") || (mode().startsWith("voz") && file.type.startsWith("audio")))) return;
   state.file = file;
   const v = $("#preview");
-  v.src = URL.createObjectURL(file); v.hidden = false; v.play();
   $(".drop-inner").hidden = true;
-  $("#to-edit").disabled = false;
+  if (file.type.startsWith("audio")) {
+    v.hidden = true;
+    $("#audio-picked").hidden = false; $("#audio-picked").textContent = `🎙 ${file.name}`;
+  } else {
+    $("#audio-picked").hidden = true;
+    v.src = URL.createObjectURL(file); v.hidden = false; v.play();
+  }
+  canGo();
 }
+function renderBroll() {
+  $("#broll-list").innerHTML = state.broll.map((f, i) => `
+    <figure>${f.type.startsWith("image") ? `<img src="${URL.createObjectURL(f)}" alt="">` : `<video src="${URL.createObjectURL(f)}#t=0.5" muted></video>`}
+      <figcaption>${i + 1}</figcaption><button type="button" data-unbroll="${i}" title="Quitar">✕</button></figure>`).join("");
+  canGo();
+}
+$("#broll").onchange = e => {
+  state.broll = [...state.broll, ...[...e.target.files].filter(f => /^(video|image)\//.test(f.type))].slice(0, 12);
+  e.target.value = ""; renderBroll();
+};
+$("#broll-list").onclick = e => {
+  const b = e.target.closest("[data-unbroll]");
+  if (b) { state.broll.splice(+b.dataset.unbroll, 1); renderBroll(); }
+};
+setMode();
 $("#file").onchange = e => pick(e.target.files[0]);
 drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
@@ -214,7 +258,9 @@ $("#go").onclick = async () => {
   fd.append("hook_template", $("#hook-template").value);
   fd.append("instructions", $("#instructions").value);
   fd.append("remember", $("#remember").checked);
-  showWorking("Subiendo tu vídeo", 0.01);
+  fd.append("mode", mode() === "vozclips" ? "voz" : mode());
+  if (mode() !== "largo") state.broll.forEach(f => fd.append("broll", f));
+  showWorking(mode() === "largo" ? "Subiendo tu vídeo largo" : "Subiendo tu vídeo", 0.01);
   go("result");
   try {
     state.job = await api("/api/jobs", { method: "POST", body: fd });
@@ -243,6 +289,7 @@ function poll() {
     state.job = j;
     if (j.status === "working") { showWorking(j.step, j.progress); return poll(); }
     if (j.status === "error") return showError(j.error);
+    if (j.result?.clips) return showClips(j);
     showResult(j); if (j.options?.watermark) loadSettings();
   }, 900);
 }
@@ -272,7 +319,7 @@ const FX_NAMES = { lista: "Lista", palabra: "Palabra gigante", titular: "Titular
   color: "Golpe de color", comentario: "Comentario", contador: "Contador", portada: "Portada de revista", cta: "Llamada a la acción",
   dato: "Dato", bruto: "Toma en bruto", fantasma: "Eco", pagina: "Página de revista", detras: "Texto detrás de ti",
   fondo: "Fondo de color", desenfoque: "Fondo desenfocado", ubicacion: "Ubicación", oferta: "Oferta", ruta: "Ruta",
-  testimonio: "Testimonio", plazas: "Plazas", precio: "Precio" };
+  testimonio: "Testimonio", plazas: "Plazas", precio: "Precio", apoyo: "Vídeo de apoyo" };
 function renderEffects(j) {
   const list = j.result.plan.effects || [];
   $("#fx-box").hidden = !list.length;
@@ -409,7 +456,27 @@ $("#memory-list").onclick = async e => {
 };
 loadMemory();
 
+function showClips(j) {
+  // Vídeo largo → varios reels: los enseñamos todos y cada uno se abre como un reel normal.
+  $("#working").hidden = true; $("#download").hidden = true;
+  $("#clips").hidden = false; $("#result-tools").hidden = true;
+  const first = j.result.clips[0];
+  if (first) { $("#out").src = `/api/jobs/${first.id}/reel.mp4`; $("#out").hidden = false; }
+  $("#clips").innerHTML = `<h3>He sacado ${j.result.clips.length} reels de tu vídeo</h3><div class="library">` + j.result.clips.map(c => `
+    <div class="reel-card" data-open-clip="${c.id}" role="button" tabindex="0">
+      <img src="/api/jobs/${c.id}/reel.jpg" alt="" loading="lazy">
+      <div><strong>${esc(c.title || "Sin título")}</strong><span>${fmt(c.duration)}${c.why ? " · " + esc(c.why) : ""}</span></div>
+    </div>`).join("") + `</div><p class="hint">Están también en tu biblioteca. Abre uno para cambiarlo, hacer su carrusel o descargarlo.</p>`;
+  loadLibrary();
+}
+$("#clips").onclick = async e => {
+  const card = e.target.closest("[data-open-clip]");
+  if (!card) return;
+  state.job = await api(`/api/jobs/${card.dataset.openClip}`);
+  showResult(state.job);
+};
 function showResult(j) {
+  $("#clips").hidden = true; $("#result-tools").hidden = false; $("#download").hidden = false;
   renderChat(j);
   $("#kit-box").hidden = true; $("#kit-btn").textContent = "✦ Hazme el carrusel y las historias";
   loadPhrases(j);

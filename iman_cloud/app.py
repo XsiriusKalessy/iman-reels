@@ -166,3 +166,14 @@ def style(request: Request, body: StyleIn, x_iman_license: str = Header(""), x_i
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+class ClipsIn(BaseModel):
+    transcript: str = Field(..., max_length=120000)
+    n: int = Field(4, ge=1, le=8)
+
+
+@app.post("/v1/clips")
+def clips(request: Request, body: ClipsIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
+    _check(x_iman_license, x_iman_instance, request)
+    return ai.pick_clips_raw(_cfg(), body.transcript, body.n)

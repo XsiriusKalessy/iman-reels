@@ -16,10 +16,10 @@ OPENAI_MODEL = "gpt-4o"
 
 EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "color", "comentario",
                 "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
-                "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio"]
+                "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo"]
 FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
                    "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
-                   "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio")
+                   "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo")
 LISTA_LOOKS = ("checklist", "capitulos", "itinerario")
 TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
@@ -151,6 +151,10 @@ Tu trabajo:
    - "testimonio": reseña con cinco estrellas (text: lo que dijo el cliente o alumno; subtitle: quién lo dijo).
    - "plazas": aviso rojo de escasez arriba (text: "Solo 7 plazas", "Acaba el domingo").
    - "precio": etiqueta de precio (text: precio nuevo; subtitle: precio anterior tachado o vacío; title: "-30%" o vacío).
+   - "apoyo": SOLO si te pasan VÍDEOS DE APOYO. Mientras el creador habla de lo que se ve en ese vídeo (el destino,
+     el producto, el local), el vídeo de apoyo ocupa la pantalla y el creador queda en un círculo abajo
+     (text: el número del vídeo de apoyo, "1", "2"…; until_word: hasta dónde). De 2 a 5 segundos cada uno;
+     usa cada vídeo una vez y aquí sí puede haber varios efectos del mismo tipo.
    En "lista", look "itinerario" muestra los días de un viaje en una línea de tiempo; look "capitulos" muestra un índice numerado que se ilumina por partes; look "checklist" muestra casillas arriba que se marcan al decir cada punto (bueno para
    "lo que hace" o "lo que no necesitas"); vacío muestra la lista grande en el centro.
    Rellena siempre todos los campos: los que no use el tipo van vacíos, [] o -1. Como mucho uno de cada
@@ -609,6 +613,98 @@ def clean_kit(data: dict) -> dict:
     stories = [{"text": str(s.get("text", "")).strip()[:120], "sticker": str(s.get("sticker", "")).strip()[:30]}
                for s in data.get("stories", []) if str(s.get("text", "")).strip()][:5]
     return {"carousel": slides, "stories": stories, "reply": str(data.get("reply", "")).strip()[:300]}
+
+
+CLIPS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "clips": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "from": {"type": "integer"},
+                    "to": {"type": "integer"},
+                    "title": {"type": "string"},
+                    "why": {"type": "string"},
+                },
+                "required": ["from", "to", "title", "why"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["clips"],
+    "additionalProperties": False,
+}
+
+CLIPS_SYSTEM = """Sacas reels de un vídeo largo del creador (un directo, un podcast, una clase, un vídeo de YouTube).
+Te paso la transcripción con el número de cada palabra entre corchetes.
+Elige los mejores momentos para convertirlos en reels independientes:
+- Cada uno se entiende solo, sin haber visto el resto: empieza al principio de una idea y acaba cuando se cierra.
+- Entre 20 y 60 segundos cada uno (mira las marcas de tiempo), sin solaparse.
+- Prioriza lo que engancha: una opinión fuerte, un consejo concreto, una historia, una cifra que sorprende.
+- "from" y "to" son números de palabra; "to" es la última palabra que se queda.
+- "title" es el gancho en pantalla, de 3 a 7 palabras, con la voz del creador.
+- "why" explica en una frase por qué funciona.
+Ordénalos del mejor al peor. Responde solo con el JSON."""
+
+
+def transcript_with_times(words: list[Word]) -> str:
+    """Transcripción con una marca de tiempo cada 10 segundos, para vídeos largos."""
+    out, mark = [], -10.0
+    for i, w in enumerate(words):
+        if w.start - mark >= 10:
+            mark = w.start
+            out.append(f"<{int(w.start // 60)}:{int(w.start % 60):02d}>")
+        out.append(f"[{i}] {w.text}")
+    return " ".join(out)
+
+
+def pick_clips(cfg: AIConfig, words: list[Word], n: int = 4) -> list[dict]:
+    if cfg.provider == "iman":
+        from . import cloud
+
+        data = cloud.call(cfg, "clips", {"transcript": transcript_with_times(words)[:120000], "n": n})
+    else:
+        data = pick_clips_raw(cfg, transcript_with_times(words), n)
+    return clean_clips(data, words, n)
+
+
+def pick_clips_raw(cfg: AIConfig, transcript: str, n: int = 4) -> dict:
+    user = f"TRANSCRIPCIÓN:\n{transcript}\n\nSaca como mucho {n} reels."
+    return _ask_json(cfg, CLIPS_SYSTEM, user, CLIPS_SCHEMA)
+
+
+def clean_clips(data: dict, words: list[Word], n: int) -> list[dict]:
+    """Solo tramos válidos, de 12 a 90 segundos y sin solaparse."""
+    out: list[dict] = []
+    for c in data.get("clips", []):
+        a, b = int(c.get("from", -1)), int(c.get("to", -1))
+        if not (0 <= a < b < len(words)):
+            continue
+        dur = words[b].end - words[a].start
+        if not 12 <= dur <= 90 or any(a <= o["to"] and o["from"] <= b for o in out):
+            continue
+        out.append({"from": a, "to": b, "title": str(c.get("title", "")).strip()[:80],
+                     "why": str(c.get("why", "")).strip()[:200]})
+        if len(out) >= n:
+            break
+    return out
+
+
+def fallback_clips(words: list[Word], n: int = 4, target: float = 40.0) -> list[dict]:
+    """Sin IA: corta el vídeo largo en trozos de unos 40 s que acaban en final de frase."""
+    out, a = [], 0
+    for i, w in enumerate(words):
+        long_enough = w.end - words[a].start >= target
+        if long_enough and (w.text.rstrip()[-1:] in ".?!" or w.end - words[a].start >= target * 1.5):
+            out.append({"from": a, "to": i, "title": fallback_hook(words[a:i + 1]), "why": ""})
+            a = i + 1
+            if len(out) >= n:
+                break
+    if len(out) < n and a < len(words) and words[-1].end - words[a].start >= 12:
+        out.append({"from": a, "to": len(words) - 1, "title": fallback_hook(words[a:]), "why": ""})
+    return out
 
 
 def fallback_hook(words: list[Word], max_words: int = 6) -> str:
