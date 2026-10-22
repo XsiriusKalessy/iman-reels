@@ -140,3 +140,17 @@ def test_caja_style_puts_captions_in_a_box():
     clock, dur = _clock()
     ass = build_ass(clock.kept, STYLES["caja"], dur)
     assert "Style: Box," in ass and ",Box,," in ass
+
+
+def test_video_effects_become_ffmpeg_overlays():
+    from iman import media
+
+    clock, dur = _clock()
+    fx = [{"type": "bruto", "word": 6, "text": "-", "until_word": 10}, {"type": "fantasma", "word": 11, "text": "-"},
+          {"type": "pagina", "word": 15, "text": "toma revista."}, {"type": "palabra", "word": 18, "text": "x"}]
+    ops = effects.video_ops(fx, clock, dur, src_of=lambda t: t + 4.0)
+    assert [o.kind for o in ops] == ["bruto", "fantasma", "pagina"]
+    assert ops[0].src_start > 0 and all(0 <= o.start < o.end <= dur for o in ops)
+    info = media.MediaInfo(width=1280, height=720, duration=12.0, fps=30.0, has_audio=True, hdr=False)
+    graph = media.build_filtergraph([Span(0, 5)], info, None, overlays=ops)
+    assert "rotate=" in graph and "colorchannelmixer=aa=" in graph and "color=c=0xF4ECDF" in graph

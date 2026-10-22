@@ -33,6 +33,15 @@ _SCREEN = f"m 0 0 l {W} 0 {W} {H} 0 {H}"
 
 
 @dataclass
+class VideoOp:
+    """Efecto que necesita mezclar vídeo (lo pinta ffmpeg, no el ASS)."""
+    kind: str
+    start: float
+    end: float
+    src_start: float = 0.0
+
+
+@dataclass
 class Window:
     start: float
     end: float
@@ -628,7 +637,67 @@ def frase_events(effect: dict, clock: WordClock, style: Style, duration: float) 
     return lines, Window(start, end)
 
 
-BUILDERS = {LISTA: lista_events, PALABRA: palabra_events, TITULAR: titular_events, CIFRA: cifra_events, FRASE: frase_events,
+VIDEO_KINDS = {"bruto": (3.0, 2.0), "fantasma": (1.6, 0.8), "pagina": (2.6, 1.6)}
+
+
+def bruto_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Etiqueta y nota a mano de la tarjeta con la toma original (la tarjeta la pinta ffmpeg)."""
+    span = _span(effect, clock, duration, *VIDEO_KINDS["bruto"])
+    if not span:
+        return [], None
+    start, end = span
+    t = f"{_ts(start)},{_ts(end)}"
+    label = (effect.get("title") or "Bruto").upper()[:16]
+    note = (effect.get("subtitle", "").strip() or "tal cual, sin tocar")[:22]
+    lw = textfit.width(label, "Figtree ExtraBold", 40) + 40
+    return [
+        f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an7\\pos(600,290)\\frz4\\bord0\\shad0\\1c{_accent(style)}&\\fad(150,150)\\p1}}"
+        f"{_rect(0, 0, lw, 58, 12)}",
+        f"Dialogue: 7,{t},Sub,,0,0,0,,{{\\an4\\pos(620,318)\\frz4\\fnFigtree ExtraBold\\fs40\\bord0\\shad0"
+        f"\\c&H00141518&\\fad(150,150)}}{_esc(label)}",
+        f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an7\\pos(640,1060)\\frz4\\fn{HAND}\\fs64\\bord0\\shad3"
+        f"\\4a&H70&\\c&H00FFFFFF&\\fad(250,150)}}{_esc(note)}",
+    ], None
+
+
+def pagina_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Texto de la hoja de revista; el vídeo encogido lo pinta ffmpeg. Tapa los subtítulos."""
+    span = _span(effect, clock, duration, *VIDEO_KINDS["pagina"])
+    if not span:
+        return [], None
+    start, end = span
+    t = f"{_ts(start)},{_ts(end)}"
+    rows = _wrap(effect["text"].strip()[:60], "Playfair Display ExtraBold", 84, 860)[:2]
+    lines = []
+    for k, r in enumerate(rows):
+        lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an2\\pos(540,{520 - (len(rows) - 1 - k) * 92})\\fnPlayfair Display ExtraBold"
+                     f"\\fs84\\bord0\\shad0\\c&H00141518&\\fad(200,150)}}{_esc(r)}")
+    sub = effect.get("subtitle", "").strip()
+    if sub:
+        lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an8\\pos(540,1735)\\fn{HAND}\\fs72\\bord0\\shad0"
+                     f"\\c{rgb('#D2372B')}&\\fad(300,150)}}{_esc(sub)}")
+    return lines, Window(start, end)
+
+
+def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=None) -> list[VideoOp]:
+    """Los efectos de vídeo de un plan, en tiempos del reel. `src_of(t)` da el segundo de la toma original."""
+    ops = []
+    starts = [clock.at(int(fx.get("word", -1))) for fx in effects or []]
+    for i, fx in enumerate(effects or []):
+        kind = fx.get("type")
+        if kind not in VIDEO_KINDS:
+            continue
+        later = [t for j, t in enumerate(starts) if j != i and t is not None and starts[i] is not None and t > starts[i]]
+        span = _span({**fx, "_next": min(later) if later else None}, clock, duration, *VIDEO_KINDS[kind])
+        if not span:
+            continue
+        # La tarjeta "bruto" enseña la toma sin cortar desde el principio de lo que se dice ahí.
+        src = src_of(span[0]) if (src_of and kind == "bruto") else 0.0
+        ops.append(VideoOp(kind, span[0], span[1], max(0.0, src - 0.5)))
+    return ops
+
+
+BUILDERS = {"bruto": bruto_events, "pagina": pagina_events, LISTA: lista_events, PALABRA: palabra_events, TITULAR: titular_events, CIFRA: cifra_events, FRASE: frase_events,
             TECLEO: tecleo_events, "color": color_events, "comentario": comentario_events,
             "contador": contador_events, "portada": portada_events, "cta": cta_events, "dato": dato_events}
 

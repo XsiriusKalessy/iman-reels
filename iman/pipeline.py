@@ -59,6 +59,16 @@ class EditResult:
 Progress = Callable[[str, float], None]
 
 
+def _source_time(spans, t: float) -> float:
+    """Segundo de la toma original que se ve en el segundo `t` del reel."""
+    acc = 0.0
+    for sp in spans:
+        if t < acc + sp.duration:
+            return sp.start + (t - acc)
+        acc += sp.duration
+    return spans[-1].end if spans else 0.0
+
+
 def run(
     src: Path,
     workdir: Path,
@@ -136,7 +146,11 @@ def run(
 
     progress("Montando tu reel", 0.65)
     out = workdir / "reel.mp4"
-    media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice, zoom)
+    overlays = []
+    if opts.effects:
+        overlays = effects.video_ops(plan.effects, effects.WordClock(kept, kept_idx), out_duration,
+                                     lambda t: _source_time(spans, t))
+    media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice, zoom, overlays=overlays)
     media.thumbnail(out, workdir / "reel.jpg", min(0.6, out_duration / 2))
     progress("Listo", 1.0)
     return EditResult(

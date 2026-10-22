@@ -15,8 +15,9 @@ CLAUDE_MODEL = "claude-opus-5-5"
 OPENAI_MODEL = "gpt-4o"
 
 EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "color", "comentario",
-                "contador", "portada", "cta", "dato"]
-FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato")
+                "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina"]
+FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
+                   "bruto", "fantasma", "pagina")
 TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
 LOOK_ENUM = ["", *TITULAR_LOOKS, "checklist", "capitulos", "enfoque", *COLORS]
@@ -114,6 +115,12 @@ Tu trabajo:
      duración real de la toma bajando hasta la del reel. Deja text en "-" y title y subtitle vacíos.
    - "portada": el vídeo convertido en portada de revista (text: la cabecera, 1 palabra corta, p. ej. la
      marca o el tema; subtitle: un titular de portada de 4 a 8 palabras). Úsalo como mucho una vez.
+   - "bruto": tarjeta inclinada con la toma original sin cortar, cuando el creador habla de cómo grabó o de
+     que no ha editado (title: etiqueta corta, p. ej. "Bruto"; subtitle: nota a mano, p. ej. "tal cual, sin tocar").
+   - "fantasma": un eco semitransparente del propio creador durante una frase dramática o de sorpresa
+     (text: "-"). Muy de vez en cuando.
+   - "pagina": el vídeo encogido dentro de una hoja de revista (text: titular de la hoja, 2 a 6 palabras;
+     subtitle: remate a mano o vacío).
    - "cta": al final, si el creador pide comentar una palabra para recibir algo (text: esa palabra;
      subtitle: el aviso, p. ej. "Te envío el enlace por privado").
    - "tecleo": una caja que se escribe sola con una petición o mensaje que el creador cuenta que escribe

@@ -95,10 +95,57 @@ def _filter_path(p: Path) -> str:
     return str(p).replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
 
 
+def _video_overlays(parts: list[str], ops: list, W: int, H: int) -> str:
+    """Efectos que mezclan vídeo sobre el reel ya montado (tiempos del reel, en segundos).
+
+    - bruto: tarjeta inclinada con la toma original sin cortar, arriba a la derecha.
+    - fantasma: una copia del propio reel, un instante retrasada y semitransparente.
+    - pagina: el reel encogido sobre una hoja de revista color crema.
+    """
+    k_scale = W / 1080
+    cur = "[vx]"
+    for k, op in enumerate(ops):
+        a, b = op.start, op.end
+        if b - a < 0.2:
+            continue
+        on = f"enable='between(t,{a:.3f},{b:.3f})'"
+        if op.kind == "bruto":
+            cw, ch = int(380 * k_scale) // 2 * 2, int(676 * k_scale) // 2 * 2
+            brd = int(12 * k_scale)
+            parts.append(
+                f"[0:v]trim=start={op.src_start:.3f}:duration={b - a:.3f},setpts=PTS-STARTPTS+{a:.3f}/TB,fps=30,"
+                f"scale={cw}:{ch}:force_original_aspect_ratio=increase,crop={cw}:{ch},setsar=1,"
+                f"pad={cw + 2 * brd}:{ch + 2 * brd}:{brd}:{brd}:white,format=rgba,"
+                f"rotate=-0.07:c=none:ow=rotw(-0.07):oh=roth(-0.07)[ov{k}]"
+            )
+            parts.append(f"{cur}[ov{k}]overlay=x={int(600 * k_scale)}:y={int(330 * k_scale)}:{on}:eof_action=pass[o{k}]")
+        elif op.kind == "fantasma":
+            lag = 0.45
+            parts.append(f"{cur}split[m{k}][g{k}]")
+            parts.append(
+                f"[g{k}]trim=start={max(0.0, a - lag):.3f}:end={max(0.0, b - lag):.3f},setpts=PTS+{lag}/TB,"
+                f"format=yuva420p,colorchannelmixer=aa=0.42[gh{k}]"
+            )
+            parts.append(f"[m{k}][gh{k}]overlay=0:0:{on}:eof_action=pass[o{k}]")
+        elif op.kind == "pagina":
+            pw, ph = int(760 * k_scale) // 2 * 2, int(1150 * k_scale) // 2 * 2
+            parts.append(f"{cur}split[m{k}][p{k}]")
+            parts.append(f"color=c=0xF4ECDF:s={W}x{H}:r=30:d={b - a:.3f},setpts=PTS+{a:.3f}/TB[bgp{k}]")
+            parts.append(f"[p{k}]trim=start={a:.3f}:end={b:.3f},scale={pw}:{ph}:force_original_aspect_ratio=increase,"
+                         f"crop={pw}:{ph},setsar=1[pv{k}]")
+            parts.append(f"[bgp{k}][pv{k}]overlay={(W - pw) // 2}:{int(560 * k_scale)}:eof_action=pass[pg{k}]")
+            parts.append(f"[m{k}][pg{k}]overlay=0:0:{on}:eof_action=pass[o{k}]")
+        else:
+            continue
+        cur = f"[o{k}]"
+    return cur
+
+
 def build_filtergraph(
     spans: list[Span], info: MediaInfo, ass_path: Path | None, size: str = "1080", fit: str = "recortar",
     voice: bool = True,
     zooms: list[bool] | None = None,
+    overlays: list | None = None,
 ) -> str:
     W, H = SIZES[size]
     zooms = zooms or [False] * len(spans)
@@ -139,7 +186,9 @@ def build_filtergraph(
         parts.append("[bg][fg]overlay=(W-w)/2:(H-h)/2[vf]")
     else:
         parts.append(f"{chain}scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{H}[vf]")
-    tail = "[vf]fps=30,setsar=1"
+    parts.append("[vf]fps=30,setsar=1[vx]")
+    cur = _video_overlays(parts, overlays or [], W, H)
+    tail = f"{cur}null"
     if ass_path is not None:
         tail += f",ass=filename='{_filter_path(ass_path)}':fontsdir='{_filter_path(FONTS_DIR)}'"
     parts.append(tail + ",format=yuv420p[vout]")
@@ -162,8 +211,9 @@ def render(
     voice: bool = True,
     zooms: list[bool] | None = None,
     preset: str = "medium",
+    overlays: list | None = None,
 ) -> Path:
-    graph = build_filtergraph(spans, info, ass_path, size, fit, voice, zooms)
+    graph = build_filtergraph(spans, info, ass_path, size, fit, voice, zooms, overlays)
     script = dst.with_suffix(".filters.txt")
     script.write_text(graph)
     cmd = [
