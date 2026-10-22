@@ -166,6 +166,7 @@ details p { color: var(--muted); margin-top: 10px; max-width: 70ch; }
 .final h2 { font-size: clamp(40px, 7vw, 80px); }
 footer { border-top: 1px solid var(--line); padding-block: 28px; color: var(--muted); font-size: 15px; }
 footer .inner { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+[hidden] { display: none !important; }
 </style>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -246,6 +247,10 @@ footer .inner { display: flex; justify-content: space-between; gap: 16px; flex-w
       <div class="feat"><span class="mono">Tu editor</span><h3>Pídeselo con tus palabras</h3><p>"Quita la parte del precio", "resalta gratis". Imán lo entiende y lo aplica.</p></div>
       <div class="feat"><span class="mono">Formato</span><h3>Vertical y en 4K</h3><p>1080×1920 o 4K a 30 fps. Si grabas en horizontal, recorta o pone fondo desenfocado.</p></div>
       <div class="feat"><span class="mono">iPhone</span><h3>Colores bien en cualquier móvil</h3><p>Convierte el HDR del iPhone para que no salga quemado al subirlo a Instagram.</p></div>
+      <div class="feat"><span class="mono">Efectos</span><h3>Efectos que se ponen solos</h3><p>Titulares de revista, listas que se marcan, cifras que suben, texto gigante detrás de ti y fondo desenfocado. La IA elige dónde.</p></div>
+      <div class="feat"><span class="mono">Tu marca</span><h3>Tus colores y tu logo, sin tocar nada</h3><p>Sube tu logo una vez: Imán saca tus colores y cierra cada reel con tu logo y tu llamada a la acción.</p></div>
+      <div class="feat"><span class="mono">Tu sector</span><h3>Packs para viajes, cursos y productos</h3><p>Chincheta en el destino, ruta en avión, ofertas, testimonios de alumnos o etiquetas de precio, según lo que vendas.</p></div>
+      <div class="feat"><span class="mono">Publicar</span><h3>Texto y hashtags listos</h3><p>Imán te escribe el texto de la publicación con tu voz, los hashtags y te deja elegir la portada.</p></div>
       <div class="feat"><span class="mono">Privado</span><h3>Tu vídeo se queda en tu ordenador</h3><p>Imán monta el vídeo en tu equipo. Solo la transcripción viaja a la IA para decidir los cortes.</p></div>
     </div>
   </div>
@@ -288,6 +293,7 @@ footer .inner { display: flex; justify-content: space-between; gap: 16px; flex-w
         <li>Soporte por email en español</li>
       </ul>
       <a class="btn" href="#precio" id="buy">Quiero Imán</a>
+      <p class="fine" id="buy-soon" hidden>Abrimos las ventas muy pronto, con precio de lanzamiento para los primeros.</p>
       <p class="fine">IVA incluido. Si en 14 días no te convence, te devolvemos el dinero.</p>
     </div>
   </div>
@@ -323,6 +329,25 @@ footer .inner { display: flex; justify-content: space-between; gap: 16px; flex-w
 </footer>
 
 <script>
+// Pago con Lemon Squeezy: pega aquí el enlace de compra del producto (Tienda → Productos → Compartir).
+const CHECKOUT_URL = "";
+(() => {
+  const buy = document.getElementById("buy");
+  if (!CHECKOUT_URL) {
+    buy.onclick = e => { e.preventDefault(); document.getElementById("buy-soon").hidden = false; };
+    return;
+  }
+  // El pago se abre encima de la web, sin salir de ella.
+  document.querySelectorAll('a[href="#precio"].btn').forEach(a => {
+    a.href = CHECKOUT_URL + (CHECKOUT_URL.includes("?") ? "&" : "?") + "embed=1&media=0&logo=0";
+    a.classList.add("lemonsqueezy-button");
+  });
+  const s = document.createElement("script");
+  s.src = "https://app.lemonsqueezy.com/js/lemon.js";
+  s.defer = true;
+  s.onload = () => window.createLemonSqueezy && window.createLemonSqueezy();
+  document.head.appendChild(s);
+})();
 (() => {
   const words = ["Hoy", "te", "cuento", "el", "error", "que", "comete", "el", "90%", "al", "grabar", "reels", "y", "arreglarlo", "es", "gratis"];
   const keys = new Set(["90%", "gratis", "error"]);
