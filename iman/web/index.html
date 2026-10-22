@@ -103,6 +103,8 @@
           <select id="hook-template"><option value="">Plantilla de gancho (opcional)</option></select>
           <h3>Dímelo como a tu editor</h3>
           <textarea id="instructions" rows="5" placeholder="Ej.: quita la parte en la que me equivoco con el precio y resalta «gratis»"></textarea>
+          <label class="check small"><input type="checkbox" id="remember"> Recordarlo para mis próximos reels</label>
+          <p class="hint" id="memory-hint" hidden></p>
           <p class="hint" id="ai-hint"></p>
         </div>
       </div>
@@ -129,7 +131,12 @@
           <h1>Tu reel</h1>
           <div id="stats" class="stats"></div>
           <div id="hook-box"></div>
-          <details id="cuts-box"><summary>Qué he quitado</summary><div id="cuts"></div></details>
+          <details id="review-box" open>
+            <summary>Revisa lo que dices</summary>
+            <p class="hint">Lo que se queda y lo que he quitado, frase a frase. Si algo no te cuadra, cámbialo.</p>
+            <div id="phrases" class="phrases"></div>
+            <button class="ghost" id="phrases-apply" hidden>Aplicar cambios</button>
+          </details>
           <label class="check small"><input type="checkbox" id="safe-toggle"> Ver zonas que tapan Instagram y TikTok</label>
           <div id="fx-box" hidden>
             <h3>Efectos</h3>
@@ -142,6 +149,7 @@
             <input id="chat-input" placeholder="Ej.: pon una lista con los 3 pasos y quita la parte del precio" autocomplete="off">
             <button class="primary" type="submit">Enviar</button>
           </form>
+          <label class="check small"><input type="checkbox" id="chat-remember"> Recordarlo para mis próximos reels</label>
           <h3>Cambios rápidos</h3>
           <div class="quick">
             <button data-rhythm="rapido">Más rápido</button>
@@ -206,6 +214,9 @@
         <label>Clave de Anthropic (Claude)<input name="anthropic_key" type="password" placeholder="sk-ant-…" autocomplete="off"></label>
         <label>Clave de OpenAI (ChatGPT)<input name="openai_key" type="password" placeholder="sk-…" autocomplete="off"></label>
       </details>
+      <h3>Lo que Imán recuerda de ti</h3>
+      <p class="hint" id="memory-empty">Aún nada. Marca «Recordarlo para mis próximos reels» cuando le pidas algo y lo aplicará siempre.</p>
+      <ul class="memory" id="memory-list"></ul>
       <h3>Transcripción</h3>
       <div class="choices inline">
         <label class="choice"><input type="radio" name="transcriber" value="local"><span>En mi ordenador (gratis)</span></label>

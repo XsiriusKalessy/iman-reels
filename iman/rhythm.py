@@ -97,32 +97,51 @@ def detect_retakes(words: list[Word], ngram: int = 3, window: int = 30) -> list[
     return drops
 
 
-def dropped_indices(words: list[Word], rhythm: Rhythm, extra: list[tuple[int, int]]) -> set[int]:
+def _expand(ranges, n: int) -> set[int]:
     out: set[int] = set()
-    if not rhythm.cut:
-        return out
-    if rhythm.remove_fillers:
-        out |= {i for i in range(len(words)) if is_filler(words, i)}
-    ranges = list(extra)
-    if rhythm.remove_retakes:
-        ranges += detect_retakes(words)
     for a, b in ranges:
-        a, b = max(0, a), min(len(words) - 1, b)
-        out |= set(range(a, b + 1))
+        out |= set(range(max(0, a), min(n - 1, b) + 1))
     return out
 
 
+def dropped_indices(words: list[Word], rhythm: Rhythm, extra: list[tuple[int, int]],
+                    restore: list[tuple[int, int]] | None = None) -> set[int]:
+    """Palabras que se quitan. Lo que el creador recupera manda sobre todo lo demás."""
+    out: set[int] = set()
+    if rhythm.cut:
+        if rhythm.remove_fillers:
+            out |= {i for i in range(len(words)) if is_filler(words, i)}
+        ranges = list(extra)
+        if rhythm.remove_retakes:
+            ranges += detect_retakes(words)
+        out |= _expand(ranges, len(words))
+    return out - _expand(restore or [], len(words))
+
+
+# Pausas con sentido: tras una pregunta, unos puntos suspensivos o dos puntos se deja respirar la frase.
+PAUSE_MARKS = ("?", "…", "...", ":", "!")
+MAX_PAUSE = 0.9  # una pausa más larga que esto se recorta a KEPT_PAUSE
+KEPT_PAUSE = 0.6
+
+
+def natural_pauses(words: list[Word]) -> set[int]:
+    return {i for i, w in enumerate(words[:-1]) if w.text.rstrip().endswith(PAUSE_MARKS)}
+
+
 def keep_spans(
-    words: list[Word], duration: float, rhythm: Rhythm, extra_drops: list[tuple[int, int]] | None = None
+    words: list[Word], duration: float, rhythm: Rhythm, extra_drops: list[tuple[int, int]] | None = None,
+    restore: list[tuple[int, int]] | None = None, pauses: list[int] | set[int] | None = None,
 ) -> tuple[list[Span], set[int]]:
     """Devuelve los tramos a conservar y las palabras eliminadas."""
-    drops = dropped_indices(words, rhythm, extra_drops or [])
+    drops = dropped_indices(words, rhythm, extra_drops or [], restore)
     if not rhythm.cut or not words:
         return [Span(0.0, duration)], drops
 
+    keep_pause = set(pauses or ()) | natural_pauses(words)
     spans: list[Span] = []
     cut_pending = False  # hay palabras eliminadas desde el último tramo
     prev_kept: Word | None = None
+    prev_i = -1
     for i, w in enumerate(words):
         if i in drops:
             cut_pending = True
@@ -134,14 +153,20 @@ def keep_spans(
         e = min(duration, w.end + rhythm.pad_after)
         if cut_pending and i > 0:
             s = max(s, words[i - 1].end)
-        if spans and not cut_pending and s - spans[-1].end <= rhythm.max_gap:
+        pause = spans and not cut_pending and prev_i in keep_pause
+        if pause and s - spans[-1].end <= MAX_PAUSE:
+            spans[-1].end = max(spans[-1].end, e)  # la pausa se queda entera
+        elif spans and not cut_pending and s - spans[-1].end <= rhythm.max_gap:
             spans[-1].end = max(spans[-1].end, e)
         else:
+            if pause:
+                spans[-1].end = max(spans[-1].end, min(prev_kept.end + KEPT_PAUSE, s))
             if spans and s < spans[-1].end:
                 s = spans[-1].end
             spans.append(Span(s, e))
         cut_pending = False
         prev_kept = w
+        prev_i = i
     # Tramos minúsculos producen saltos raros; los descartamos.
     spans = [sp for sp in spans if sp.duration >= 0.12]
     return spans or [Span(0.0, duration)], drops
@@ -194,6 +219,41 @@ def remap_words(words: list[Word], spans: list[Span], drops: set[int]) -> tuple[
     return out, idx
 
 
+@dataclass
+class Phrase:
+    a: int
+    b: int
+    text: str
+    start: float
+    end: float
+    dropped: int  # palabras quitadas dentro de la frase
+    reason: str  # por qué se ha quitado, en palabras del creador
+
+    @property
+    def state(self) -> str:
+        n = self.b - self.a + 1
+        return "fuera" if self.dropped >= n else ("parte" if self.dropped else "dentro")
+
+
+def phrases(words: list[Word], drops: set[int], reasons: dict[int, str] | None = None,
+            max_words: int = 16, gap: float = 0.7) -> list[Phrase]:
+    """Parte la toma en frases para "Revisa lo que dices"."""
+    reasons = reasons or {}
+    out: list[Phrase] = []
+    a = 0
+    for i, w in enumerate(words):
+        last = i == len(words) - 1
+        end_mark = w.text.rstrip().endswith((".", "?", "!", "…"))
+        long_gap = not last and words[i + 1].start - w.end > gap
+        if last or end_mark or long_gap or i - a + 1 >= max_words:
+            idx = range(a, i + 1)
+            why = next((reasons[k] for k in idx if k in drops and reasons.get(k)), "")
+            out.append(Phrase(a, i, " ".join(words[k].text for k in idx), words[a].start, w.end,
+                              sum(1 for k in idx if k in drops), why))
+            a = i + 1
+    return out
+
+
 __all__ = [
-    "RHYTHMS", "Rhythm", "TimeMap", "detect_retakes", "is_filler", "keep_spans", "normalize", "remap_words",
+    "Phrase", "RHYTHMS", "Rhythm", "TimeMap", "detect_retakes", "natural_pauses", "phrases", "is_filler", "keep_spans", "normalize", "remap_words",
 ]

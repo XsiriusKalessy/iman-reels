@@ -156,6 +156,17 @@ def test_library_toggles_and_post(sample, tmp_path, monkeypatch):
     assert "YA" in ass
     assert "GANCHO NUEVO" in ass.upper()
 
+    # Revisa lo que dices: recuperar la toma repetida y quitar la última frase.
+    rows = c.get(f"/api/jobs/{jid}/review").json()["phrases"]
+    first, last = rows[0], rows[-1]
+    assert first["state"] == "fuera" and last["state"] == "dentro"
+    c.post(f"/api/jobs/{jid}/plan", json={"phrases": [{"from": first["from"], "to": first["to"], "keep": True},
+                                                      {"from": last["from"], "to": last["to"], "keep": False}]})
+    assert wait(jid)["status"] == "done"
+    rows = c.get(f"/api/jobs/{jid}/review").json()["phrases"]
+    assert rows[0]["state"] == "dentro" and rows[-1]["state"] == "fuera"
+    assert "gratis." in wait(jid)["result"]["removed_words"]
+
     # Sigue en la biblioteca aunque Imán se reinicie.
     server.JOBS.clear()
     lib = c.get("/api/reels").json()["reels"]

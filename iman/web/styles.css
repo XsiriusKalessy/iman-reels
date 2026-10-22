@@ -232,3 +232,14 @@ label.color input { width: 44px; height: 34px; padding: 2px; margin: 0; border-r
 .update details p { white-space: pre-line; color: var(--muted); font-size: 14px; }
 .update button { padding: 8px 14px; }
 @media (max-width: 1088px) { .update { margin-inline: 24px; } }
+
+/* revisa lo que dices */
+.phrases { display: grid; gap: 2px; max-height: 360px; overflow: auto; margin: 8px 0; }
+.phrase { display: flex; gap: 10px; align-items: baseline; padding: 8px 10px; border-radius: 10px; font-size: 14.5px; }
+.phrase:hover { background: var(--panel); }
+.phrase .t { font: 12px ui-monospace, Menlo, monospace; color: var(--muted); min-width: 34px; }
+.phrase small { display: block; color: var(--accent); font-size: 12px; }
+.phrase.fuera .txt { text-decoration: line-through; color: var(--muted); }
+.phrase .link { white-space: nowrap; font-size: 13px; }
+.memory { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.memory li { display: flex; gap: 8px; justify-content: space-between; align-items: center; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 14px; }

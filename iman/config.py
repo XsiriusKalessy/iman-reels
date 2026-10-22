@@ -27,7 +27,27 @@ DEFAULTS = {
     "license_checked": 0,
     "license_valid": False,
     "free_reels_used": 0,
+    # "Recuérdalo para mis próximos reels": preferencias que se aplican a todos los reels nuevos.
+    "memory": [],
 }
+
+MEMORY_MAX = 20
+
+
+def remember(text: str) -> list[str]:
+    text = " ".join(text.split())[:300]
+    mem = [m for m in load().get("memory", []) if m.lower() != text.lower()]
+    if text:
+        mem = (mem + [text])[-MEMORY_MAX:]
+    save({"memory": mem})
+    return mem
+
+
+def memory_prompt(cfg: dict) -> str:
+    mem = cfg.get("memory") or []
+    if not mem:
+        return ""
+    return "PREFERENCIAS GUARDADAS DEL CREADOR (aplícalas siempre):\n" + "\n".join(f"- {m}" for m in mem)
 
 
 def load() -> dict:

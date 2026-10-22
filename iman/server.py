@@ -13,7 +13,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import ai, brand, config, license, packs, pipeline, updates
 from .captions import STYLES
@@ -139,6 +139,31 @@ class SettingsIn(BaseModel):
 def set_settings(body: SettingsIn):
     data = {k: v for k, v in body.model_dump().items() if v is not None and v != ""}
     return config.public(config.save(data))
+
+
+@app.get("/api/memory")
+def get_memory():
+    return {"memory": config.load().get("memory", [])}
+
+
+class MemoryIn(BaseModel):
+    text: str
+
+
+@app.post("/api/memory")
+def add_memory(body: MemoryIn):
+    if not body.text.strip():
+        raise HTTPException(400, "Escribe lo que quieres que recuerde")
+    return {"memory": config.remember(body.text)}
+
+
+@app.delete("/api/memory/{index}")
+def delete_memory(index: int):
+    mem = list(config.load().get("memory", []))
+    if 0 <= index < len(mem):
+        mem.pop(index)
+        config.save({"memory": mem})
+    return {"memory": mem}
 
 
 class LicenseIn(BaseModel):
@@ -289,6 +314,7 @@ async def create_job(
     voice: bool = Form(True),
     use_brand: bool = Form(True),
     pack: str = Form(""),
+    remember: bool = Form(False),
 ):
     if pack and pack not in packs.PACKS:
         raise HTTPException(400, "Opción no válida")
@@ -297,6 +323,12 @@ async def create_job(
     allowed, watermark = license.can_edit(_refresh_license())
     if not allowed:
         raise HTTPException(402, "Has usado tus reels de prueba. Activa tu licencia en Ajustes para seguir editando.")
+    if remember and instructions.strip():
+        config.remember(instructions)
+        instructions = ""  # ya va en las preferencias guardadas
+    saved = config.memory_prompt(config.load())
+    if saved:
+        instructions = f"{saved}\n\n{instructions}".strip()
     job_id = uuid.uuid4().hex[:10]
     workdir = JOBS_DIR / job_id
     workdir.mkdir(parents=True, exist_ok=True)
@@ -345,6 +377,7 @@ def reedit(job_id: str, body: dict):
 
 class ChatIn(BaseModel):
     message: str
+    remember: bool = False
 
 
 @app.post("/api/jobs/{job_id}/chat")
@@ -364,6 +397,10 @@ def chat(job_id: str, body: ChatIn):
         new_plan, settings, reply = ai.revise_plan(aicfg, words, plan, body.message, opts.rhythm, opts.style)
     except Exception as e:
         raise HTTPException(502, f"La IA no ha podido aplicar el cambio: {e}")
+    # Lo que el creador decidió a mano en "Revisa lo que dices" se mantiene.
+    new_plan.cut, new_plan.restore = plan.cut, plan.restore
+    if body.remember:
+        config.remember(body.message)
     if settings.get("rhythm") in RHYTHMS:
         opts.rhythm = settings["rhythm"]
     if settings.get("style") in STYLES:
@@ -385,9 +422,32 @@ def get_job(job_id: str):
     return job
 
 
+class PhraseIn(BaseModel):
+    start: int = Field(alias="from")
+    to: int
+    keep: bool
+
+
 class PlanEditIn(BaseModel):
     effects_off: list[int] | None = None
     hook_title: str | None = None
+    phrases: list[PhraseIn] | None = None
+
+
+def _without(ranges, a: int, b: int) -> list[tuple[int, int]]:
+    return [(x, y) for x, y in ranges if y < a or x > b]
+
+
+@app.get("/api/jobs/{job_id}/review")
+def review(job_id: str):
+    """"Revisa lo que dices": cada frase, si se queda o se va, y por qué."""
+    job = _job(job_id)
+    workdir = JOBS_DIR / job_id
+    if not job or not (workdir / "plan.json").exists():
+        raise HTTPException(404, "No encuentro ese reel")
+    words = [Word(**w) for w in json.loads((workdir / "transcript.json").read_text())]
+    plan = EditPlan.from_dict(json.loads((workdir / "plan.json").read_text()))
+    return {"phrases": pipeline.review(words, plan, job["options"]["rhythm"])}
 
 
 @app.post("/api/jobs/{job_id}/plan")
@@ -401,6 +461,12 @@ def edit_plan(job_id: str, body: PlanEditIn):
     if body.effects_off is not None:
         off = set(body.effects_off)
         plan.effects = [{**fx, "off": i in off} for i, fx in enumerate(plan.effects)]
+    for ph in body.phrases or []:
+        a, b = ph.start, ph.to
+        if not 0 <= a <= b:
+            continue
+        plan.cut, plan.restore = _without(plan.cut, a, b), _without(plan.restore, a, b)
+        (plan.restore if ph.keep else plan.cut).append((a, b))
     opts = pipeline.EditOptions(**job["options"])
     if body.hook_title is not None:
         plan.hook_title = body.hook_title.strip()[:80]

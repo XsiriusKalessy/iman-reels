@@ -84,8 +84,13 @@ EDIT_SCHEMA = {
                 "additionalProperties": False,
             },
         },
+        "pauses": {
+            "type": "array",
+            "description": "Índices de palabras tras las que la pausa da fuerza y NO se corta (0 a 4).",
+            "items": {"type": "integer"},
+        },
     },
-    "required": ["hook_title", "hook_line", "drop", "emphasis", "effects", "zooms"],
+    "required": ["hook_title", "hook_line", "drop", "emphasis", "effects", "zooms", "pauses"],
     "additionalProperties": False,
 }
 
@@ -151,6 +156,9 @@ Tu trabajo:
    Rellena siempre todos los campos: los que no use el tipo van vacíos, [] o -1. Como mucho uno de cada
    tipo y nunca dos efectos a la vez.
 6. zooms: rangos cortos (una frase) donde acercar la cámara para subrayar una idea fuerte.
+7. pauses: los silencios se cortan, pero no por segundos: con sentido. Si el creador hace una pausa a propósito
+   para dar fuerza (antes de revelar un dato, tras una pregunta, antes del remate), pon el índice de la palabra
+   tras la que va esa pausa y se respetará. Solo las que de verdad suman.
 Respeta el idioma del vídeo. Sigue las instrucciones del creador si las hay."""
 
 REVISE_SYSTEM = EDIT_SYSTEM + """
@@ -287,6 +295,7 @@ def _plan_from(data: dict, n: int, source: str) -> EditPlan:
                             "until_word": until if int(fx["word"]) < until < n else None})
     zooms = [(int(z["from"]), int(z["to"])) for z in data.get("zooms", [])
              if 0 <= int(z["from"]) <= int(z["to"]) < n]
+    pauses = sorted({int(i) for i in data.get("pauses", []) if 0 <= int(i) < n - 1})[:6]
     return EditPlan(
         hook_title=data.get("hook_title", "").strip(),
         hook_line=data.get("hook_line", "").strip(),
@@ -295,6 +304,7 @@ def _plan_from(data: dict, n: int, source: str) -> EditPlan:
         emphasis=[i for i in data.get("emphasis", []) if 0 <= int(i) < n],
         effects=effects,
         zooms=zooms,
+        pauses=pauses,
         source=source,
     )
 
@@ -327,6 +337,7 @@ def _plan_to_prompt(plan: EditPlan) -> dict:
         "emphasis": plan.emphasis,
         "effects": plan.effects,
         "zooms": [{"from": a, "to": b} for a, b in plan.zooms],
+        "pauses": plan.pauses,
     }
 
 

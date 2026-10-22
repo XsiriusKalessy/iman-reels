@@ -115,3 +115,17 @@ def test_reel_with_brand(tmp_path):
     im = Image.open(mid).convert("RGB")
     assert _close("#%02X%02X%02X" % im.getpixel((60, 1000)), (128, 128, 128), tol=40)
     assert _close("#%02X%02X%02X" % im.getpixel((1080 - 40 - 60, 230)), (20, 110, 190), tol=45)
+
+
+def test_memory_is_saved_and_reaches_new_reels(tmp_path, monkeypatch):
+    from iman import config
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(config, "HOME", tmp_path)
+    assert config.memory_prompt(config.load()) == ""
+    config.remember("Subtítulos grandes y nada de música")
+    config.remember("subtítulos grandes y nada de música")  # no se repite
+    config.remember("Pon mi web al final")
+    mem = config.load()["memory"]
+    assert len(mem) == 2
+    assert "Pon mi web al final" in config.memory_prompt(config.load())

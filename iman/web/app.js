@@ -179,6 +179,7 @@ $("#go").onclick = async () => {
   fd.append("hook_title", $("#hook-title").value);
   fd.append("hook_template", $("#hook-template").value);
   fd.append("instructions", $("#instructions").value);
+  fd.append("remember", $("#remember").checked);
   showWorking("Subiendo tu vídeo", 0.01);
   go("result");
   try {
@@ -224,7 +225,8 @@ $("#chat-form").onsubmit = async e => {
   renderChat({ chat: [...(state.job.chat || []), { role: "user", text: msg }] });
   showWorking("Pensando el cambio", 0.02);
   try {
-    state.job = await api(`/api/jobs/${state.job.id}/chat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: msg }) });
+    state.job = await api(`/api/jobs/${state.job.id}/chat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: msg, remember: $("#chat-remember").checked }) });
+    if ($("#chat-remember").checked) { $("#chat-remember").checked = false; loadMemory(); }
     renderChat(state.job);
     poll();
   } catch (err) {
@@ -305,8 +307,54 @@ $("#library").onclick = async e => {
   showResult(state.job);
 };
 
+// ---------- revisa lo que dices ----------
+async function loadPhrases(j) {
+  $("#phrases-apply").hidden = true;
+  let list = [];
+  try { list = (await api(`/api/jobs/${j.id}/review`)).phrases; } catch { /* reels antiguos sin plan */ }
+  $("#review-box").hidden = !list.length;
+  const out = list.filter(p => p.state !== "dentro").length;
+  $("#review-box summary").textContent = `Revisa lo que dices · ${list.length} frases${out ? `, ${out} con cortes` : ""}`;
+  $("#phrases").innerHTML = list.map(p => `
+    <div class="phrase ${p.state}" data-from="${p.from}" data-to="${p.to}" data-keep="${p.state !== "fuera"}">
+      <span class="t">${fmt(p.start)}</span>
+      <span class="grow"><span class="txt">${esc(p.text)}</span>${p.reason ? `<small>${esc(p.reason)}${p.state === "parte" ? " · una parte" : ""}</small>` : ""}</span>
+      <button type="button" class="link">${p.state === "fuera" ? "Recuperar" : "Quitar"}</button>
+    </div>`).join("");
+}
+$("#phrases").onclick = e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  const row = b.closest(".phrase"), keep = row.dataset.keep !== "true";
+  row.dataset.keep = keep; row.dataset.changed = "1";
+  row.classList.toggle("fuera", !keep); row.classList.toggle("dentro", keep); row.classList.remove("parte");
+  b.textContent = keep ? "Quitar" : "Recuperar";
+  $("#phrases-apply").hidden = false;
+};
+$("#phrases-apply").onclick = async () => {
+  const phrases = $$("#phrases .phrase[data-changed]").map(r => ({ from: +r.dataset.from, to: +r.dataset.to, keep: r.dataset.keep === "true" }));
+  showWorking("Aplicando cambios", 0.02);
+  try { state.job = await postJSON(`/api/jobs/${state.job.id}/plan`, { phrases }); poll(); }
+  catch (err) { showError(err.message); }
+};
+
+// ---------- lo que Imán recuerda ----------
+async function loadMemory() {
+  const { memory } = await api("/api/memory");
+  $("#memory-empty").hidden = memory.length > 0;
+  $("#memory-list").innerHTML = memory.map((m, i) => `<li><span>${esc(m)}</span><button type="button" class="link" data-forget="${i}" title="Olvidar">✕</button></li>`).join("");
+  $("#memory-hint").hidden = !memory.length;
+  $("#memory-hint").textContent = memory.length ? `Ya recuerdo ${memory.length} ${memory.length === 1 ? "preferencia tuya" : "preferencias tuyas"}: las aplico solas.` : "";
+}
+$("#memory-list").onclick = async e => {
+  const b = e.target.closest("[data-forget]");
+  if (b) { await api(`/api/memory/${b.dataset.forget}`, { method: "DELETE" }); loadMemory(); }
+};
+loadMemory();
+
 function showResult(j) {
   renderChat(j);
+  loadPhrases(j);
   renderEffects(j);
   $("#post-box").hidden = true;
   $("#cover-t").max = j.result.duration_out.toFixed(1);
@@ -323,8 +371,6 @@ function showResult(j) {
   const p = r.plan;
   $("#hook-box").innerHTML = (p.hook_title ? `<div class="card"><h4>${esc(p.hook_title)}</h4><p class="hint">Gancho en pantalla</p></div>` : "")
     + (p.hook_line ? `<div class="card"><p>«${esc(p.hook_line)}»</p><p class="hint">Si quieres regrabar el arranque, prueba con esta frase.</p></div>` : "");
-  $("#cuts").innerHTML = (p.drop_reasons.length ? `<p>${p.drop_reasons.map(esc).join("<br>")}</p>` : "")
-    + `<p>${r.removed_words.map(esc).join(" · ") || "Nada"}</p>`;
 }
 async function reedit(changes) {
   if (!state.job || state.job.status === "working") return;

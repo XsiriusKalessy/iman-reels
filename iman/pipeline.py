@@ -11,7 +11,7 @@ from . import ai, brand, effects, media, segment
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Word
-from .rhythm import RHYTHMS, keep_spans, remap_words
+from .rhythm import RHYTHMS, detect_retakes, is_filler, keep_spans, phrases, remap_words
 
 WATERMARK = (
     "Dialogue: 9,0:00:00.00,{end},Sub,,0,0,0,,"
@@ -71,6 +71,27 @@ def _source_time(spans, t: float) -> float:
     return spans[-1].end if spans else 0.0
 
 
+def review(words: list[Word], plan: EditPlan, rhythm_key: str) -> list[dict]:
+    """Las frases de la toma, si se quedan o se van y por qué ("Revisa lo que dices")."""
+    rhythm = RHYTHMS[rhythm_key]
+    _, drops = keep_spans(words, words[-1].end if words else 0, rhythm, plan.drop + plan.cut, plan.restore,
+                          plan.pauses)
+    why: dict[int, str] = {}
+    if rhythm.cut:
+        if rhythm.remove_retakes:
+            for a, b in detect_retakes(words):
+                why.update({k: "Frase repetida" for k in range(a, b + 1)})
+        if rhythm.remove_fillers:
+            why.update({i: "Muletilla" for i in range(len(words)) if is_filler(words, i)})
+        for (a, b), r in zip(plan.drop, plan.drop_reasons + [""] * len(plan.drop)):
+            why.update({k: (r or "Toma falsa").capitalize() for k in range(a, b + 1)})
+    for a, b in plan.cut:
+        why.update({k: "La quitaste tú" for k in range(a, b + 1)})
+    return [{"from": p.a, "to": p.b, "text": p.text, "start": round(p.start, 2), "end": round(p.end, 2),
+             "state": p.state, "reason": p.reason if p.dropped else ""}
+            for p in phrases(words, drops, why)]
+
+
 def run(
     src: Path,
     workdir: Path,
@@ -118,7 +139,7 @@ def run(
 
     progress("Cortando silencios y tomas falsas", 0.55)
     rhythm = RHYTHMS[opts.rhythm]
-    spans, drops = keep_spans(words, info.duration, rhythm, plan.drop)
+    spans, drops = keep_spans(words, info.duration, rhythm, plan.drop + plan.cut, plan.restore, plan.pauses)
     zooms_wanted = plan.zooms if opts.effects else []
     spans = effects.split_spans(spans, words, zooms_wanted)
     zoom = effects.zoom_flags(spans, words, zooms_wanted, opts.auto_zoom and rhythm.cut)

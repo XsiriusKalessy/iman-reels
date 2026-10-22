@@ -40,6 +40,11 @@ class EditPlan:
     # Efectos en pantalla (ver effects.py) y rangos de palabras con zoom de énfasis.
     effects: list[dict] = field(default_factory=list)
     zooms: list[tuple[int, int]] = field(default_factory=list)
+    # Índices de palabras tras las que hay una pausa con sentido (antes de un dato, tras una pregunta): se respeta.
+    pauses: list[int] = field(default_factory=list)
+    # Lo que decide el creador en "Revisa lo que dices": frases que quita (cut) o recupera (restore).
+    cut: list[tuple[int, int]] = field(default_factory=list)
+    restore: list[tuple[int, int]] = field(default_factory=list)
     source: str = "heuristica"
 
     @classmethod
@@ -52,6 +57,9 @@ class EditPlan:
             emphasis=list(d.get("emphasis", [])),
             effects=list(d.get("effects", [])),
             zooms=[tuple(x) for x in d.get("zooms", [])],
+            pauses=list(d.get("pauses", [])),
+            cut=[tuple(x) for x in d.get("cut", [])],
+            restore=[tuple(x) for x in d.get("restore", [])],
             source=d.get("source", "heuristica"),
         )
 

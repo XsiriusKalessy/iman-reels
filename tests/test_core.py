@@ -98,3 +98,38 @@ def test_transcript_for_prompt_marks_pauses():
 
 def test_fallback_hook_stops_at_sentence():
     assert ai.fallback_hook(TAKE[6:], 12) == "Hoy te cuento el error que comete todo el mundo"
+
+
+def test_restore_beats_automatic_cuts_and_cut_removes_good_takes():
+    _, drops = keep_spans(TAKE, 12.0, RHYTHMS["rapido"])
+    assert 0 in drops
+    _, drops = keep_spans(TAKE, 12.0, RHYTHMS["rapido"], restore=[(0, 4)])
+    assert not drops & set(range(0, 5))
+    _, drops = keep_spans(TAKE, 12.0, RHYTHMS["rapido"], [(16, 18)])
+    assert {16, 17, 18} <= drops
+
+
+def test_meaningful_pause_is_kept_but_capped():
+    words = W([("¿Sabes", 0.0, 0.4), ("qué?", 0.45, 0.8), ("Nada.", 1.5, 1.9), ("Fin", 4.0, 4.3)])
+    spans, _ = keep_spans(words, 5.0, RHYTHMS["rapido"])
+    assert spans[0].end >= 1.5  # la pausa tras la pregunta se queda
+    words2 = W([("Dato", 0.0, 0.4), ("importante", 0.45, 0.8), ("Nada", 1.5, 1.9)])
+    spans2, _ = keep_spans(words2, 3.0, RHYTHMS["rapido"])
+    assert spans2[0].end < 1.0  # sin motivo, el silencio se corta
+    spans3, _ = keep_spans(words2, 3.0, RHYTHMS["rapido"], pauses=[1])  # la IA marca la pausa
+    assert spans3[0].end >= 1.5
+    long = W([("¿Listo?", 0.0, 0.5), ("Vamos", 3.0, 3.4)])
+    spans4, _ = keep_spans(long, 4.0, RHYTHMS["rapido"])
+    assert len(spans4) == 2 and 0.9 <= spans4[0].end <= 1.2  # una pausa larga se queda en ~0,6 s
+
+
+def test_review_lists_phrases_with_reasons():
+    from iman.models import EditPlan
+    from iman.pipeline import review
+
+    rows = review(TAKE, EditPlan(), "rapido")
+    assert rows[0]["state"] == "fuera" and rows[0]["reason"] == "Frase repetida"
+    assert any(r["state"] == "dentro" and "mundo" in r["text"] for r in rows)
+    rows = review(TAKE, EditPlan(cut=[(16, 18)]), "rapido")
+    last = rows[-1]
+    assert last["state"] == "fuera" and last["reason"] == "La quitaste tú"
