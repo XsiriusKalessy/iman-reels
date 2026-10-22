@@ -431,6 +431,48 @@ def brand_copy(cfg: AIConfig, description: str) -> dict:
             "sector": data.get("sector", "")}
 
 
+# --- Texto para publicar ------------------------------------------------------------
+
+POST_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "caption": {"type": "string"},
+        "hashtags": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["caption", "hashtags"],
+    "additionalProperties": False,
+}
+
+POST_SYSTEM = """Escribes el texto que acompaña a un reel en Instagram y TikTok, con la voz del creador.
+Estructura: una primera línea que engancha (no repitas el título del vídeo tal cual), 2 a 4 frases cortas con
+el valor del vídeo, y una llamada a la acción al final (usa la del creador si te la pasa). Máximo 600
+caracteres, saltos de línea entre bloques, como mucho 2 emojis. Hashtags: de 5 a 8, en el idioma del vídeo,
+mezclando de nicho y generales, sin el símbolo # y sin espacios."""
+
+
+def post_copy(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "", cta: str = "", handle: str = "") -> dict:
+    if cfg.provider == "iman":
+        from . import cloud
+
+        data = cloud.call(cfg, "post", {"transcript": transcript[:6000], "hook": hook, "pack": pack,
+                                        "cta": cta, "handle": handle})
+    else:
+        user = f"LO QUE DICE EL VÍDEO:\n{transcript[:6000]}\n\nTítulo en pantalla: {hook}"
+        if pack and pack != "general":
+            user += f"\nSector: {pack}"
+        if cta:
+            user += f"\nLlamada a la acción del creador: {cta}"
+        if handle:
+            user += f"\nCuenta: {handle}"
+        data = _ask_json(cfg, POST_SYSTEM, user, POST_SCHEMA)
+    tags = []
+    for t in data.get("hashtags", []):
+        t = "".join(str(t).split()).lstrip("#")
+        if t and t.lower() not in (x.lower() for x in tags):
+            tags.append(t)
+    return {"caption": str(data.get("caption", "")).strip()[:2000], "hashtags": tags[:10]}
+
+
 def fallback_hook(words: list[Word], max_words: int = 6) -> str:
     """Sin IA: usa la primera frase del vídeo como título."""
     out = []

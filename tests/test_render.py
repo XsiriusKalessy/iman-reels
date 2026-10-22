@@ -117,3 +117,56 @@ def test_text_behind_person_two_pass(sample, tmp_path):
     assert (tmp_path / "w" / "mask.mp4").exists() and (tmp_path / "w" / "behind.ass").exists()
     info = media.probe(res.video)
     assert (info.width, info.height) == (1080, 1920) and abs(info.duration - res.duration_out) < 0.3
+
+
+def test_library_toggles_and_post(sample, tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from iman import ai, config, server
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    real_run = pipeline.run
+    monkeypatch.setattr(pipeline, "run", lambda *a, **k: real_run(*a, **{**k, "words": k.get("words") or TAKE}))
+    c = TestClient(server.app)
+    c.post("/api/settings", json={"provider": "none"})
+    with sample.open("rb") as f:
+        job = c.post("/api/jobs", files={"video": ("toma.mp4", f, "video/mp4")}, data={"pack": "viajes"}).json()
+
+    def wait(jid):
+        for _ in range(120):
+            j = c.get(f"/api/jobs/{jid}").json()
+            if j["status"] != "working":
+                return j
+            time.sleep(0.5)
+
+    jid = job["id"]
+    assert wait(jid)["options"]["pack"] == "viajes"
+    plan_file = tmp_path / "jobs" / jid / "plan.json"
+    plan = json.loads(plan_file.read_text())
+    plan["effects"] = [{"type": "palabra", "word": 6, "text": "YA"}, {"type": "plazas", "word": 11, "text": "Solo 3"}]
+    plan_file.write_text(json.dumps(plan))
+
+    j = c.post(f"/api/jobs/{jid}/plan", json={"effects_off": [1], "hook_title": "Gancho nuevo"}).json()
+    j = wait(jid)
+    assert j["status"] == "done", j
+    assert [fx.get("off") for fx in j["result"]["plan"]["effects"]] == [False, True]
+    ass = (tmp_path / "jobs" / jid / "subs.ass").read_text()
+    assert "SOLO 3" not in ass
+    assert "YA" in ass
+    assert "GANCHO NUEVO" in ass.upper()
+
+    # Sigue en la biblioteca aunque Imán se reinicie.
+    server.JOBS.clear()
+    lib = c.get("/api/reels").json()["reels"]
+    assert lib[0]["id"] == jid and lib[0]["title"] == "Gancho nuevo"
+    assert c.get(f"/api/jobs/{jid}/cover.jpg?t=1.0").status_code == 200
+
+    assert c.post(f"/api/jobs/{jid}/post").status_code == 400  # sin IA
+    config.save({"provider": "iman"})
+    monkeypatch.setattr(ai, "post_copy", lambda *a: {"caption": "Hola", "hashtags": ["viajes"]})
+    assert c.post(f"/api/jobs/{jid}/post").json()["hashtags"] == ["viajes"]
+
+    assert c.delete(f"/api/jobs/{jid}").json()["ok"]
+    assert c.get("/api/reels").json()["reels"] == []
+    assert c.get("/api/jobs/a..b").status_code == 404

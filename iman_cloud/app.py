@@ -118,6 +118,20 @@ def brand(request: Request, body: BrandIn, x_iman_license: str = Header(""), x_i
     return ai.brand_copy(_cfg(), body.description)
 
 
+class PostIn(BaseModel):
+    transcript: str = Field(..., max_length=6000)
+    hook: str = Field("", max_length=200)
+    pack: str = Field("", max_length=20)
+    cta: str = Field("", max_length=60)
+    handle: str = Field("", max_length=60)
+
+
+@app.post("/v1/post")
+def post(request: Request, body: PostIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
+    _check(x_iman_license, x_iman_instance, request)
+    return ai.post_copy(_cfg(), body.transcript, body.hook, body.pack, body.cta, body.handle)
+
+
 @app.get("/health")
 def health():
     return {"ok": True}

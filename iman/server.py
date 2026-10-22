@@ -31,6 +31,55 @@ _lock = threading.Lock()
 def _set(job_id: str, **kw) -> None:
     with _lock:
         JOBS[job_id].update(kw)
+        if JOBS[job_id].get("status") != "working":
+            _save_job(JOBS[job_id])
+
+
+def _save_job(job: dict) -> None:
+    """Guarda el estado del reel en disco para que siga en la biblioteca al reiniciar Imán."""
+    d = JOBS_DIR / job["id"]
+    if d.exists():
+        (d / "job.json").write_text(json.dumps({k: v for k, v in job.items() if k != "trial"}, ensure_ascii=False))
+
+
+def _job(job_id: str) -> dict | None:
+    if job_id in JOBS:
+        return JOBS[job_id]
+    if not job_id.isalnum():
+        return None
+    f = JOBS_DIR / job_id / "job.json"
+    if not f.exists():
+        return None
+    job = json.loads(f.read_text())
+    if job.get("status") == "working":  # Imán se cerró a mitad
+        job.update(status="error", error="La edición se interrumpió. Vuelve a aplicar los cambios.")
+    with _lock:
+        JOBS[job_id] = job
+    return job
+
+
+@app.get("/api/reels")
+def reels():
+    """Biblioteca: tus reels, del más nuevo al más antiguo."""
+    out = []
+    for f in JOBS_DIR.glob("*/job.json") if JOBS_DIR.exists() else []:
+        job = _job(f.parent.name)
+        if not job or job.get("status") != "done":
+            continue
+        r = job.get("result") or {}
+        out.append({"id": job["id"], "created": job.get("created", 0), "title": (r.get("plan") or {}).get("hook_title", ""),
+                    "duration": r.get("duration_out", 0), "pack": (job.get("options") or {}).get("pack", "")})
+    return {"reels": sorted(out, key=lambda r: -r["created"])}
+
+
+@app.delete("/api/jobs/{job_id}")
+def delete_job(job_id: str):
+    job = _job(job_id)
+    if not job or job["status"] == "working":
+        raise HTTPException(404, "No encuentro ese reel o aún se está editando")
+    shutil.rmtree(JOBS_DIR / job_id, ignore_errors=True)
+    JOBS.pop(job_id, None)
+    return {"ok": True}
 
 
 @app.get("/api/options")
@@ -260,7 +309,7 @@ def _work(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions, pla
 @app.post("/api/jobs/{job_id}/reedit")
 def reedit(job_id: str, body: dict):
     """Vuelve a montar con otras opciones sin volver a transcribir."""
-    job = JOBS.get(job_id)
+    job = _job(job_id)
     if not job or job["status"] == "working":
         raise HTTPException(404, "No encuentro ese reel o aún se está editando")
     workdir = JOBS_DIR / job_id
@@ -283,7 +332,7 @@ class ChatIn(BaseModel):
 @app.post("/api/jobs/{job_id}/chat")
 def chat(job_id: str, body: ChatIn):
     """"Dímelo como a tu editor": cambios en lenguaje natural sobre el reel ya montado."""
-    job = JOBS.get(job_id)
+    job = _job(job_id)
     if not job or job["status"] == "working":
         raise HTTPException(404, "No encuentro ese reel o aún se está editando")
     aicfg = config.ai_config(config.load())
@@ -312,9 +361,75 @@ def chat(job_id: str, body: ChatIn):
 
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: str):
-    if job_id not in JOBS:
+    job = _job(job_id)
+    if job is None:
         raise HTTPException(404, "No encuentro ese reel")
+    return job
+
+
+class PlanEditIn(BaseModel):
+    effects_off: list[int] | None = None
+    hook_title: str | None = None
+
+
+@app.post("/api/jobs/{job_id}/plan")
+def edit_plan(job_id: str, body: PlanEditIn):
+    """Encender o apagar efectos del plan y cambiar el gancho, sin pasar por la IA."""
+    job = _job(job_id)
+    if not job or job["status"] == "working":
+        raise HTTPException(404, "No encuentro ese reel o aún se está editando")
+    workdir = JOBS_DIR / job_id
+    plan = EditPlan.from_dict(json.loads((workdir / "plan.json").read_text()))
+    if body.effects_off is not None:
+        off = set(body.effects_off)
+        plan.effects = [{**fx, "off": i in off} for i, fx in enumerate(plan.effects)]
+    opts = pipeline.EditOptions(**job["options"])
+    if body.hook_title is not None:
+        plan.hook_title = body.hook_title.strip()[:80]
+        opts.hook_title = plan.hook_title
+        opts.hook = bool(plan.hook_title)
+    _set(job_id, status="working", step="Aplicando cambios", progress=0.0, options=asdict(opts), error=None)
+    src = next(workdir.glob("original.*"))
+    threading.Thread(target=_work, args=(job_id, src, workdir, opts, plan), daemon=True).start()
     return JOBS[job_id]
+
+
+@app.post("/api/jobs/{job_id}/post")
+def post_copy(job_id: str):
+    """Texto de la publicación y hashtags, escritos por la IA con lo que dices en el vídeo."""
+    job = _job(job_id)
+    if not job or job["status"] != "done":
+        raise HTTPException(404, "No encuentro ese reel")
+    workdir = JOBS_DIR / job_id
+    cached = workdir / "post.json"
+    if cached.exists():
+        return json.loads(cached.read_text())
+    aicfg = config.ai_config(config.load())
+    if not aicfg.enabled:
+        raise HTTPException(400, "Activa la IA en Ajustes para que te escriba el texto de la publicación")
+    words = [Word(**w) for w in json.loads((workdir / "transcript.json").read_text())]
+    b = brand.load()
+    try:
+        data = ai.post_copy(aicfg, " ".join(w.text for w in words), job["result"]["plan"].get("hook_title", ""),
+                            job["options"].get("pack", ""), b.cta, b.handle)
+    except Exception as e:
+        raise HTTPException(502, f"La IA no ha podido escribir el texto: {e}")
+    cached.write_text(json.dumps(data, ensure_ascii=False))
+    return data
+
+
+@app.get("/api/jobs/{job_id}/cover.jpg")
+def get_cover(job_id: str, t: float = 0.5):
+    """Fotograma del reel para usarlo de portada."""
+    p = JOBS_DIR / job_id / "reel.mp4"
+    if not job_id.isalnum() or not p.exists():
+        raise HTTPException(404)
+    out = JOBS_DIR / job_id / f"cover-{int(max(0.0, t) * 10)}.jpg"
+    if not out.exists():
+        from . import media
+
+        media.thumbnail(p, out, max(0.0, t))
+    return FileResponse(out, media_type="image/jpeg", filename=f"portada-{job_id}.jpg")
 
 
 @app.get("/api/jobs/{job_id}/reel.mp4")

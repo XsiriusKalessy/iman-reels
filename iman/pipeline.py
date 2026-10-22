@@ -128,6 +128,7 @@ def run(
         plan.hook_title = ai.fallback_hook(kept)
     (workdir / "plan.json").write_text(json.dumps(plan.to_dict(), ensure_ascii=False, indent=1))
 
+    active = [fx for fx in plan.effects if not fx.get("off")]  # los que el creador ha apagado no salen
     kit = brand.load() if opts.brand else None
     style = brand.apply(STYLES[opts.style], kit) if kit else STYLES[opts.style]
     # El cierre de marca va DESPUÉS de lo que dices, para no taparte la llamada a la acción.
@@ -140,7 +141,7 @@ def run(
         fx_lines, fx_windows = ([], [])
         if opts.effects:
             fx_lines, fx_windows = effects.build_effects(
-                plan.effects, effects.WordClock(kept, kept_idx), style, out_duration, info.duration
+                active, effects.WordClock(kept, kept_idx), style, out_duration, info.duration
             )
         ass = build_ass(
             kept if opts.captions else [], style, total,
@@ -155,11 +156,11 @@ def run(
     out = workdir / "reel.mp4"
     overlays = []
     if opts.effects:
-        overlays = effects.video_ops(plan.effects, effects.WordClock(kept, kept_idx), out_duration,
+        overlays = effects.video_ops(active, effects.WordClock(kept, kept_idx), out_duration,
                                      lambda t: _source_time(spans, t))
     overlays += effects.brand_ops(kit, total)
     clock = effects.WordClock(kept, kept_idx)
-    segs = effects.seg_ops(plan.effects, clock, out_duration) if opts.effects else []
+    segs = effects.seg_ops(active, clock, out_duration) if opts.effects else []
     if segs and segment.available():
         # Dos pasadas: primero el reel limpio, luego la persona recortada encima de lo que va detrás.
         base = media.render(src, workdir / "base.mp4", spans, info, None, opts.size, opts.fit, opts.voice, zoom,
@@ -168,7 +169,7 @@ def run(
         mask = segment.person_masks(base, workdir / "mask.mp4", [(o.start, o.end) for o in segs])
         behind = workdir / "behind.ass"
         behind.write_text(build_ass([], style, total,
-                                    extra_events=effects.behind_events(plan.effects, clock, style,
+                                    extra_events=effects.behind_events(active, clock, style,
                                                                        out_duration)), encoding="utf-8")
         progress("Montando tu reel", 0.90)
         media.composite(base, mask, src, out, behind, ass_path, segs, overlays, opts.size)
