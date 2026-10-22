@@ -319,7 +319,8 @@ const FX_NAMES = { lista: "Lista", palabra: "Palabra gigante", titular: "Titular
   color: "Golpe de color", comentario: "Comentario", contador: "Contador", portada: "Portada de revista", cta: "Llamada a la acción",
   dato: "Dato", bruto: "Toma en bruto", fantasma: "Eco", pagina: "Página de revista", detras: "Texto detrás de ti",
   fondo: "Fondo de color", desenfoque: "Fondo desenfocado", ubicacion: "Ubicación", oferta: "Oferta", ruta: "Ruta",
-  testimonio: "Testimonio", plazas: "Plazas", precio: "Precio", apoyo: "Vídeo de apoyo" };
+  testimonio: "Testimonio", plazas: "Plazas", precio: "Precio", apoyo: "Vídeo de apoyo",
+  sube: "Sube con tu dedo", choque: "El choque", aparece: "Aparece donde señalas" };
 function renderEffects(j) {
   const list = j.result.plan.effects || [];
   $("#fx-box").hidden = !list.length;

@@ -16,10 +16,11 @@ OPENAI_MODEL = "gpt-4o"
 
 EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "color", "comentario",
                 "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
-                "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo"]
+                "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque", "aparece"]
 FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
                    "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
-                   "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo")
+                   "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque",
+                   "aparece")
 LISTA_LOOKS = ("checklist", "capitulos", "itinerario")
 TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
@@ -155,6 +156,13 @@ Tu trabajo:
      el producto, el local), el vídeo de apoyo ocupa la pantalla y el creador queda en un círculo abajo
      (text: el número del vídeo de apoyo, "1", "2"…; until_word: hasta dónde). De 2 a 5 segundos cada uno;
      usa cada vídeo una vez y aquí sí puede haber varios efectos del mismo tipo.
+   Efectos con las manos (Imán ve dónde están las manos del creador y los ajusta solo; si no las ve, salen igual):
+   - "sube": una palabra sale de su dedo y sube con él (text: 1 o 2 palabras de lo que crece: "+30 %", "VENTAS",
+     "MÁS CLIENTES"). Cuando habla de subir, crecer, más.
+   - "choque": una palabra enorme en el centro que salta en pedazos cuando la mano la golpea o al final
+     (text: 1 palabra; "ADIÓS", "MITO", "EXCUSAS"). Para romper con algo: un mito, un error, una excusa.
+   - "aparece": lo que dice aparece donde señala con el dedo (text: lo que nombra, corto: "90 €", "Roma",
+     "mi socio"). Cuando presenta algo concreto: un precio, un sitio, una persona.
    En "lista", look "itinerario" muestra los días de un viaje en una línea de tiempo; look "capitulos" muestra un índice numerado que se ilumina por partes; look "checklist" muestra casillas arriba que se marcan al decir cada punto (bueno para
    "lo que hace" o "lo que no necesitas"); vacío muestra la lista grande en el centro.
    Rellena siempre todos los campos: los que no use el tipo van vacíos, [] o -1. Como mucho uno de cada

@@ -786,9 +786,10 @@ BUILDERS = {"bruto": bruto_events, "pagina": pagina_events, LISTA: lista_events,
 
 
 def _pack_builders() -> dict:
+    from .gestos import GESTURE_BUILDERS
     from .packfx import PACK_BUILDERS
 
-    return PACK_BUILDERS
+    return {**PACK_BUILDERS, **GESTURE_BUILDERS}
 
 
 def build_effects(effects: list[dict], clock: WordClock, style: Style, duration: float, source_duration: float = 0.0) -> tuple[list[str], list[Window]]:

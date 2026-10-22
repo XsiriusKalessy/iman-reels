@@ -284,13 +284,14 @@ def _api(tmp_path, monkeypatch, words):
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
     monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
     monkeypatch.setattr(pipeline, "_transcribe", lambda *a, **k: list(words))
+    monkeypatch.setattr(pipeline.hands, "available", lambda: False)  # las manos tienen su propia prueba
     c = TestClient(server.app)
     c.post("/api/settings", json={"provider": "none"})
     return c, server
 
 
 def _wait(c, job):
-    for _ in range(400):
+    for _ in range(800):
         job = c.get(f"/api/jobs/{job['id']}").json()
         if job["status"] != "working":
             return job

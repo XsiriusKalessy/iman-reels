@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import ai, brand, copystyle, effects, media, segment
+from . import ai, brand, copystyle, effects, gestos, hands, media, segment
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Word
@@ -36,6 +36,7 @@ class EditOptions:
     watermark: bool = False  # reels de prueba sin licencia
     brand: bool = True  # aplicar el kit de marca guardado (colores, logo y cierre)
     pack: str = ""  # sector: viajes, cursos, productos, empresas (vacío = general)
+    gestures: bool = True  # efectos que siguen tus manos (si se ven en el vídeo)
     mode: str = "camara"  # camara (hablas a cámara) | voz (solo tu voz, sobre tus vídeos o un fondo)
 
 
@@ -222,13 +223,24 @@ def run(
     out_duration = sum(s.duration for s in spans)
     if not plan.hook_title and kept:
         plan.hook_title = ai.fallback_hook(kept)
+    hand_frames: list[dict] = []
+    found: list = []
+    if opts.effects and opts.gestures and not voice_only and hands.available():
+        progress("Mirando tus manos", 0.58)
+        try:
+            hand_frames = gestos.reel_frames(hands.track(src, workdir / "manos.json"), spans, zoom, info, opts.fit)
+            found = gestos.gestures(hand_frames)
+        except Exception:  # las manos son un extra: si falla el modelo, los efectos salen sin seguirlas
+            hand_frames, found = [], []
+        plan.effects = gestos.auto_effects(plan.effects, found, effects.WordClock(kept, kept_idx))
     if voice_only:  # no hay cara que poner en el círculo ni persona que recortar
         plan.effects = [fx for fx in plan.effects if fx.get("type") not in effects.PERSON_TYPES]
     else:
         plan.effects = effects.auto_broll(plan.effects, kept_idx, len(clips))
     (workdir / "plan.json").write_text(json.dumps(plan.to_dict(), ensure_ascii=False, indent=1))
 
-    active = [fx for fx in plan.effects if not fx.get("off")]  # los que el creador ha apagado no salen
+    active = [dict(fx) for fx in plan.effects if not fx.get("off")]  # los que el creador ha apagado no salen
+    gestos.attach(active, found, hand_frames, effects.WordClock(kept, kept_idx))
     kit = brand.load() if opts.brand else None
     style = brand.apply(STYLES[opts.style], kit) if kit else STYLES[opts.style]
     # El cierre de marca va DESPUÉS de lo que dices, para no taparte la llamada a la acción.
