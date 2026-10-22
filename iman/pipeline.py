@@ -130,7 +130,10 @@ def run(
 
     kit = brand.load() if opts.brand else None
     style = brand.apply(STYLES[opts.style], kit) if kit else STYLES[opts.style]
-    end_lines, end_window = effects.end_card_events(kit, style, out_duration)
+    # El cierre de marca va DESPUÉS de lo que dices, para no taparte la llamada a la acción.
+    tail = effects.END_CARD if kit is not None and kit.active and kit.end_card and out_duration > 1 else 0.0
+    total = out_duration + tail
+    end_lines, end_window = effects.end_card_events(kit, style, total)
     ass_path = None
     if opts.captions or opts.hook or opts.watermark or end_lines:
         emphasis_out = {j for j, i in enumerate(kept_idx) if i in set(plan.emphasis)}
@@ -140,9 +143,9 @@ def run(
                 plan.effects, effects.WordClock(kept, kept_idx), style, out_duration, info.duration
             )
         ass = build_ass(
-            kept if opts.captions else [], style, out_duration,
+            kept if opts.captions else [], style, total,
             plan.hook_title if opts.hook else "", emphasis_out,
-            extra_events=fx_lines + end_lines + ([WATERMARK.format(end=_ts(out_duration))] if opts.watermark else []),
+            extra_events=fx_lines + end_lines + ([WATERMARK.format(end=_ts(total))] if opts.watermark else []),
             hide=fx_windows + ([end_window] if end_window else []),
         )
         ass_path = workdir / "subs.ass"
@@ -154,27 +157,27 @@ def run(
     if opts.effects:
         overlays = effects.video_ops(plan.effects, effects.WordClock(kept, kept_idx), out_duration,
                                      lambda t: _source_time(spans, t))
-    overlays += effects.brand_ops(kit, out_duration)
+    overlays += effects.brand_ops(kit, total)
     clock = effects.WordClock(kept, kept_idx)
     segs = effects.seg_ops(plan.effects, clock, out_duration) if opts.effects else []
     if segs and segment.available():
         # Dos pasadas: primero el reel limpio, luego la persona recortada encima de lo que va detrás.
         base = media.render(src, workdir / "base.mp4", spans, info, None, opts.size, opts.fit, opts.voice, zoom,
-                            preset="veryfast")
+                            preset="veryfast", tail=tail)
         progress("Recortándote del fondo", 0.80)
         mask = segment.person_masks(base, workdir / "mask.mp4", [(o.start, o.end) for o in segs])
         behind = workdir / "behind.ass"
-        behind.write_text(build_ass([], style, out_duration,
+        behind.write_text(build_ass([], style, total,
                                     extra_events=effects.behind_events(plan.effects, clock, style,
                                                                        out_duration)), encoding="utf-8")
         progress("Montando tu reel", 0.90)
         media.composite(base, mask, src, out, behind, ass_path, segs, overlays, opts.size)
     else:
-        media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice, zoom, overlays=overlays)
+        media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice, zoom, overlays=overlays, tail=tail)
     media.thumbnail(out, workdir / "reel.jpg", min(0.6, out_duration / 2))
     progress("Listo", 1.0)
     return EditResult(
-        video=out, plan=plan, duration_in=info.duration, duration_out=out_duration,
+        video=out, plan=plan, duration_in=info.duration, duration_out=total,
         removed_words=[words[i].text for i in sorted(drops)],
         cuts=sum(1 for a, b in zip(spans, spans[1:]) if abs(a.end - b.start) > 1e-3),
     )

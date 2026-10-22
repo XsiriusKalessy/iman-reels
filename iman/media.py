@@ -170,7 +170,9 @@ def build_filtergraph(
     voice: bool = True,
     zooms: list[bool] | None = None,
     overlays: list | None = None,
+    tail: float = 0.0,
 ) -> str:
+    """`tail`: segundos extra al final (último fotograma congelado y silencio) para el cierre de marca."""
     W, H = SIZES[size]
     zooms = zooms or [False] * len(spans)
     w0, h0 = info.width - info.width % 2, info.height - info.height % 2
@@ -192,7 +194,12 @@ def build_filtergraph(
             f"[0:a]atrim=start={sp.start:.3f}:end={sp.end:.3f},asetpts=PTS-STARTPTS{afx}[a{i}]"
         )
         labels.append(f"[v{i}][a{i}]")
-    parts.append(f"{''.join(labels)}concat=n={len(spans)}:v=1:a=1[vc][ac]")
+    if tail > 0:
+        parts.append(f"{''.join(labels)}concat=n={len(spans)}:v=1:a=1[vc0][ac0]")
+        parts.append(f"[vc0]tpad=stop_mode=clone:stop_duration={tail:.3f}[vc]")
+        parts.append(f"[ac0]apad=pad_dur={tail:.3f}[ac]")
+    else:
+        parts.append(f"{''.join(labels)}concat=n={len(spans)}:v=1:a=1[vc][ac]")
 
     chain = "[vc]"
     if info.hdr:
@@ -237,8 +244,9 @@ def render(
     zooms: list[bool] | None = None,
     preset: str = "medium",
     overlays: list | None = None,
+    tail: float = 0.0,
 ) -> Path:
-    graph = build_filtergraph(spans, info, ass_path, size, fit, voice, zooms, overlays)
+    graph = build_filtergraph(spans, info, ass_path, size, fit, voice, zooms, overlays, tail)
     script = dst.with_suffix(".filters.txt")
     script.write_text(graph)
     extra, _ = _image_inputs(overlays, 1)
