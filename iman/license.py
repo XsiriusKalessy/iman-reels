@@ -16,6 +16,8 @@ import time
 import urllib.parse
 import urllib.request
 
+from . import offline_license
+
 API = "https://api.lemonsqueezy.com/v1/licenses"
 # Id del producto en Lemon Squeezy; evita que valga una clave de otra tienda.
 PRODUCT_ID = os.environ.get("IMAN_LEMON_PRODUCT_ID", "")
@@ -50,6 +52,12 @@ def _check_product(meta: dict) -> None:
 
 def activate(key: str) -> dict:
     """Activa la clave en este ordenador. Devuelve los datos a guardar en la configuración."""
+    if offline_license.is_offline(key):
+        info = offline_license.read(key)
+        if not info:
+            raise LicenseError("Esta clave no es válida o ha caducado")
+        return {"license_key": key.strip(), "license_instance": "", "license_expires": info.get("exp", ""),
+                "license_checked": time.time(), "license_valid": True}
     res = _post("activate", {"license_key": key.strip(), "instance_name": platform.node() or "Imán"})
     if not res.get("activated"):
         raise LicenseError(res.get("error") or "No se ha podido activar la licencia")
@@ -65,6 +73,8 @@ def activate(key: str) -> dict:
 
 
 def deactivate(cfg: dict) -> None:
+    if offline_license.is_offline(cfg.get("license_key") or ""):
+        return
     if cfg.get("license_key") and cfg.get("license_instance"):
         try:
             _post("deactivate", {"license_key": cfg["license_key"], "instance_id": cfg["license_instance"]})
@@ -76,6 +86,8 @@ def validate(cfg: dict) -> dict:
     """Comprueba la licencia como mucho una vez al día; sin conexión, aguanta 14 días."""
     if not cfg.get("license_key"):
         return {"license_valid": False}
+    if offline_license.is_offline(cfg["license_key"]):  # firmada: se comprueba aquí mismo, sin internet
+        return {"license_valid": offline_license.read(cfg["license_key"]) is not None, "license_checked": time.time()}
     if time.time() - float(cfg.get("license_checked") or 0) < REVALIDATE_EVERY:
         return {}
     try:
