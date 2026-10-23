@@ -6,9 +6,26 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from .models import Word
+
+SAMPLE_RATE = 16000
+
+
+def _pcm(audio: Path):
+    """El audio a 16 kHz mono con nuestro ffmpeg. Así no dependemos de PyAV, que cambia
+    su API entre versiones (p. ej. «metadata_errors» desapareció en av 19)."""
+    import numpy as np
+
+    from .media import FFMPEG
+
+    res = subprocess.run([FFMPEG, "-nostdin", "-v", "error", "-i", str(audio), "-vn", "-ac", "1",
+                          "-ar", str(SAMPLE_RATE), "-f", "f32le", "-"], capture_output=True)
+    if res.returncode != 0:
+        raise RuntimeError("No he podido leer el audio del vídeo: " + res.stderr.decode(errors="replace")[-300:])
+    return np.frombuffer(res.stdout, dtype=np.float32)
 
 
 def transcribe(audio: Path, engine: str = "local", language: str | None = "es", model: str = "small",
@@ -25,7 +42,7 @@ def _local(audio: Path, language: str | None, model: str) -> list[Word]:
         raise RuntimeError("Falta faster-whisper: pip install faster-whisper") from e
     wm = WhisperModel(model, device="auto", compute_type="auto")
     segments, _ = wm.transcribe(
-        str(audio), language=language, word_timestamps=True, vad_filter=False,
+        _pcm(audio), language=language, word_timestamps=True, vad_filter=False,
         # Sin VAD ni "condition_on_previous_text" para no perder muletillas ni tomas falsas.
         condition_on_previous_text=False,
         initial_prompt="Eh, em, o sea, bueno... Transcribe literalmente, con muletillas y repeticiones.",

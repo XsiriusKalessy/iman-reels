@@ -81,6 +81,16 @@ if __name__ == "__main__":
         import uvicorn
 
         uvicorn.Config(server.app, host="127.0.0.1", port=PORT, log_level="warning").configure_logging()
+        if "--transcribe" in sys.argv:  # en CI: transcribe de verdad con el modelo más pequeño
+            import subprocess
+            import tempfile
+            from pathlib import Path
+
+            from iman import transcribe
+
+            wav = Path(tempfile.mkdtemp()) / "prueba.wav"
+            subprocess.run([media.FFMPEG, "-v", "error", "-f", "lavfi", "-i", "sine=d=2", str(wav)], check=True)
+            transcribe.transcribe(wav, model="tiny")
         print("ok", media.FFMPEG, segment.available(), file=out)
     else:
         main()

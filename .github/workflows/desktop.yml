@@ -68,10 +68,10 @@ jobs:
 
       - name: Comprobar el ejecutable
         if: runner.os == 'Windows'
-        run: dist\Iman\Iman.exe --smoke
+        run: dist\Iman\Iman.exe --smoke --transcribe
       - name: Comprobar la app
         if: runner.os == 'macOS'
-        run: '"dist/Imán.app/Contents/MacOS/Iman" --smoke'
+        run: '"dist/Imán.app/Contents/MacOS/Iman" --smoke --transcribe'
 
       - name: Instalador de Windows
         if: runner.os == 'Windows'
