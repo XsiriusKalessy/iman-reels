@@ -94,6 +94,29 @@ function applyPack(fromBrand) {
 
 const NAMES = { iman: "la IA de Imán", claude: "tu Claude", openai: "tu ChatGPT" };
 
+$("#export-secrets").onchange = e => {
+  $("#export-warn").hidden = !e.target.checked;
+  $("#export-settings").href = "/api/settings/export" + (e.target.checked ? "?claves=1" : "");
+};
+$("#import-settings").onchange = async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const out = $("#import-result");
+  out.hidden = false; out.classList.remove("error"); out.textContent = "Importando…";
+  try {
+    const fd = new FormData(); fd.append("file", f);
+    const { got } = await api("/api/settings/import", { method: "POST", body: fd });
+    const parts = ["tus ajustes y lo que Imán recuerda de ti"];
+    if (got.marca) parts.push(got.logo ? "Mi marca con el logo" : "Mi marca");
+    if (got.claves) parts.push("tus claves de IA");
+    if (got.licencia) parts.push("tu licencia");
+    out.textContent = "✓ Listo: he traído " + parts.join(", ") + ".";
+    await loadSettings();
+    api("/api/brand").then(renderBrand);
+  } catch (err) {
+    out.classList.add("error"); out.textContent = err.message;
+  } finally { e.target.value = ""; }
+};
 async function loadSettings() {
   state.settings = await api("/api/settings");
   const s = state.settings;

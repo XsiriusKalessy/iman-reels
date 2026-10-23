@@ -298,6 +298,16 @@
       <h3>Lo que Imán recuerda de ti</h3>
       <p class="hint" id="memory-empty">Aún nada. Marca «Recordarlo para mis próximos reels» cuando le pidas algo y lo aplicará siempre.</p>
       <ul class="memory" id="memory-list"></ul>
+      <h3>Llevar Imán a otro ordenador</h3>
+      <p class="hint">Guarda en un archivo tus ajustes, Mi marca con el logo y lo que Imán recuerda de ti. En el otro ordenador, pulsa «Importar» y elige ese archivo.</p>
+      <label class="check small"><input type="checkbox" id="export-secrets"> Incluir también mi licencia y mis claves de IA</label>
+      <p class="hint warn-text" id="export-warn" hidden>Quien tenga ese archivo podrá usar tu licencia y gastar de tu cuenta de IA. Guárdalo en un USB o en tu nube, no lo mandes por WhatsApp ni por correo, y bórralo cuando hayas terminado.</p>
+      <div class="row">
+        <a class="ghost button" id="export-settings" href="/api/settings/export" download="mis-ajustes.iman">⬇ Exportar mis ajustes</a>
+        <label class="ghost button">⬆ Importar ajustes<input type="file" id="import-settings" accept=".iman,.zip" hidden></label>
+      </div>
+      <p class="hint" id="import-result" hidden></p>
+
       <h3>Transcripción</h3>
       <div class="choices inline">
         <label class="choice"><input type="radio" name="transcriber" value="local"><span>En mi ordenador (gratis)</span></label>

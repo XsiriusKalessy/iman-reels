@@ -11,11 +11,11 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ai, brand, config, copystyle, effects, license, packs, pipeline, updates
+from . import ai, brand, config, copystyle, effects, license, packs, pipeline, portable, updates
 from .captions import STYLES
 from .models import EditPlan, Word
 from .rhythm import RHYTHMS
@@ -193,6 +193,21 @@ class SettingsIn(BaseModel):
 def set_settings(body: SettingsIn):
     data = {k: v for k, v in body.model_dump().items() if v is not None and v != ""}
     return config.public(config.save(data))
+
+
+@app.get("/api/settings/export")
+def export_settings(claves: bool = False):
+    return Response(portable.export(claves), media_type="application/zip",
+                    headers={"Content-Disposition": 'attachment; filename="mis-ajustes.iman"'})
+
+
+@app.post("/api/settings/import")
+async def import_settings(file: UploadFile = File(...)):
+    try:
+        got = portable.import_(await file.read())
+    except portable.ImportError_ as e:
+        raise HTTPException(400, str(e))
+    return {"got": got, "settings": config.public(config.load())}
 
 
 @app.get("/api/memory")
