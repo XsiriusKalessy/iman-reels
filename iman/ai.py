@@ -723,3 +723,26 @@ def fallback_hook(words: list[Word], max_words: int = 6) -> str:
         if w.text.rstrip()[-1:] in ".?!" or len(out) >= max_words:
             break
     return " ".join(out).rstrip(",.;:")
+
+
+SETUP_AI = ("La IA incluida de Imán todavía no está activa. Ve a Ajustes › IA que edita, "
+            "elige «Mi Claude» y pega tu clave de Claude (empieza por sk-ant-).")
+
+
+def error_message(e: Exception) -> str:
+    """Lo que le decimos a la persona cuando falla la IA, en vez de un «Error 500»."""
+    msg = str(e)
+    if type(e).__name__ == "CloudError":
+        return SETUP_AI if msg.startswith(("No hay conexión", "El servidor de Imán respondió")) else msg
+    origin = type(e).__module__.split(".")[0]
+    if origin in ("anthropic", "openai"):
+        who = "Claude" if origin == "anthropic" else "ChatGPT"
+        low = msg.lower()
+        if type(e).__name__ == "AuthenticationError":
+            return f"Tu clave de {who} no es válida. Cópiala otra vez en Ajustes › IA que edita."
+        if "credit" in low or "billing" in low or "quota" in low:
+            return f"Tu cuenta de {who} no tiene saldo. Añade saldo y vuelve a probar."
+        if type(e).__name__ in ("APIConnectionError", "APITimeoutError"):
+            return f"No hay conexión con {who}. Revisa internet y vuelve a probar."
+        return f"{who} ha fallado: {msg[:200]}"
+    return f"Algo ha fallado: {msg[:200]}"

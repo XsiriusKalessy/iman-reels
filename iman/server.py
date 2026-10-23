@@ -11,7 +11,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -24,6 +24,13 @@ WEB = Path(__file__).parent / "web"
 JOBS_DIR = config.HOME / "jobs"
 
 app = FastAPI(title="Imán")
+
+@app.exception_handler(Exception)
+async def _any_error(request, e: Exception):
+    import traceback
+
+    traceback.print_exception(e)  # va a ~/.iman/registro.txt en la app de escritorio
+    return JSONResponse({"detail": ai.error_message(e)}, status_code=500)
 JOBS: dict[str, dict] = {}
 _lock = threading.Lock()
 

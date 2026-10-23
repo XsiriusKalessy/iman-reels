@@ -495,7 +495,8 @@ function showResult(j) {
     <div><b>${r.cuts}</b><span>cortes</span></div>
     <div><b>${r.removed_words.length}</b><span>palabras quitadas</span></div>`;
   const p = r.plan;
-  $("#hook-box").innerHTML = (p.hook_title ? `<div class="card"><h4>${esc(p.hook_title)}</h4><p class="hint">Gancho en pantalla</p></div>` : "")
+  $("#hook-box").innerHTML = (r.ai_warning ? `<div class="card warn"><p>${esc(r.ai_warning)}</p><p class="hint">El reel está cortado y con subtítulos, pero sin los efectos de la IA.</p></div>` : "")
+    + (p.hook_title ? `<div class="card"><h4>${esc(p.hook_title)}</h4><p class="hint">Gancho en pantalla</p></div>` : "")
     + (p.hook_line ? `<div class="card"><p>«${esc(p.hook_line)}»</p><p class="hint">Si quieres regrabar el arranque, prueba con esta frase.</p></div>` : "");
 }
 async function reedit(changes) {

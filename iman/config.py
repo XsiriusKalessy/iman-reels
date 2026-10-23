@@ -88,8 +88,11 @@ def public(cfg: dict) -> dict:
 
 
 def ai_config(cfg: dict) -> AIConfig:
+    provider = cfg["provider"]
+    if provider == "iman":  # si has puesto tu propia clave, manda ella
+        provider = "claude" if cfg["anthropic_key"] else "openai" if cfg["openai_key"] else "iman"
     return AIConfig(
-        provider=cfg["provider"],
+        provider=provider,
         anthropic_key=cfg["anthropic_key"] or None,
         openai_key=cfg["openai_key"] or None,
         claude_model=cfg["claude_model"],

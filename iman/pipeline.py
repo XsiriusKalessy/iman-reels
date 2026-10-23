@@ -48,6 +48,7 @@ class EditResult:
     duration_out: float
     removed_words: list[str] = field(default_factory=list)
     cuts: int = 0
+    ai_warning: str = ""
 
     def summary(self) -> dict:
         return {
@@ -57,6 +58,7 @@ class EditResult:
             "duration_out": round(self.duration_out, 2),
             "removed_words": self.removed_words,
             "cuts": self.cuts,
+            "ai_warning": self.ai_warning,
         }
 
 
@@ -200,14 +202,15 @@ def run(
 
     progress("Buscando fallos y el mejor gancho", 0.40)
     aicfg = ai_config(cfg)
+    ai_warning = ""
     if plan is not None:
         pass  # plan ya decidido (p. ej. tras un cambio pedido por chat)
     elif aicfg.enabled and words:
         plan = EditPlan()
         try:
             plan = ai.plan_edit(aicfg, words, opts.instructions, opts.hook_template, opts.pack)
-        except Exception as e:  # la IA es un extra: si falla, seguimos
-            plan.drop_reasons.append(f"IA no disponible: {e}")
+        except Exception as e:  # la IA es un extra: si falla, seguimos y lo avisamos
+            ai_warning = ai.error_message(e)
     else:
         plan = EditPlan()
     if opts.hook_title:
@@ -294,4 +297,5 @@ def run(
         video=out, plan=plan, duration_in=info.duration, duration_out=total,
         removed_words=[words[i].text for i in sorted(drops)],
         cuts=sum(1 for a, b in zip(spans, spans[1:]) if abs(a.end - b.start) > 1e-3),
+        ai_warning=ai_warning,
     )
