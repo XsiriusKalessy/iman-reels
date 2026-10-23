@@ -42,14 +42,52 @@
 
     <!-- 0. IDEA -->
     <section class="panel" data-panel="idea">
-      <h1>¿Sobre qué grabas hoy?</h1>
-      <p class="lead">El agente de ideas te da el gancho y un guion corto con tus palabras. Grábalo de una toma, con el móvil apoyado y luz natural. Es opcional: si ya lo tienes grabado, <a href="#" data-goto="upload">sáltate este paso</a>.</p>
-      <form id="idea-form" class="stack">
-        <label>Tema<input name="topic" required placeholder="Ej.: cómo conseguir tus primeros clientes como fisio"></label>
-        <label>Para quién<input name="audience" placeholder="Ej.: fisios que empiezan por su cuenta"></label>
-        <button class="primary" type="submit">Dame 3 ideas</button>
-      </form>
+      <div class="idea-top">
+        <div>
+          <h1>¿Sobre qué grabas hoy?</h1>
+          <p class="lead">El agente de ideas te da el gancho y un guion corto con tus palabras. Grábalo de una toma, con el móvil apoyado y luz natural. Es opcional: si ya lo tienes grabado, <a href="#" data-goto="upload">sáltate este paso</a>.</p>
+          <form id="idea-form" class="stack">
+            <label>Tema<input name="topic" required placeholder="Ej.: cómo conseguir tus primeros clientes como fisio"></label>
+            <label>Para quién<input name="audience" placeholder="Ej.: fisios que empiezan por su cuenta"></label>
+            <button class="primary" type="submit">Dame 3 ideas</button>
+          </form>
+        </div>
+        <div class="logo3d" aria-hidden="true">
+          <div class="logo3d-spin">
+            <img src="iman-logo-oscuro.svg" alt="" class="l0"><img src="iman-logo-oscuro.svg" alt="" class="l1">
+            <img src="iman-logo-oscuro.svg" alt="" class="l2"><img src="iman-logo-oscuro.svg" alt="" class="l3">
+            <img src="iman-logo-oscuro.svg" alt="" class="l4"><img src="iman-logo-oscuro.svg" alt="" class="l5">
+          </div>
+          <div class="logo3d-floor"></div>
+        </div>
+      </div>
       <div id="ideas" class="cards"></div>
+
+      <div class="today">
+        <div class="today-head"><h3>Qué grabar hoy</h3><button class="ghost small" id="today-more" type="button">Otras ideas ↻</button></div>
+        <p class="hint" id="today-hint">Toca una y te relleno el tema. Luego pulsa «Dame 3 ideas».</p>
+        <div id="today" class="today-list"></div>
+      </div>
+
+      <h3>Para que te quede bien a la primera</h3>
+      <div class="tips">
+        <div class="tip"><b>☀️ Luz de frente</b><span>Ponte mirando a una ventana. Nunca con la ventana detrás.</span></div>
+        <div class="tip"><b>📱 Móvil apoyado</b><span>En vertical, a la altura de los ojos. Cámara trasera si puedes: graba mejor.</span></div>
+        <div class="tip"><b>🎙 Que se te oiga</b><span>Habitación sin eco o un micro de solapa. El audio importa más que la imagen.</span></div>
+        <div class="tip"><b>🎬 Una toma y sigue</b><span>Si te equivocas, calla un segundo y repite la frase. Imán quita el fallo.</span></div>
+        <div class="tip"><b>⏱ 30–60 segundos</b><span>Una sola idea por reel. Empieza fuerte: la primera frase es el gancho.</span></div>
+        <div class="tip"><b>👉 Cierra con una acción</b><span>«Escríbeme JAPÓN», «guárdalo», «reserva tu plaza». Una sola.</span></div>
+      </div>
+
+      <h3>Preguntas frecuentes</h3>
+      <div class="faq">
+        <details><summary>¿Tengo que usar el agente de ideas?</summary><p>No. Si ya tienes el vídeo grabado, pasa directamente a «Sube tu vídeo».</p></details>
+        <details><summary>¿Puedo leer el guion mientras grabo?</summary><p>Mejor no leerlo palabra por palabra: quédate con el gancho y las 2–3 ideas y cuéntalo con tus palabras. Suena mucho más natural.</p></details>
+        <details><summary>¿En vertical u horizontal?</summary><p>Mejor vertical. Si grabas en horizontal, Imán lo encuadra solo, pero pierdes calidad en los lados.</p></details>
+        <details><summary>¿Cuánto tarda en editarse?</summary><p>Un reel de un minuto suele tardar entre uno y tres minutos, según tu ordenador. La primera vez algo más, porque descarga el modelo que transcribe.</p></details>
+        <details><summary>¿Se sube mi vídeo a algún sitio?</summary><p>No. El vídeo se edita en tu ordenador. A la IA solo le llega el texto de lo que dices.</p></details>
+        <details><summary>¿Por qué me sale un error al pedir ideas?</summary><p>Revisa en Ajustes › IA que edita que tengas elegida «Mi Claude» con tu clave pegada, y que tu cuenta tenga saldo.</p></details>
+      </div>
     </section>
 
     <!-- 1. UPLOAD -->

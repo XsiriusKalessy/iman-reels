@@ -160,6 +160,69 @@ $("#save-settings").onclick = async e => {
 };
 
 // ---------- 0. idea ----------
+// Ideas listas para grabar, según el sector de «Mi marca». No usan la IA: salen siempre.
+const TODAY = {
+  viajes: [
+    ["Cuenta atrás: quedan X días para el viaje", "el grupo que viaja con nosotros", "Crea ganas y recuerda lo que falta"],
+    ["Qué meter en la maleta para este destino", "viajeros que salen en unas semanas", "Lista práctica que todos guardan"],
+    ["3 errores que comete todo el mundo en este destino", "gente que va por primera vez", "Gancho de error: funciona siempre"],
+    ["Lo que nadie te cuenta antes de ir", "viajeros curiosos", "Secretos y consejos de experto"],
+    ["Un día del itinerario, hora a hora", "quien duda si apuntarse", "Enseña el viaje por dentro"],
+    ["Cuánto cuesta de verdad este viaje", "gente que compara precios", "Transparencia: genera confianza"],
+    ["Por qué viajar en grupo con nosotros", "quien viaja solo o en pareja", "Tu diferencia frente a ir por libre"],
+    ["Presento al guía o al equipo", "futuros viajeros", "Caras conocidas = más reservas"],
+  ],
+  cursos: [
+    ["El error nº 1 de quien empieza en esto", "principiantes", "Gancho de error"],
+    ["Lo que haría si empezara hoy desde cero", "quien quiere empezar", "Consejo de experto"],
+    ["Un mito de mi sector que hay que desmontar", "mi audiencia", "Genera debate"],
+    ["Antes y después de un alumno", "quien duda si apuntarse", "Prueba social"],
+    ["3 pasos para conseguir el primer resultado", "principiantes", "Contenido que se guarda"],
+    ["Respondo la pregunta que más me hacen", "mis seguidores", "Fácil de grabar"],
+  ],
+  productos: [
+    ["Cómo se hace nuestro producto por dentro", "clientes curiosos", "Detrás de las cámaras"],
+    ["3 formas de usarlo que no conocías", "clientes actuales", "Útil y se comparte"],
+    ["Respondo la duda que más nos llega", "quien está a punto de comprar", "Quita objeciones"],
+    ["Por qué cuesta lo que cuesta", "gente que compara", "Transparencia"],
+    ["Lo nuevo que acaba de llegar", "seguidores", "Novedad con urgencia real"],
+    ["Un cliente cuenta su experiencia", "indecisos", "Prueba social"],
+  ],
+  empresas: [
+    ["El problema que resolvemos en 30 segundos", "clientes potenciales", "Claro y directo"],
+    ["Un caso real de un cliente", "empresas parecidas", "Prueba social"],
+    ["3 señales de que necesitas este servicio", "quien aún no lo sabe", "Gancho de diagnóstico"],
+    ["Presento al equipo", "clientes y candidatos", "Confianza"],
+    ["Lo que nadie te cuenta de mi sector", "clientes potenciales", "Autoridad"],
+    ["Cómo trabajamos, paso a paso", "quien está comparando", "Quita miedos"],
+  ],
+  general: [
+    ["Lo que he aprendido esta semana", "mis seguidores", "Fácil y cercano"],
+    ["3 consejos que me hubiera gustado saber antes", "quien empieza", "Se guarda y se comparte"],
+    ["Un error que cometí y cómo lo arreglé", "mi audiencia", "Historia personal"],
+    ["Respondo la pregunta que más me hacen", "mis seguidores", "Fácil de grabar"],
+    ["Mi opinión sincera sobre un tema de moda", "mi audiencia", "Genera comentarios"],
+    ["Un día conmigo en 60 segundos", "seguidores nuevos", "Te conocen mejor"],
+  ],
+};
+let todayAt = 0;
+function renderToday() {
+  const list = TODAY[state.brand?.sector] || TODAY.general;
+  const pick = Array.from({ length: Math.min(3, list.length) }, (_, k) => list[(todayAt + k) % list.length]);
+  $("#today").innerHTML = pick.map(([t, a, why]) =>
+    `<button type="button" data-topic="${esc(t)}" data-audience="${esc(a)}">${esc(t)}<small>${esc(why)}</small></button>`).join("");
+}
+$("#today-more").onclick = () => { todayAt += 3; renderToday(); };
+$("#today").onclick = e => {
+  const b = e.target.closest("button[data-topic]");
+  if (!b) return;
+  const f = $("#idea-form");
+  f.topic.value = b.dataset.topic;
+  if (!f.audience.value.trim()) f.audience.value = b.dataset.audience;
+  f.topic.focus(); f.topic.select();
+  f.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+};
+renderToday();
 $("#idea-form").onsubmit = async e => {
   e.preventDefault();
   const btn = e.target.querySelector("button");
@@ -523,6 +586,7 @@ function ink(hex) {
 const FONT_CSS = Object.fromEntries(["Moderna", "Impacto", "Condensada", "Elegante", "Manuscrita"].map(n => [n, `"Iman ${n}"`]));
 function renderBrand(b) {
   state.brand = b;
+  renderToday();
   const f = brandForm;
   for (const k of ["name", "cta", "contact", "handle"]) f[k].value = b[k] || "";
   f.primary.value = b.primary || "#FF5547"; f.secondary.value = b.secondary || "#141518";
