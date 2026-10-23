@@ -28,7 +28,26 @@ def _free(port: int) -> bool:
         return s.connect_ex(("127.0.0.1", port)) != 0
 
 
+def _fix_streams() -> None:
+    """En la app de ventana (sin consola) Windows deja stdout y stderr a None y uvicorn, tqdm y
+    cualquier print revientan. Los mandamos a un registro en ~/.iman para poder ver qué pasó."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    from iman.config import HOME
+
+    try:
+        HOME.mkdir(parents=True, exist_ok=True)
+        log = open(HOME / "registro.txt", "a", encoding="utf-8", buffering=1)
+    except OSError:
+        import os
+
+        log = open(os.devnull, "w", encoding="utf-8")
+    sys.stdout = sys.stdout or log
+    sys.stderr = sys.stderr or log
+
+
 def main() -> None:
+    _fix_streams()
     port = PORT
     if _running(port):
         webbrowser.open(f"http://localhost:{port}")
@@ -56,6 +75,12 @@ if __name__ == "__main__":
 
         import mediapipe  # noqa: F401  (falla aquí si el recorte no viene en el paquete)
 
-        print("ok", media.FFMPEG, segment.available())
+        # Como en la app de ventana de Windows: sin stdout ni stderr, el servidor tiene que arrancar igual.
+        out, sys.stdout, sys.stderr = sys.stdout, None, None
+        _fix_streams()
+        import uvicorn
+
+        uvicorn.Config(server.app, host="127.0.0.1", port=PORT, log_level="warning").configure_logging()
+        print("ok", media.FFMPEG, segment.available(), file=out)
     else:
         main()
