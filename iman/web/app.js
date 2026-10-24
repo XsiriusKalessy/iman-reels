@@ -414,6 +414,45 @@ $("#chat-form").onsubmit = async e => {
     if (state.job.result) showResult(state.job); else showError(err.message);
   }
 };
+// Ideas para «Dímelo como a tu editor», según lo que ya lleva el reel y el sector de «Mi marca».
+// Sin IA: salen al momento y nadie se queda en blanco.
+const CHAT_IDEAS = {
+  sin_titular: "Pon un titular grande al principio que enganche",
+  sin_lista: "Cuando enumero cosas, ponlas en una lista que vaya apareciendo",
+  sin_palabra: "Pon en grande la palabra más importante de cada frase",
+  sin_cta: "Termina con una llamada a la acción: escríbeme por privado",
+  sin_cifra: "Cuando diga un número o un precio, que salga en grande",
+  sin_comentario: "Abre con un comentario de un seguidor preguntando esto",
+  arranque: "Empieza directamente en la frase más potente, sin saludar",
+  zoom: "Haz zoom en los momentos importantes para que tenga más ritmo",
+  emojis: "Añade algún emoji en los subtítulos donde encaje",
+  corto: "Déjalo en menos de 30 segundos con lo mejor",
+};
+const SECTOR_IDEAS = {
+  viajes: ["Pon una cuenta atrás con los días que quedan para el viaje", "Al final, pon «Plazas limitadas» y que nos escriban por privado", "Pon la ruta del viaje con las ciudades en pantalla"],
+  cursos: ["Al final, invita a apuntarse al curso con un enlace en la bio", "Pon en pantalla los 3 pasos que explico"],
+  productos: ["Que salga el precio en grande cuando lo diga", "Termina con «pídelo por privado»"],
+  empresas: ["Pon un dato o cifra de clientes en grande", "Termina con «pide tu presupuesto sin compromiso»"],
+};
+function renderChatIdeas(j) {
+  const kinds = new Set((j.result?.plan?.effects || []).filter(fx => !fx.off).map(fx => fx.type));
+  const out = [];
+  if (!kinds.has("titular") && !j.result?.plan?.hook_title) out.push(CHAT_IDEAS.sin_titular);
+  for (const k of ["lista", "palabra", "cta", "cifra", "comentario"]) if (!kinds.has(k)) out.push(CHAT_IDEAS["sin_" + k]);
+  out.push(...(SECTOR_IDEAS[state.brand?.sector] || []));
+  out.push(CHAT_IDEAS.arranque, CHAT_IDEAS.zoom);
+  if ((j.result?.duration_out || 0) > 40) out.push(CHAT_IDEAS.corto);
+  // Primero las del sector y lo que falta, sin pasarse: 6 como mucho.
+  const sector = SECTOR_IDEAS[state.brand?.sector] || [];
+  const picked = [...sector.slice(0, 2), ...out.filter(t => !sector.includes(t))].slice(0, 6);
+  $("#chat-ideas").innerHTML = picked.map(t => `<button type="button" data-idea="${esc(t)}">${esc(t)}</button>`).join("");
+}
+$("#chat-ideas").onclick = e => {
+  const b = e.target.closest("[data-idea]");
+  if (!b) return;
+  const input = $("#chat-input");
+  input.value = b.dataset.idea; input.focus(); input.setSelectionRange(input.value.length, input.value.length);
+};
 const FX_NAMES = { lista: "Lista", palabra: "Palabra gigante", titular: "Titular", cifra: "Cifra", frase: "Frase", tecleo: "Texto que se escribe",
   color: "Golpe de color", comentario: "Comentario", contador: "Contador", portada: "Portada de revista", cta: "Llamada a la acción",
   dato: "Dato", bruto: "Toma en bruto", fantasma: "Eco", pagina: "Página de revista", detras: "Texto detrás de ti",
@@ -578,6 +617,7 @@ $("#clips").onclick = async e => {
 function showResult(j) {
   $("#clips").hidden = true; $("#result-tools").hidden = false; $("#download").hidden = false;
   renderChat(j);
+  renderChatIdeas(j);
   $("#kit-box").hidden = true; $("#kit-btn").textContent = "✦ Hazme el carrusel y las historias";
   loadPhrases(j);
   renderEffects(j);
