@@ -110,6 +110,7 @@ details summary { cursor: pointer; }
 .quick { display: flex; gap: 8px; flex-wrap: wrap; }
 .quick button { background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 8px 12px; border-radius: 99px; }
 .quick button:hover { border-color: var(--accent); }
+.quick button.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .error { color: var(--danger); }
 
 dialog { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 18px; padding: 24px; width: min(560px, 92vw); }
@@ -368,9 +369,9 @@ label.color input { width: 44px; height: 34px; padding: 2px; margin: 0; border-r
 @media (prefers-reduced-motion: reduce) { .sp-text { animation: none; } }
 .music-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin: 8px 0 4px; }
 .music-row label { display: flex; flex-direction: column; gap: 6px; color: var(--text); }
-.music-row select { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card, transparent); color: var(--text); min-width: 240px; }
+.music-row select { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--text); min-width: 240px; }
 .quick-music { display: inline-flex; gap: 6px; align-items: center; color: var(--text); font-size: 14px; }
-.quick-music select { padding: 8px 10px; border-radius: 99px; border: 1px solid var(--line); background: transparent; color: var(--text); }
+.quick-music select { padding: 8px 10px; border-radius: 99px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
 .palettes { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .palette { display: flex; padding: 0; border: 2px solid var(--line); border-radius: 12px; overflow: hidden; cursor: pointer; background: none; }
 .palette span { width: 34px; height: 34px; display: block; }
@@ -381,3 +382,8 @@ label.color input { width: 44px; height: 34px; padding: 2px; margin: 0; border-r
 .checks li.ok { opacity: .85; }
 .checks li.warn { color: #ffb347; }
 .checks li small { display: block; color: var(--muted); margin-left: 18px; }
+
+/* Windows pinta la lista de un desplegable con su propio fondo blanco: colores explícitos para que se lea. */
+select { background-color: var(--panel); color: var(--text); color-scheme: dark; }
+select option, select optgroup { background-color: var(--panel); color: var(--text); }
+select option:checked { background-color: var(--accent); color: var(--accent-ink); }

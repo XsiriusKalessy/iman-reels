@@ -34,7 +34,12 @@ def user_dir() -> Path:
 
 def family_name(path: Path) -> str:
     """El nombre completo con el que libass encuentra la fuente ("Poppins ExtraBold")."""
-    names = TTFont(path, lazy=True)["name"]
+    with TTFont(path, lazy=True) as f:  # cerrada enseguida: en Windows, abierta no se puede borrar ni sustituir
+        names = f["name"]
+        return _pick_name(names, path)
+
+
+def _pick_name(names, path: Path) -> str:
     for nid in (4, 1):
         rec = names.getName(nid, 3, 1, 0x409) or names.getName(nid, 1, 0, 0) or names.getName(nid, 3, 1)
         if rec and str(rec).strip():
@@ -84,11 +89,11 @@ def fonts_dir() -> Path:
 
 @lru_cache(maxsize=None)
 def _metrics(family: str):
-    f = TTFont(font_path(family), lazy=True)
-    os2 = f["OS/2"]
-    # libass escala la fuente para que ascendente + descendente (Windows) midan `fs` píxeles.
-    height = os2.usWinAscent + os2.usWinDescent
-    return f.getBestCmap(), f["hmtx"].metrics, height
+    with TTFont(font_path(family), lazy=True) as f:
+        os2 = f["OS/2"]
+        # libass escala la fuente para que ascendente + descendente (Windows) midan `fs` píxeles.
+        height = os2.usWinAscent + os2.usWinDescent
+        return dict(f.getBestCmap()), dict(f["hmtx"].metrics), height
 
 
 def width(text: str, family: str, size: float) -> float:

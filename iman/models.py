@@ -51,6 +51,8 @@ class EditPlan:
     music: str = ""
     # Look de color que la IA recomienda (ver media.LOOKS).
     color: str = ""
+    # Estilo de subtítulos que la IA recomienda (ver captions.STYLES).
+    caption_style: str = ""
     source: str = "heuristica"
 
     @classmethod
@@ -69,6 +71,7 @@ class EditPlan:
             silence=[int(i) for i in d.get("silence", [])],
             music=str(d.get("music", "")),
             color=str(d.get("color", "")),
+            caption_style=str(d.get("caption_style", "")),
             source=d.get("source", "heuristica"),
         )
 

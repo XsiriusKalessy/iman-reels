@@ -4,6 +4,7 @@ import io
 import shutil
 import subprocess
 
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw
@@ -167,3 +168,18 @@ def test_own_font_upload_and_render(tmp_path, monkeypatch):
     assert (d / "Anton-Regular.ttf").exists()
     r = c.delete("/api/brand/font").json()
     assert r["font"] == "" and not r["my_font"] and textfit.fonts_dir() == textfit.FONTS_DIR
+
+
+@pytest.mark.parametrize("variant", ["color", "marca_degradado", "marca_bokeh", "marca_logo"])
+def test_brand_backgrounds_are_dark_with_brand_light(tmp_path, variant):
+    from iman import fondos
+
+    logo = tmp_path / "logo.png"
+    logo.write_bytes(_logo_png())
+    img = Image.open(fondos.render(variant, "#D4A537", "#111111", tmp_path / "f.jpg", logo)).convert("RGB")
+    assert img.size == (1080, 1920)
+    px = [tuple(p) for p in np.asarray(img.resize((54, 96))).reshape(-1, 3).tolist()]
+    mean = sum(sum(p) for p in px) / (3 * len(px))
+    assert 12 < mean < 120  # oscuro, pero no negro: lleva la luz de la marca
+    r, g, b = max(px, key=sum)
+    assert r > b + 15  # el tono de la marca (dorado) se nota

@@ -203,8 +203,14 @@ def ruta_events(effect: dict, clock: WordClock, style: Style, duration: float) -
 
 
 def viaje_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
-    """Itinerario de varias paradas: la ruta se dibuja de ciudad en ciudad, con el avión, los nombres y las fechas."""
-    stops = [x.strip()[:16] for x in effect["text"].replace("→", "›").replace(">", "›").split("›") if x.strip()][:6]
+    """Itinerario de varias paradas: la ruta se dibuja de ciudad en ciudad, con el avión, los nombres y las fechas.
+
+    Si las paradas están en el mapa, lo pinta el mapa 3D (effects.video_ops) y aquí no se dibuja nada."""
+    from . import mapa
+
+    if mapa.stops(effect.get("text", "")):
+        return [], None
+    stops = [x.strip()[:16] for x in mapa.strip_coords(effect["text"]).replace("→", "›").replace(">", "›").split("›") if x.strip()][:6]
     if len(stops) < 2:
         return [], None
     span = _span(effect, clock, duration, max(4.0, 1.3 * len(stops)), 2.6)

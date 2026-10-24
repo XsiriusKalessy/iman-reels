@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
+import os
+import shutil
+import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import ai, brand, copystyle, effects, gestos, hands, jsonfile, media, musica, packfx, segment, sfx
+from . import ai, brand, copystyle, effects, fondos, gestos, hands, jsonfile, media, musica, packfx, packs, segment, sfx
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Word
 from .rhythm import RHYTHMS, detect_retakes, is_filler, keep_spans, phrases, remap_words
+
+log = logging.getLogger(__name__)
 
 WATERMARK = (
     "Dialogue: 9,0:00:00.00,{end},Sub,,0,0,0,,"
@@ -22,7 +30,7 @@ WATERMARK = (
 @dataclass
 class EditOptions:
     rhythm: str = "rapido"
-    style: str = "impacto"
+    style: str = "auto"  # "auto": el que recomienda la IA para este vídeo
     size: str = "1080"  # 1080 | 4k
     fit: str = "recortar"  # recortar | fondo
     hook: bool = True
@@ -59,6 +67,7 @@ class EditResult:
     removed_words: list[str] = field(default_factory=list)
     cuts: int = 0
     ai_warning: str = ""
+    notices: list[str] = field(default_factory=list)  # avisos: algo se ha quitado para que el reel salga
     checks: list[dict] = field(default_factory=list)
 
     def summary(self) -> dict:
@@ -70,11 +79,30 @@ class EditResult:
             "removed_words": self.removed_words,
             "cuts": self.cuts,
             "ai_warning": self.ai_warning,
+            "notices": self.notices,
             "checks": self.checks,
         }
 
 
 Progress = Callable[[str, float], None]
+
+
+def _publish(tmp: Path, dst: Path) -> Path:
+    """Pone el reel recién montado en su sitio. En Windows el archivo puede estar abierto un momento
+    (el reproductor de la app lo está leyendo): se reintenta y, si no, se copia encima."""
+    for suf in (".filters.txt", ".composite.txt"):  # los filtros usados, junto al reel, por si hay que revisarlos
+        side = tmp.with_suffix(suf)
+        if side.exists():
+            os.replace(side, dst.with_suffix(suf))
+    for _ in range(20):
+        try:
+            os.replace(tmp, dst)
+            return dst
+        except PermissionError:
+            time.sleep(0.15)
+    shutil.copyfile(tmp, dst)
+    tmp.unlink(missing_ok=True)
+    return dst
 
 
 def _source_time(spans, t: float) -> float:
@@ -112,16 +140,23 @@ def visual_cuts(words: list[Word], every: float = 3.0) -> list[float]:
     return cuts
 
 
-BACKGROUNDS = ("", "desenfoque", "color", "foto")
+BACKGROUNDS = ("", "desenfoque", "color", "foto", "marca_degradado", "marca_bokeh", "marca_logo")
 
 
 def _background_op(opts: EditOptions, workdir: Path, kit, duration: float):
     """El fondo elegido para todo el reel, como un efecto de recorte que dura de principio a fin."""
     if opts.background == "desenfoque":
         return effects.SegOp("desenfoque", 0.0, duration)
-    if opts.background == "color":
-        color = kit.primary if kit is not None and brand.is_hex(kit.primary or "") else "#141518"
-        return effects.SegOp("fondo", 0.0, duration, color)
+    if opts.background in fondos.VARIANTS:
+        # Fondo de marca diseñado (base oscura con la luz del color de la marca), no un color liso.
+        primary = kit.primary if kit is not None and brand.is_hex(kit.primary or "") else "#FF5547"
+        secondary = kit.secondary if kit is not None and brand.is_hex(kit.secondary or "") else ""
+        logo = kit.logo_path if kit is not None else None
+        key = hashlib.sha1(f"{opts.background}{primary}{secondary}{logo and logo.stat().st_mtime}".encode()).hexdigest()[:10]
+        img = workdir / f"fondo-marca-{key}.jpg"
+        if not img.exists():
+            fondos.render(opts.background, primary, secondary, img, logo)
+        return effects.SegOp("foto", 0.0, duration, path=str(img))
     photo = workdir / "fondo.jpg"
     if opts.background == "foto" and photo.exists():
         return effects.SegOp("foto", 0.0, duration, path=str(photo))
@@ -296,8 +331,8 @@ def run(
 ) -> EditResult:
     workdir.mkdir(parents=True, exist_ok=True)
     copystyle.register()  # los estilos copiados de otros reels
-    if opts.style not in STYLES:
-        opts.style = "impacto"
+    if opts.style != "auto" and opts.style not in STYLES:
+        opts.style = "auto"
     progress("Preparando tu vídeo", 0.03)
     voice_only = opts.mode == "voz"
     clips = broll_files(workdir)
@@ -364,12 +399,15 @@ def run(
         plan.effects = [fx for fx in plan.effects if fx.get("type") not in effects.PERSON_TYPES]
     else:
         plan.effects = effects.auto_broll(plan.effects, kept_idx, len(clips))
+    if plan.caption_style not in STYLES:
+        plan.caption_style = packs.get(opts.pack).style or "impacto"  # sin IA, el del sector
     jsonfile.save(workdir / "plan.json", plan.to_dict(), indent=1)
 
     active = [dict(fx) for fx in plan.effects if not fx.get("off")]  # los que el creador ha apagado no salen
     gestos.attach(active, found, hand_frames, effects.WordClock(kept, kept_idx))
     kit = brand.load() if opts.brand else None
-    style = brand.apply(STYLES[opts.style], kit) if kit else STYLES[opts.style]
+    style_key = opts.style if opts.style in STYLES else plan.caption_style
+    style = brand.apply(STYLES[style_key], kit) if kit else STYLES[style_key]
     # El cierre de marca va DESPUÉS de lo que dices, para no taparte la llamada a la acción.
     tail = effects.END_CARD if kit is not None and kit.active and kit.end_card and out_duration > 1 else 0.0
     total = out_duration + tail
@@ -393,12 +431,16 @@ def run(
         ass_path.write_text(ass, encoding="utf-8")
 
     progress("Montando tu reel", 0.65)
-    out = workdir / "reel.mp4"
+    final = workdir / "reel.mp4"
+    # Cada montaje escribe sus intermedios con nombre propio: si otro montaje (o el reproductor) tiene abiertos
+    # los del anterior, no se mezclan ni se leen a medio escribir.
+    run_id = uuid.uuid4().hex[:8]
+    out = workdir / f"reel-{run_id}.tmp.mp4"
     overlays = []
     if opts.effects:
         overlays = effects.video_ops(active, effects.WordClock(kept, kept_idx), out_duration,
                                      lambda t: _source_time(spans, t),
-                                     {str(i + 1): str(p) for i, p in enumerate(clips)})
+                                     {str(i + 1): str(p) for i, p in enumerate(clips)}, style.accent)
     overlays += effects.brand_ops(kit, total)
     clock = effects.WordClock(kept, kept_idx)
     segs = effects.seg_ops(active, clock, out_duration) if opts.effects else []
@@ -427,21 +469,41 @@ def run(
         look = plan.color if plan.color in media.LOOKS else AUTO_LOOK.get(opts.pack, "natural")
         plan.color = look
     av = dict(sfx_bed=sound, music=music, punch=punch, hush=hush, look=look, transitions=trans)
+    warnings = []
+    done = False
     if segs and segment.available():
         # Dos pasadas: primero el reel limpio, luego la persona recortada encima de lo que va detrás.
-        base = media.render(src, workdir / "base.mp4", spans, info, None, opts.size, opts.fit, opts.voice, zoom,
-                            preset="veryfast", tail=tail, **av)
-        progress("Recortándote del fondo", 0.80)
-        mask = segment.person_masks(base, workdir / "mask.mp4", [(o.start, o.end) for o in segs])
-        behind = workdir / "behind.ass"
-        behind.write_text(build_ass([], style, total,
-                                    extra_events=effects.behind_events(active, clock, style,
-                                                                       out_duration)), encoding="utf-8")
-        progress("Montando tu reel", 0.90)
-        media.composite(base, mask, src, out, behind, ass_path, segs, overlays, opts.size)
-    else:
-        media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice, zoom, overlays=overlays, tail=tail,
-                     **av)
+        base, mask = workdir / f"base-{run_id}.tmp.mp4", workdir / f"mask-{run_id}.tmp.mp4"
+        try:
+            media.render(src, base, spans, info, None, opts.size, opts.fit, opts.voice, zoom,
+                         preset="veryfast", tail=tail, **av)
+            progress("Recortándote del fondo", 0.80)
+            segment.person_masks(base, mask, [(o.start, o.end) for o in segs])
+            behind = workdir / "behind.ass"
+            behind.write_text(build_ass([], style, total,
+                                        extra_events=effects.behind_events(active, clock, style,
+                                                                           out_duration)), encoding="utf-8")
+            progress("Montando tu reel", 0.90)
+            media.composite(base, mask, src, out, behind, ass_path, segs, overlays, opts.size)
+            done = True
+        except Exception as e:  # noqa: BLE001 - sin los efectos de detrás, el reel sale igual
+            log.warning("Falla la pasada con la persona recortada: %s", e)
+            warnings.append("No he podido recortarte del fondo en este vídeo; el reel sale sin el cambio de fondo.")
+        finally:
+            for p in (base, mask):
+                p.unlink(missing_ok=True)
+    if not done:
+        try:
+            media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice, zoom, overlays=overlays,
+                         tail=tail, **av)
+        except Exception as e:  # noqa: BLE001 - se reintenta sin los efectos de vídeo, que son lo más delicado
+            if not (overlays or trans):
+                raise
+            log.warning("Falla el montaje con efectos de vídeo: %s", e)
+            warnings.append("Un efecto de vídeo ha fallado y lo he quitado para que tu reel salga.")
+            media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice, zoom, overlays=[],
+                         tail=tail, **{**av, "transitions": None})
+    out = _publish(out, final)
     media.thumbnail(out, workdir / "reel.jpg", min(0.6, out_duration / 2))
     progress("Listo", 1.0)
     return EditResult(
@@ -449,5 +511,6 @@ def run(
         removed_words=[words[i].text for i in sorted(drops)],
         cuts=sum(1 for a, b in zip(spans, spans[1:]) if abs(a.end - b.start) > 1e-3),
         ai_warning=ai_warning,
+        notices=warnings,
         checks=pre_publish(opts, plan, kept, total, active, kit, music is not None),
     )

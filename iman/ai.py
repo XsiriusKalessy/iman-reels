@@ -27,6 +27,8 @@ TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
 LOOK_ENUM = ["", *TITULAR_LOOKS, *LISTA_LOOKS, "enfoque", *COLORS]
 
+CAPTION_STYLES = ["", "impacto", "editorial", "palabra", "karaoke", "caja", "neon", "gigante", "mezcla", "minimal",
+                  "elegante", "manuscrita", "marcador", "hormozi", "bebas", "comic", "bloque"]
 MUSIC_STYLES = ["", "tranquila", "alegre", "cinematica", "tropical", "phonk", "corporativa", "epica", "emotiva", "inspiracional", "suspense", "acustica", "romantica", "piano", "piano_alegre", "piano_cine", "synthwave"]
 
 EDIT_SCHEMA = {
@@ -95,6 +97,8 @@ EDIT_SCHEMA = {
         },
         "color": {"type": "string", "enum": ["natural", "calido", "teal", "cine", "grano", "retro", "bn"],
                   "description": "Look de color y textura para todo el reel."},
+        "caption_style": {"type": "string", "enum": CAPTION_STYLES,
+                          "description": "Estilo de subtítulos que mejor encaja con el vídeo."},
         "music": {"type": "string", "enum": MUSIC_STYLES,
                   "description": "Estilo de música de fondo que mejor encaja con el vídeo."},
         "silence": {
@@ -103,7 +107,8 @@ EDIT_SCHEMA = {
             "items": {"type": "integer"},
         },
     },
-    "required": ["hook_title", "hook_line", "drop", "emphasis", "effects", "zooms", "pauses", "silence", "music", "color"],
+    "required": ["hook_title", "hook_line", "drop", "emphasis", "effects", "zooms", "pauses", "silence", "music", "color",
+                 "caption_style"],
     "additionalProperties": False,
 }
 
@@ -201,7 +206,9 @@ Tu trabajo:
    En "lista", look "itinerario" muestra los días de un viaje en una línea de tiempo; look "capitulos" muestra un índice numerado que se ilumina por partes; look "checklist" muestra casillas arriba que se marcan al decir cada punto (bueno para
    "lo que hace" o "lo que no necesitas"); vacío muestra la lista grande en el centro.
    - "viaje": itinerario de un viaje con varias paradas: la ruta se dibuja de ciudad en ciudad con un avión
-     (text: las paradas en orden separadas por "›", p. ej. "Tokio › Kioto › Gero › Osaka"; title: el viaje en
+     sobre un mapa 3D real (text: las paradas en orden separadas por "›", cada una con sus coordenadas
+     aproximadas (lat, lon), p. ej. "Tokio (35.68, 139.69) › Kioto (35.01, 135.77) › Gero (35.81, 137.24)";
+     en pantalla solo salen los nombres; title: el viaje en
      2 a 4 palabras, p. ej. "Japón en grupo"; subtitle: las fechas, p. ej. "18–29 nov", o vacío). Cuando el
      creador cuenta el recorrido de un viaje. Mejor que "ruta" si hay más de dos sitios.
    - "objeto": pegatina con el dibujo de una cosa concreta que el creador nombra (text: UN emoji que la dibuje,
@@ -231,6 +238,14 @@ Tu trabajo:
 10. color: el look de todo el reel. "natural" por defecto; "calido" (comida, hogar, atardeceres, cercanía);
    "teal" (viajes, playa, ciudad: turquesas en agua y cielo, piel cálida); "cine" (historias, documental);
    "grano" (nostalgia, recuerdos); "retro" (gaming, cripto, años 80-90); "bn" (reflexión seria, dramático).
+11. caption_style: los subtítulos que mejor venden este vídeo. "hormozi" (consejos directos, negocios, ventas:
+   palabra clave en color, letra gruesa), "impacto" (energía, retos, TikTok), "editorial" (viajes, estilo de
+   vida, marcas cuidadas), "palabra" (frases cortas con mucho ritmo, una palabra cada vez), "karaoke" (cursos,
+   explicaciones largas), "caja" (anuncios, ofertas, mucho contraste), "neon" (noche, ocio, tecnología),
+   "gigante" (pocas palabras muy fuertes), "mezcla" (reflexiones, frases para guardar), "minimal" (lujo,
+   moda, calma), "elegante" (bodas, hoteles, gastronomía), "manuscrita" (diario personal, cercanía),
+   "marcador" (enseñar, datos, listas), "bebas" (deporte, motor, titulares), "comic" (humor, niños, juegos),
+   "bloque" (avisos, polémicas, opiniones fuertes).
 Respeta el idioma del vídeo. Sigue las instrucciones del creador si las hay."""
 
 REVISE_SYSTEM = EDIT_SYSTEM + """
@@ -389,6 +404,7 @@ def _plan_from(data: dict, n: int, source: str) -> EditPlan:
         silence=silence,
         music=data.get("music", "") if data.get("music", "") in MUSIC_STYLES else "",
         color=str(data.get("color", "")),
+        caption_style=data.get("caption_style", "") if data.get("caption_style", "") in CAPTION_STYLES else "",
         source=source,
     )
 
@@ -426,6 +442,7 @@ def _plan_to_prompt(plan: EditPlan) -> dict:
         "silence": plan.silence,
         "music": plan.music,
         "color": plan.color,
+        "caption_style": plan.caption_style,
     }
 
 

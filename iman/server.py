@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import shutil
 import threading
 import time
@@ -25,6 +26,8 @@ WEB = Path(__file__).parent / "web"
 JOBS_DIR = config.HOME / "jobs"
 
 app = FastAPI(title="Imán")
+log = logging.getLogger(__name__)
+
 
 @app.exception_handler(Exception)
 async def _any_error(request, e: Exception):
@@ -41,6 +44,28 @@ def _set(job_id: str, **kw) -> None:
         JOBS[job_id].update(kw)
         if JOBS[job_id].get("status") != "working":
             _save_job(JOBS[job_id])
+
+
+def _claim(job_id: str, **kw) -> None:
+    """Marca el reel como «editándose» solo si nadie lo está montando ya (dos montajes a la vez sobre los mismos
+    archivos los estropean)."""
+    with _lock:
+        job = JOBS.get(job_id)
+        if not job or job.get("status") == "working":
+            raise HTTPException(409, "Ese reel ya se está editando: espera a que termine")
+        job["prev_options"] = job.get("options")
+        job.update(status="working", **kw)
+
+
+def _friendly(e: Exception) -> str:
+    """El error en palabras para el creador (el detalle técnico va al registro)."""
+    msg = str(e)
+    if "ffmpeg" in msg.lower() or "Invalid" in msg or "NAL" in msg:
+        return ("No he podido montar el vídeo. Vuelve a intentarlo; si se repite, sube otra vez el vídeo original "
+                "(puede que el archivo se haya copiado mal).")
+    if len(msg) > 300:
+        return "Algo ha fallado al editar. Vuelve a intentarlo y, si se repite, avísanos."
+    return msg
 
 
 def _save_job(job: dict) -> None:
@@ -510,7 +535,7 @@ def music_preview(key: str):
 async def create_job(
     video: UploadFile = File(...),
     rhythm: str = Form("rapido"),
-    style: str = Form("impacto"),
+    style: str = Form("auto"),
     size: str = Form("1080"),
     fit: str = Form("recortar"),
     hook: bool = Form(True),
@@ -537,7 +562,7 @@ async def create_job(
             or background not in pipeline.BACKGROUNDS:
         raise HTTPException(400, "Opción no válida")
     copystyle.register()
-    if rhythm not in RHYTHMS or style not in STYLES or size not in ("1080", "4k") or fit not in ("recortar", "fondo"):
+    if rhythm not in RHYTHMS or (style != "auto" and style not in STYLES) or size not in ("1080", "4k") or fit not in ("recortar", "fondo"):
         raise HTTPException(400, "Opción no válida")
     allowed, watermark = license.can_edit(_refresh_license())
     if not allowed:
@@ -631,7 +656,18 @@ def _work(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions, pla
             config.save({"free_reels_used": int(cfg.get("free_reels_used") or 0) + 1})
         _set(job_id, status="done", result=res.summary())
     except Exception as e:
-        _set(job_id, status="error", error=str(e))
+        log.exception("Falla la edición de %s", job_id)
+        try:
+            (workdir / "error.log").write_text(f"{e}\n", encoding="utf-8")
+        except OSError:
+            pass
+        prev = JOBS[job_id].get("result")
+        if prev:
+            # Un cambio que falla no se lleva el reel que ya estaba hecho.
+            _set(job_id, status="done", error=None, options=JOBS[job_id].get("prev_options") or JOBS[job_id]["options"],
+                 result={**prev, "notices": [f"No he podido aplicar el último cambio. {_friendly(e)}"]})
+        else:
+            _set(job_id, status="error", error=_friendly(e))
 
 
 @app.post("/api/jobs/{job_id}/reedit")
@@ -644,7 +680,7 @@ def reedit(job_id: str, body: dict):
     src = next(workdir.glob("original.*"))
     merged = {**job["options"], **{k: v for k, v in body.items() if k in job["options"]}}
     opts = pipeline.EditOptions(**merged)
-    _set(job_id, status="working", step="Aplicando cambios", progress=0.0, options=asdict(opts), error=None)
+    _claim(job_id, step="Aplicando cambios", progress=0.0, options=asdict(opts), error=None)
     plan_file = workdir / "plan.json"
     saved = jsonfile.load(plan_file)  # si se guardó mal, se vuelve a planificar desde cero
     plan = EditPlan.from_dict(saved) if saved is not None else None
@@ -673,7 +709,8 @@ def chat(job_id: str, body: ChatIn):
     plan = _saved_plan(workdir)
     opts = pipeline.EditOptions(**job["options"])
     try:
-        new_plan, settings, reply = ai.revise_plan(aicfg, words, plan, body.message, opts.rhythm, opts.style)
+        new_plan, settings, reply = ai.revise_plan(aicfg, words, plan, body.message, opts.rhythm,
+                                                     opts.style if opts.style in STYLES else plan.caption_style)
     except Exception as e:
         raise HTTPException(502, f"La IA no ha podido aplicar el cambio: {e}")
     # Lo que el creador decidió a mano en "Revisa lo que dices" se mantiene.
@@ -686,7 +723,7 @@ def chat(job_id: str, body: ChatIn):
         opts.style = settings["style"]
     opts.hook_title = ""  # el gancho lo decide ahora el plan revisado
     history = job.get("chat", []) + [{"role": "user", "text": body.message}, {"role": "iman", "text": reply}]
-    _set(job_id, status="working", step="Aplicando tus cambios", progress=0.0, options=asdict(opts),
+    _claim(job_id, step="Aplicando tus cambios", progress=0.0, options=asdict(opts),
          error=None, chat=history)
     src = next(workdir.glob("original.*"))
     threading.Thread(target=_work, args=(job_id, src, workdir, opts, new_plan), daemon=True).start()
@@ -751,7 +788,7 @@ def edit_plan(job_id: str, body: PlanEditIn):
         plan.hook_title = body.hook_title.strip()[:80]
         opts.hook_title = plan.hook_title
         opts.hook = bool(plan.hook_title)
-    _set(job_id, status="working", step="Aplicando cambios", progress=0.0, options=asdict(opts), error=None)
+    _claim(job_id, step="Aplicando cambios", progress=0.0, options=asdict(opts), error=None)
     src = next(workdir.glob("original.*"))
     threading.Thread(target=_work, args=(job_id, src, workdir, opts, plan), daemon=True).start()
     return JOBS[job_id]

@@ -55,8 +55,9 @@ def set_font(name: str, data: bytes) -> str:
         probe = Path(tmp) / f"f{ext}"
         probe.write_bytes(data)
         family = textfit.family_name(probe)  # falla si no es una fuente de verdad
-        if "cmap" not in textfit.TTFont(probe, lazy=True):
-            raise ValueError("Esa fuente no tiene letras")
+        with textfit.TTFont(probe, lazy=True) as f:
+            if "cmap" not in f:
+                raise ValueError("Esa fuente no tiene letras")
     d = textfit.user_dir()
     if d.exists():
         for old in d.iterdir():

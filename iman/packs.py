@@ -32,6 +32,8 @@ PACKS = {p.key: p for p in [
   title: lo que incluye en pocas palabras, "7 noches · vuelo + hotel").
 - "lista" con look "itinerario" si cuenta el viaje por días o etapas (un punto por día, 2 a 4 palabras).
 - "ruta" si dice de dónde a dónde se viaja (text: origen; subtitle: destino; title: duración o vacío).
+- "viaje" (el mapa 3D, con coordenadas de cada parada) si nombra el recorrido con tres o más sitios: es el
+  efecto estrella del pack, úsalo siempre que el creador cuente por dónde pasa el viaje.
 - "cta" al final si invita a escribir o reservar.
 El gancho debe despertar ganas de viajar: un lugar concreto, un precio sorprendente o un secreto del destino.""",
         style="editorial",

@@ -457,9 +457,19 @@ def composite(
     if behind_ass is not None:
         parts.append(f"{cur}ass=filename='{_filter_path(behind_ass)}':fontsdir='{_filter_path(fonts_dir())}'[bt]")
         cur = "[bt]"
-    parts.append(f"[1:v]scale={W}:{H}:flags=bicubic,format=gray,boxblur=2:1[mk]")
+    # Borde del recorte suavizado y una sombra difusa detrás, para que la persona no parezca pegada encima.
+    parts.append(f"[1:v]scale={W}:{H}:flags=bicubic,format=gray,split[m1][m2]")
+    parts.append("[m1]boxblur=2:1[mk]")
+    parts.append("[m2]boxblur=36:2,split[sa][sb]")
+    parts.append("[sa]lut=y=16[sk]")
+    parts.append("[sb]lut=y=val*0.55[sx]")
+    parts.append("[sk]format=yuv420p[skc]")
+    parts.append("[skc][sx]alphamerge[shadow]")
+    swap = [o for o in seg_ops if o.kind in ("fondo", "foto", "desenfoque")]
+    when = "+".join(f"between(t,{o.start:.3f},{o.end:.3f})" for o in swap) or "0"
+    parts.append(f"{cur}[shadow]overlay={int(18 * W / 1080)}:{int(26 * W / 1080)}:enable='{when}'[sh]")
     parts.append("[fg][mk]alphamerge[person]")
-    parts.append(f"{cur}[person]overlay=0:0[vx]")
+    parts.append("[sh][person]overlay=0:0[vx]")
     cur = _video_overlays(parts, overlays or [], W, H, "[vx]", "[2:v]", images)
     tail = f"{cur}null"
     if ass_path is not None:

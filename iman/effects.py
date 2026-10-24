@@ -699,7 +699,7 @@ def behind_events(effects: list[dict], clock: WordClock, style: Style, duration:
     return lines
 
 
-VIDEO_KINDS = {"bruto": (3.0, 2.0), "fantasma": (1.6, 0.8), "pagina": (2.6, 1.6), "apoyo": (3.0, 1.5),
+VIDEO_KINDS = {"viaje": (5.0, 3.0), "bruto": (3.0, 2.0), "fantasma": (1.6, 0.8), "pagina": (2.6, 1.6), "apoyo": (3.0, 1.5),
                "objeto": (2.2, 1.0), "captura": (2.6, 1.4), "collage": (2.8, 1.6)}
 PERSON_TYPES = (*SEG_KINDS, "apoyo")  # necesitan a alguien delante de la cámara
 MEDIA_EXT = (".mp4", ".mov", ".m4v", ".webm", ".jpg", ".jpeg", ".png", ".webp")
@@ -763,7 +763,7 @@ def _floats(fx: dict) -> bool:
 
 
 def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=None,
-              assets: dict[str, str] | None = None) -> list[VideoOp]:
+              assets: dict[str, str] | None = None, accent: str = "") -> list[VideoOp]:
     """Los efectos de vídeo de un plan, en tiempos del reel. `src_of(t)` da el segundo de la toma original.
     `assets`: número de vídeo de apoyo ("1", "2"…) -> archivo."""
     ops = []
@@ -784,6 +784,20 @@ def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=Non
             path = (assets or {}).get(str(fx.get("text", "")).strip(), "")
             if not path:
                 continue
+        if kind == "viaje":
+            # Mapa 3D a pantalla completa (como un plano de apoyo); si no se encuentran las paradas, va el dibujado.
+            from . import mapa
+
+            route = mapa.stops(str(fx.get("text", "")))
+            if not route:
+                continue
+            try:
+                path = str(mapa.cached(route, span[1] - span[0], str(fx.get("title", "")), str(fx.get("subtitle", "")),
+                                       mapa.ass_hex(accent)))
+            except Exception:  # noqa: BLE001 - sin mapa, el reel sigue con el itinerario dibujado
+                continue
+            ops.append(VideoOp("apoyo", span[0], span[1], path=path))
+            continue
         if kind == "objeto":
             from . import stickers
 

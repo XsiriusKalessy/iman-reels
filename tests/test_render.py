@@ -114,9 +114,29 @@ def test_text_behind_person_two_pass(sample, tmp_path):
                                                                          "look": "rosa"}]
     cfg = {"provider": "none", "anthropic_key": "", "openai_key": "", "claude_model": "", "openai_model": ""}
     res = pipeline.run(sample, tmp_path / "w", pipeline.EditOptions(), cfg, words=TAKE, plan=EditPlan(effects=fx))
-    assert (tmp_path / "w" / "mask.mp4").exists() and (tmp_path / "w" / "behind.ass").exists()
+    assert (tmp_path / "w" / "behind.ass").exists() and not res.notices
+    assert not list((tmp_path / "w").glob("*.tmp.mp4"))  # los intermedios se borran
     info = media.probe(res.video)
     assert (info.width, info.height) == (1080, 1920) and abs(info.duration - res.duration_out) < 0.3
+
+
+def test_broken_effect_pass_still_gives_a_reel(sample, tmp_path, monkeypatch):
+    from iman import segment
+    from iman.models import EditPlan
+
+    if not segment.available():
+        pytest.skip("sin el modelo de recorte")
+
+    def broken(*a, **k):
+        raise RuntimeError("ffmpeg falló: Invalid NAL unit size")
+
+    monkeypatch.setattr(media, "composite", broken)
+    fx = [{"type": "fondo", "word": 15, "text": "-", "look": "rosa"}]
+    cfg = {"provider": "none", "anthropic_key": "", "openai_key": "", "claude_model": "", "openai_model": ""}
+    res = pipeline.run(sample, tmp_path / "w", pipeline.EditOptions(), cfg, words=TAKE, plan=EditPlan(effects=fx))
+    assert res.notices and res.video.name == "reel.mp4"
+    assert abs(media.probe(res.video).duration - res.duration_out) < 0.3
+    assert not list((tmp_path / "w").glob("*.tmp.mp4"))
 
 
 def test_library_toggles_and_post(sample, tmp_path, monkeypatch):
@@ -380,7 +400,7 @@ def test_whole_reel_background(sample, tmp_path, background):
                     str(work / "fondo.jpg")], check=True)
     cfg = {"provider": "none", "anthropic_key": "", "openai_key": "", "claude_model": "", "openai_model": ""}
     res = pipeline.run(sample, work, pipeline.EditOptions(background=background), cfg, words=TAKE)
-    assert (work / "mask.mp4").exists()
+    assert not res.notices  # la pasada con la persona recortada ha salido bien
     info = media.probe(res.video)
     assert (info.width, info.height) == (1080, 1920) and abs(info.duration - res.duration_out) < 0.3
 
@@ -505,4 +525,23 @@ def test_captura_and_collage_from_support_photos(sample, tmp_path):
                        plan=EditPlan(effects=fx))
     graph = (work / "reel.filters.txt").read_text(encoding="utf-8")
     assert graph.count("overlay") >= 2
+    assert abs(media.probe(res.video).duration - res.duration_out) < 0.3
+
+
+def test_trip_map_3d(sample, tmp_path, monkeypatch):
+    from iman import config, mapa
+    from iman.models import EditPlan
+
+    monkeypatch.setattr(config, "HOME", tmp_path / "home")
+    assert mapa.geocode("Kioto") and mapa.geocode("Nueva York") and mapa.geocode("Sitio inventado") is None
+    route = mapa.stops("Tokio › Kioto (35.01, 135.77) › Osaka")
+    assert [r[0] for r in route] == ["Tokio", "Kioto", "Osaka"] and route[1][1:] == (35.01, 135.77)
+    assert mapa.stops("Tokio › Sitio inventado") is None
+    fx = [{"type": "viaje", "word": 4, "text": "Tokio (35.68, 139.69) › Kioto (35.01, 135.77) › Osaka",
+           "title": "Japón en grupo", "subtitle": "18–29 nov"}]
+    cfg = {"provider": "none", "anthropic_key": "", "openai_key": "", "claude_model": "", "openai_model": ""}
+    res = pipeline.run(sample, tmp_path / "w", pipeline.EditOptions(rhythm="sin_tocar"), cfg, words=TAKE,
+                       plan=EditPlan(effects=fx))
+    maps = list((tmp_path / "home" / "cache" / "mapas").glob("*.mp4"))
+    assert len(maps) == 1 and media.probe(maps[0]).duration >= 2.9
     assert abs(media.probe(res.video).duration - res.duration_out) < 0.3

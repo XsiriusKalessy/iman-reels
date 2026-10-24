@@ -30,8 +30,8 @@ async function loadOptions() {
   $("#rhythms").innerHTML = o.rhythms.map((r, i) => `
     <label class="choice"><input type="radio" name="rhythm" value="${r.key}" ${i === 0 ? "checked" : ""}>
     <span>${esc(r.label)}${i === 0 ? '<b class="tag">recomendado</b>' : ""}<small>${esc(r.description)}</small></span></label>`).join("");
-  renderStyles(o.styles);
   state.options = o;
+  renderStyles(o.styles);
   $("#packs").innerHTML = o.packs.map(p => `
     <label class="choice"><input type="radio" name="pack" value="${p.key}" ${p.key === "general" ? "checked" : ""}>
     <span>${esc(p.label)}<small>${esc(p.description)}</small></span></label>`).join("");
@@ -56,11 +56,21 @@ function stylePreview(s) {
     ? `<b style="color:${L.accent}${L.alt_font ? `;font-family:'Iman Elegante';font-size:1.5em` : ""}">${txt(w)}</b>` : txt(w)).join(" ");
   return `<span class="sp"><i class="sp-face"></i><em class="sp-text e-${L.entry}" style="font-family:'${CSS_FONT[L.font] || "Iman Moderna"}';font-size:${px}px;color:${L.text};${stroke}${shadow}${box}">${html}</em></span>`;
 }
+// Primera tarjeta: «Recomendado», marcado de serie. La IA elige el estilo para cada vídeo;
+// la vista previa enseña el del sector mientras tanto.
+function autoStyleCard(list, cur) {
+  const p = state.options?.packs.find(x => x.key === $("input[name=pack]:checked")?.value);
+  const s = list.find(x => x.key === (p?.style || "hormozi")) || list[0];
+  return `<label class="choice style-card recommended" title="Imán elige el estilo que mejor vende tu vídeo">
+      <input type="radio" name="style" value="auto" ${!cur || cur === "auto" ? "checked" : ""}>
+      <span>${s ? stylePreview(s) : ""}Automático<b class="tag">recomendado</b><small>Imán lo elige según tu vídeo</small></span></label>`;
+}
 function renderStyles(list, select) {
+  state.styleList = list;
   const cur = select || $("input[name=style]:checked")?.value;
-  $("#styles").innerHTML = list.map((s, i) => `
+  $("#styles").innerHTML = autoStyleCard(list, cur) + list.map(s => `
     <label class="choice style-card ${s.mine ? "mine" : ""}" ${s.notes ? `title="${esc(s.notes)}"` : ""}>
-      <input type="radio" name="style" value="${s.key}" data-rhythm="${s.rhythm || ""}" ${(cur ? s.key === cur : i === 0) ? "checked" : ""}>
+      <input type="radio" name="style" value="${s.key}" data-rhythm="${s.rhythm || ""}" ${cur && s.key === cur ? "checked" : ""}>
       <span>${stylePreview(s)}${esc(s.label)}${s.mine ? `<small>Copiado de un reel</small><button type="button" class="link forget" data-style-del="${s.key}" title="Borrar">✕</button>` : ""}</span></label>`).join("");
 }
 $("#styles").onclick = async e => {
@@ -105,8 +115,8 @@ function applyPack(fromBrand) {
   const p = o.packs.find(x => x.key === $("input[name=pack]:checked")?.value);
   if (!p) return;
   renderHooks([...p.hooks, ...o.hook_templates]);
-  const st = p.style && $(`input[name=style][value="${p.style}"]`);
-  if (st) st.checked = true;
+  // El sector no pisa la elección: solo cambia la vista previa de «Recomendado».
+  if (state.styleList) renderStyles(state.styleList);
 }
 
 const NAMES = { iman: "la IA de Imán", claude: "tu Claude", openai: "tu ChatGPT" };
@@ -685,6 +695,25 @@ $("#clips").onclick = async e => {
   state.job = await api(`/api/jobs/${card.dataset.openClip}`);
   showResult(state.job);
 };
+// Lo que la IA recomienda para este vídeo sale marcado con ✦ en los cambios rápidos.
+function markRecommended(j) {
+  const plan = j.result?.plan || {};
+  const os = j.options?.style;
+  const used = !os || os === "auto" ? plan.caption_style : os;
+  $$(".quick [data-style]").forEach(b => {
+    b.dataset.label = b.dataset.label || b.textContent;
+    const rec = b.dataset.style === plan.caption_style;
+    b.textContent = b.dataset.label + (rec ? " ✦" : "");
+    b.title = rec ? "Recomendado para este vídeo" : "";
+    b.classList.toggle("on", b.dataset.style === used);
+  });
+  for (const [sel, key] of [["#re-music", plan.music], ["#re-look", plan.color]]) {
+    $$(`${sel} option`).forEach(o => {
+      o.dataset.label = o.dataset.label || o.textContent;
+      o.textContent = o.dataset.label + (key && o.value === key ? " ✦ recomendada" : "");
+    });
+  }
+}
 function showResult(j) {
   const om = j.options && j.options.music;
   const used = om === "auto" ? (j.result.plan.music || "") : om === true ? "mia" : (om || "");
@@ -692,6 +721,7 @@ function showResult(j) {
   $("#re-music").value = used;
   const ol = j.options && j.options.look;
   $("#re-look").value = (ol === "auto" || !ol ? j.result.plan.color : ol) || "natural";
+  markRecommended(j);
   $("#clips").hidden = true; $("#result-tools").hidden = false; $("#download").hidden = false;
   renderChat(j);
   renderChatIdeas(j);
@@ -711,7 +741,8 @@ function showResult(j) {
     <div><b>${r.cuts}</b><span>cortes</span></div>
     <div><b>${r.removed_words.length}</b><span>palabras quitadas</span></div>`;
   const p = r.plan;
-  $("#hook-box").innerHTML = (r.ai_warning ? `<div class="card warn"><p>${esc(r.ai_warning)}</p><p class="hint">El reel está cortado y con subtítulos, pero sin los efectos de la IA.</p></div>` : "")
+  $("#hook-box").innerHTML = (r.notices || []).map(n => `<div class="card warn"><p>${esc(n)}</p></div>`).join("")
+    + (r.ai_warning ? `<div class="card warn"><p>${esc(r.ai_warning)}</p><p class="hint">El reel está cortado y con subtítulos, pero sin los efectos de la IA.</p></div>` : "")
     + (p.hook_title ? `<div class="card"><h4>${esc(p.hook_title)}</h4><p class="hint">Gancho en pantalla</p></div>` : "")
     + (p.hook_line ? `<div class="card"><p>«${esc(p.hook_line)}»</p><p class="hint">Si quieres regrabar el arranque, prueba con esta frase.</p></div>` : "");
   const checks = r.checks || [];
