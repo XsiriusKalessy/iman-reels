@@ -17,11 +17,11 @@ OPENAI_MODEL = "gpt-4o"
 EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "color", "comentario",
                 "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                 "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque", "aparece",
-                "objeto", "viaje"]
+                "objeto", "viaje", "notificaciones", "foco", "anillo"]
 FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
                    "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                    "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque",
-                   "aparece", "objeto", "viaje")
+                   "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo")
 LISTA_LOOKS = ("checklist", "capitulos", "itinerario")
 TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
@@ -164,6 +164,13 @@ Tu trabajo:
    - "ruta": avión de un sitio a otro (text: origen; subtitle: destino; title: duración o vacío).
    - "testimonio": reseña con cinco estrellas (text: lo que dijo el cliente o alumno; subtitle: quién lo dijo).
    - "plazas": aviso rojo de escasez arriba (text: "Solo 7 plazas", "Acaba el domingo").
+   - "notificaciones": notificaciones del móvil que caen apiladas, cuando habla de resultados que llegan (pedidos,
+     reservas, mensajes, ventas) (text: de 2 a 4 avisos cortos separados por "|", "Nuevo pedido · 49 €|Reserva
+     confirmada"; title: de dónde vienen, "Tienda", "Reservas").
+   - "foco": los bordes se oscurecen y queda la luz sobre el creador, para la frase más seria o íntima
+     (text: 2 a 5 palabras que la resumen, o "-" para solo el foco).
+   - "anillo": texto que gira alrededor de su cabeza (text: 1 a 3 palabras que se repiten, "PLAZAS LIMITADAS",
+     "NUEVO", "SOLO HOY"). Una vez como mucho, en un momento de urgencia o novedad.
    - "precio": etiqueta de precio (text: precio nuevo; subtitle: precio anterior tachado o vacío; title: "-30%" o vacío).
    - "apoyo": SOLO si te pasan VÍDEOS DE APOYO. Mientras el creador habla de lo que se ve en ese vídeo (el destino,
      el producto, el local), el vídeo de apoyo ocupa la pantalla y el creador queda en un círculo abajo

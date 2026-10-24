@@ -220,6 +220,10 @@ def _sfx_events(active: list[dict], clock: effects.WordClock, hook: bool, beats:
                     events.append((t, "pop", 0.45))
             continue
         t = clock.at(int(fx.get("word", -1))) if fx.get("word") is not None else None
+        if fx.get("type") == "notificaciones" and t is not None:  # un "ding" por aviso que cae
+            n = len([x for x in str(fx.get("text", "")).replace("›", "|").split("|") if x.strip()][:4])
+            events += [(t + k * 0.45, "pop", 0.5) for k in range(n)]
+            continue
         if name and t is not None:
             events.append((max(0.0, t - (0.25 if name in ("whoosh", "riser") else 0.0)), name, 0.5))
     # Un roce suave en cada cambio de plano, para que el corte se sienta.

@@ -342,6 +342,99 @@ def precio_events(effect: dict, clock: WordClock, style: Style, duration: float)
     return lines, None
 
 
+def notificaciones_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Notificaciones que caen y se apilan ("Nuevo pedido", "Reserva confirmada"…), una tras otra."""
+    span = _span(effect, clock, duration, 3.4, 2.0)
+    if not span:
+        return [], None
+    start, end = span
+    items = [x.strip()[:46] for x in effect["text"].replace("›", "|").split("|") if x.strip()][:4]
+    title = (effect.get("title") or "Ahora").strip()[:18]
+    if not items:
+        return [], None
+    acc = _accent(style)
+    w, h, x = 860, 150, (W - 860) / 2
+    step = max(0.15, min(0.45, (end - start - 0.6) / max(1, len(items))))
+    lines = [_dim(start, end, "90")]
+    for k, msg in enumerate(items):
+        a = start + k * step
+        # La nueva cae arriba y empuja a las anteriores hacia abajo.
+        y_final = 330 + (len(items) - 1 - k) * (h + 22)
+        t = f"{_ts(a)},{_ts(end)}"
+        mv = f"\\move({x:.0f},{y_final - 260},{x:.0f},{y_final},0,260)"
+        fade = "\\fad(120,200)\\bord0"
+        size = textfit.fit(msg, "Figtree ExtraBold", 44, w - 210, 30)
+        lines += [
+            f"Dialogue: 4,{t},Sub,,0,0,0,,{{\\an7{mv}{fade}\\shad6\\4c&H000000&\\4a&HB0&\\1c&HF8F8F8&\\p1}}"
+            f"{_rect(0, 0, w, h, 38)}",
+            f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an7\\move({x + 34:.0f},{y_final - 260 + 34},{x + 34:.0f},{y_final + 34},0,260)"
+            f"{fade}\\shad0\\1c{acc}&\\p1}}{_rect(0, 0, 82, 82, 22)}",
+            f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an7\\move({x + 148:.0f},{y_final - 260 + 28},{x + 148:.0f},{y_final + 28},0,260)"
+            f"{fade}\\shad0\\fnFigtree ExtraBold\\fs30\\c&H00808080&}}{_esc(title.upper())}",
+            f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an7\\move({x + 148:.0f},{y_final - 260 + 66},{x + 148:.0f},{y_final + 66},0,260)"
+            f"{fade}\\shad0\\fnFigtree ExtraBold\\fs{size:.0f}\\c{INK}&}}{_esc(msg)}",
+        ]
+    return lines, None
+
+
+def foco_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Foco: los bordes se oscurecen poco a poco y solo queda la luz sobre ti, para el momento clave."""
+    span = _span(effect, clock, duration, 2.8, 1.4)
+    if not span:
+        return [], None
+    start, end = span
+    t = f"{_ts(start)},{_ts(end)}"
+    lines = []
+    # Seis óvalos con un borde enorme y muy transparente: al sumarse, la sombra crece suave hacia los bordes.
+    for k in range(6):
+        d = 760 + k * 130
+        lines.append(f"Dialogue: 3,{t},Sub,,0,0,0,,{{\\an7\\pos({(W - d) / 2:.0f},{700 - d * 0.675:.0f})\\fscy135"
+                     f"\\1a&HFF&\\3c&H000000&\\bord900\\blur90\\shad0\\3a&HFF&\\t(0,600,\\3a&HC8&)"
+                     f"\\fad(0,300)\\p1}}{_circle(d)}")
+    text = effect.get("text", "").strip()
+    if text and text != "-":
+        size = textfit.fit(text, "Playfair Display ExtraBold", 92, 900, 52)
+        lines.append(f"Dialogue: 5,{_ts(start + 0.3)},{_ts(end)},Sub,,0,0,0,,{{\\an2\\pos({W / 2:.0f},1480)"
+                     f"\\fnPlayfair Display ExtraBold\\fs{size:.0f}\\i1\\bord0\\shad0\\blur8\\alpha&HFF&"
+                     f"\\t(0,350,\\blur0\\alpha&H00&)\\fad(0,250)}}{_esc(text)}")
+    return lines, None
+
+
+def anillo_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Anillo de texto que gira alrededor de tu cabeza: las letras de detrás se ven más pequeñas y apagadas."""
+    span = _span(effect, clock, duration, 3.2, 1.8)
+    if not span:
+        return [], None
+    start, end = span
+    text = effect["text"].strip().upper()[:26]
+    if not text:
+        return [], None
+    ring = f"{text} • " * (2 if len(text) < 13 else 1)
+    n = len(ring)
+    cx, cy, rx, ry = W / 2, 660, 420, 120  # elipse inclinada alrededor de la cabeza
+    acc = _accent(style)
+    fps, speed = 15, 0.9  # cuadros por segundo del anillo, vueltas por… radianes por segundo
+    lines = []
+    frames = int((end - start) * fps)
+    for f in range(frames):
+        t0, t1 = start + f / fps, min(end, start + (f + 1) / fps)
+        ang0 = (t0 - start) * speed
+        for k, ch in enumerate(ring):
+            if ch == " ":
+                continue
+            a = ang0 + 2 * math.pi * k / n
+            depth = math.sin(a)  # >0 delante, <0 detrás
+            x, y = cx + rx * math.cos(a), cy + ry * depth
+            sc = 100 + 18 * depth
+            alpha = "00" if depth > 0 else "A0"
+            layer = 6 if depth > 0 else 2
+            fade = "\\fad(250,0)" if f == 0 else ("\\fad(0,250)" if f == frames - 1 else "")
+            lines.append(f"Dialogue: {layer},{_ts(t0)},{_ts(t1)},Sub,,0,0,0,,{{\\an5\\pos({x:.0f},{y:.0f})"
+                         f"\\fnAnton\\fs84\\fscx{sc:.0f}\\fscy{sc:.0f}\\frz{-12 * math.cos(a):.0f}\\bord3\\3c&H000000&"
+                         f"\\shad0\\1c{acc}&\\alpha&H{alpha}&{fade}}}{_esc(ch)}")
+    return lines, None
+
+
 PACK_BUILDERS = {
     "ubicacion": ubicacion_events,
     "oferta": oferta_events,
@@ -350,4 +443,7 @@ PACK_BUILDERS = {
     "testimonio": testimonio_events,
     "plazas": plazas_events,
     "precio": precio_events,
+    "notificaciones": notificaciones_events,
+    "foco": foco_events,
+    "anillo": anillo_events,
 }
