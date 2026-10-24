@@ -120,7 +120,7 @@ if __name__ == "__main__":
             subprocess.run([media.FFMPEG, "-v", "error", "-f", "lavfi", "-i", "sine=d=2", str(wav)], check=True)
             transcribe.transcribe(wav, model="tiny")
         if not sys.flags.utf8_mode:
-            raise SystemExit("La app tiene que arrancar en modo UTF-8 (opción X utf8_mode=1 en iman.spec)")
+            raise SystemExit("La app tiene que arrancar en modo UTF-8 (opción «X utf8» en iman.spec)")
         print("ok", media.FFMPEG, segment.available(), file=out)
     else:
         main()

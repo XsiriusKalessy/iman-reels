@@ -28,7 +28,7 @@ pyz = PYZ(a.pure)
 icon_mac = Path(SPECPATH) / "iman.icns"
 icon_win = Path(SPECPATH) / "iman.ico"
 # Modo UTF-8: en Windows, Python escribe por defecto en cp1252 y un emoji rompía el montaje.
-exe_ = EXE(pyz, a.scripts, [("X utf8_mode=1", None, "OPTION")], exclude_binaries=True, name="Iman", console=False,
+exe_ = EXE(pyz, a.scripts, [("X utf8", None, "OPTION")], exclude_binaries=True, name="Iman", console=False,
            icon=str(icon_win) if sys.platform == "win32" and icon_win.exists() else None)
 coll = COLLECT(exe_, a.binaries, a.datas, name="Iman")
 if sys.platform == "darwin":
