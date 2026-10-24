@@ -70,6 +70,12 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # Algunas librerías (tqdm, al bajar el modelo de voz) abren procesos auxiliares de Python.
+    # En la app empaquetada esos procesos vuelven a ejecutar este archivo: sin esto, en Mac
+    # cada uno arrancaba otra Imán y abría otra ventana del navegador.
+    import multiprocessing
+
+    multiprocessing.freeze_support()
     if "--smoke" in sys.argv:  # comprobación en CI: importa todo y sale
         from iman import media, segment, server  # noqa: F401
 
