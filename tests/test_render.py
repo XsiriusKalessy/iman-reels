@@ -447,3 +447,20 @@ def test_iman_music_styles(sample, tmp_path, style):
     res = pipeline.run(sample, tmp_path / "w", pipeline.EditOptions(music=style), cfg, words=TAKE)
     assert (tmp_path / "w" / "musica_iman.wav").exists()
     assert abs(media.probe(res.video).duration - res.duration_out) < 0.3
+
+
+def test_everything_sound_and_new_effects_together(sample, tmp_path):
+    """Música de Imán + silencio dramático + efectos de sonido + zoom de entrada + los efectos nuevos."""
+    from iman.models import EditPlan
+
+    fx = [{"type": "notificaciones", "word": 6, "until_word": 9, "text": "Nuevo pedido|Reserva confirmada",
+           "title": "Tienda"},
+          {"type": "anillo", "word": 10, "until_word": 13, "text": "SOLO HOY"},
+          {"type": "foco", "word": 16, "until_word": 18, "text": "Y es gratis"}]
+    plan = EditPlan(hook_title="El error de todos", effects=fx, silence=[16], music="synthwave")
+    cfg = {"provider": "none", "anthropic_key": "", "openai_key": "", "claude_model": "", "openai_model": ""}
+    res = pipeline.run(sample, tmp_path / "w", pipeline.EditOptions(rhythm="sin_tocar"), cfg, words=TAKE,
+                       plan=plan)
+    graph = (tmp_path / "w" / "reel.filters.txt").read_text(encoding="utf-8")
+    assert "between(t," in graph and "sidechaincompress" in graph and "zoompan" in graph
+    assert abs(media.probe(res.video).duration - res.duration_out) < 0.3

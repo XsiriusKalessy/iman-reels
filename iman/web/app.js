@@ -402,7 +402,7 @@ $("#go").onclick = async () => {
   fd.append("punch", $("#punch").checked);
   const ms = $("#music-style").value;
   if (ms === "mia" && $("#music-file").files[0]) fd.append("music_file", $("#music-file").files[0]);
-  else if (ms !== "mia") fd.append("music_style", ms);
+  else fd.append("music_style", ms === "mia" ? "" : ms);  // «Mi música» sin canción elegida: sin música
   if (mode() !== "largo") state.broll.forEach(f => fd.append("broll", f));
   showWorking(mode() === "largo" ? "Subiendo tu vídeo largo" : "Subiendo tu vídeo", 0.01);
   go("result");

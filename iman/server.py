@@ -465,7 +465,7 @@ def music_preview(key: str):
     """20 segundos del estilo para escucharlo antes de elegir (se guarda en caché)."""
     if key not in musica.STYLES:
         raise HTTPException(404, "Ese estilo no existe")
-    dst = config.HOME / "cache" / "musica" / f"{key}.wav"
+    dst = config.HOME / "cache" / "musica" / f"{key}-v3.wav"  # v3: si cambia el sonido, no sirve la vieja
     if not dst.exists():
         musica.render(key, 20, dst, seed=len(key))
     return FileResponse(dst, media_type="audio/wav")
