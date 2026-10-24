@@ -907,6 +907,31 @@ def get_video(job_id: str):
     return FileResponse(p, media_type="video/mp4", filename=f"reel-{job_id}.mp4")
 
 
+@app.get("/api/jobs/{job_id}/whatsapp.zip")
+def get_whatsapp(job_id: str):
+    """El reel en trozos de menos de 60 s (los estados de WhatsApp cortan ahí), partido entre frases."""
+    import zipfile
+
+    workdir = JOBS_DIR / job_id
+    p = workdir / "reel.mp4"
+    if not p.exists():
+        raise HTTPException(404)
+    out = workdir / "whatsapp.zip"
+    if not out.exists() or out.stat().st_mtime < p.stat().st_mtime:
+        dur = media.probe(p).duration
+        marks = [0.0, *media.split_points(dur, media.silences(p)), dur]
+        parts = []
+        for k, (a, b) in enumerate(zip(marks, marks[1:])):
+            parts.append(media.cut(p, workdir / f"estado-{k + 1}.mp4", a, b))
+        tmp = out.with_suffix(".tmp")
+        with zipfile.ZipFile(tmp, "w") as z:
+            for k, part in enumerate(parts):
+                z.write(part, f"estado-{k + 1}-de-{len(parts)}.mp4")
+                part.unlink(missing_ok=True)
+        tmp.replace(out)
+    return FileResponse(out, media_type="application/zip", filename=f"reel-{job_id}-estados-whatsapp.zip")
+
+
 @app.get("/api/jobs/{job_id}/reel.jpg")
 def get_thumb(job_id: str):
     p = JOBS_DIR / job_id / "reel.jpg"

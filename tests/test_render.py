@@ -545,3 +545,30 @@ def test_trip_map_3d(sample, tmp_path, monkeypatch):
     maps = list((tmp_path / "home" / "cache" / "mapas").glob("*.mp4"))
     assert len(maps) == 1 and media.probe(maps[0]).duration >= 2.9
     assert abs(media.probe(res.video).duration - res.duration_out) < 0.3
+
+
+def test_split_for_whatsapp_status():
+    assert media.split_points(50, []) == []
+    assert media.split_points(130, []) == [59.0, 118.0]
+    # Corta en el último silencio que quepa, no a mitad de palabra.
+    cuts = media.split_points(100, [(20.0, 20.4), (52.0, 52.6), (58.9, 59.5), (80.0, 80.3)])
+    assert cuts == [52.3]
+
+
+def test_whatsapp_zip_endpoint(tmp_path, monkeypatch):
+    import zipfile
+
+    from fastapi.testclient import TestClient
+
+    from iman import server
+
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path)
+    (tmp_path / "j").mkdir()
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=gray:s=270x480:r=30:d=70",
+                    "-f", "lavfi", "-i", "sine=frequency=300:duration=70", "-c:v", "libx264", "-preset", "ultrafast",
+                    "-c:a", "aac", "-shortest", str(tmp_path / "j" / "reel.mp4")], check=True)
+    r = TestClient(server.app).get("/api/jobs/j/whatsapp.zip")
+    assert r.status_code == 200
+    (tmp_path / "w.zip").write_bytes(r.content)
+    names = zipfile.ZipFile(tmp_path / "w.zip").namelist()
+    assert names == ["estado-1-de-2.mp4", "estado-2-de-2.mp4"]

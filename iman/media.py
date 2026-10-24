@@ -105,10 +105,12 @@ def extract_audio(src: Path, dst: Path) -> Path:
     return dst
 
 
+# Suave a propósito: una reducción de ruido o un de-esser fuertes dejan la voz metálica o con siseo raro
+# (sobre todo grabando en el coche o en la calle). Mejor algo de ruido que una voz que no parece tuya.
 VOICE_CHAIN = (
-    "highpass=f=80,lowpass=f=14000,afftdn=nr=12:nf=-40:tn=1,"
-    "equalizer=f=250:t=q:w=1:g=-2,equalizer=f=3000:t=q:w=1.2:g=2.5,deesser=i=0.4,"
-    "acompressor=threshold=-20dB:ratio=3:attack=8:release=120:makeup=2"
+    "highpass=f=70,lowpass=f=16000,afftdn=nr=6:nf=-48:tn=1,"
+    "equalizer=f=220:t=q:w=1:g=-1.5,equalizer=f=3500:t=q:w=1.4:g=1.5,deesser=i=0.15,"
+    "acompressor=threshold=-18dB:ratio=2.5:attack=15:release=160:makeup=1.5"
 )
 
 # Looks de un clic (color y textura), todos con filtros de ffmpeg: nada de LUTs ni packs de terceros.
@@ -553,6 +555,28 @@ def voice_canvas(audio: Path, dst: Path, cuts: list[float], clips: list[Path], c
     if res.returncode != 0:
         raise RuntimeError(f"ffmpeg falló:\n{res.stderr[-2000:]}")
     return dst
+
+
+def silences(src: Path, noise_db: int = -35, min_len: float = 0.12) -> list[tuple[float, float]]:
+    """Tramos en silencio de un vídeo (inicio, fin), para cortar entre frases."""
+    res = subprocess.run([FFMPEG, "-v", "info", "-i", str(src), "-af", f"silencedetect=n={noise_db}dB:d={min_len}",
+                          "-f", "null", "-"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    starts = [float(x) for x in re.findall(r"silence_start: (-?[\d.]+)", res.stderr)]
+    ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", res.stderr)]
+    return list(zip(starts, ends))
+
+
+def split_points(duration: float, quiet: list[tuple[float, float]], limit: float = 59.0,
+                 shortest: float = 30.0) -> list[float]:
+    """Dónde partir un vídeo en trozos de menos de `limit` segundos: en el último silencio que quepa
+    (sin dejar trozos de menos de `shortest`) y, si no hay ninguno, justo en el límite."""
+    cuts, start = [], 0.0
+    while duration - start > limit:
+        mids = [(a + b) / 2 for a, b in quiet if start + shortest <= (a + b) / 2 <= start + limit]
+        at = max(mids) if mids else start + limit
+        cuts.append(round(at, 3))
+        start = at
+    return cuts
 
 
 def cut(src: Path, dst: Path, start: float, end: float) -> Path:

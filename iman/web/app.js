@@ -736,6 +736,8 @@ function showResult(j) {
   const v = $("#out");
   v.src = `/api/jobs/${j.id}/reel.mp4${bust}`; v.hidden = false; $("#working").hidden = true;
   $("#download").href = `/api/jobs/${j.id}/reel.mp4`;
+  $("#download-wa").href = `/api/jobs/${j.id}/whatsapp.zip`;
+  $("#download-wa").hidden = !(j.result && j.result.duration_out > 60);
   $("#stats").innerHTML = `
     <div><b>${fmt(r.duration_in)} → ${fmt(r.duration_out)}</b><span>duración</span></div>
     <div><b>${r.cuts}</b><span>cortes</span></div>
@@ -758,7 +760,8 @@ async function reedit(changes) {
   } catch (err) { showError(err.message); }
 }
 $$(".quick:not(.ideas) button").forEach(b => b.onclick = () => reedit(
-  b.dataset.rhythm ? { rhythm: b.dataset.rhythm } : b.dataset.background !== undefined ? { background: b.dataset.background } : { style: b.dataset.style }));
+  b.dataset.rhythm ? { rhythm: b.dataset.rhythm } : b.dataset.background !== undefined ? { background: b.dataset.background }
+    : b.dataset.voice ? { voice: b.dataset.voice === "true" } : { style: b.dataset.style }));
 // Fondo: «Mi foto» pide elegir la imagen; solo tiene sentido cuando hablas a cámara.
 $("#bg-choices").onchange = () => {
   const foto = $("input[name=background]:checked").value === "foto";

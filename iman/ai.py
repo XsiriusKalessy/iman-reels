@@ -132,7 +132,9 @@ Tu trabajo:
    tarjetas (ubicacion, dato, lista, objeto) y un cierre (cta). Que el primer segundo ya tenga algo potente
    (detras, titular o color). No repitas el mismo tipo dos veces seguidas. Que cada uno tenga sentido con lo
    que se dice en ese momento: nada de relleno.
-   - "lista": cuando el creador enumera pasos o razones ("uno…, dos…, tres…"). Cada punto, en 2 a 5 palabras,
+   - "lista": cuando el creador enumera pasos, razones o cosas ("uno…, dos…, tres…", "3 cosas", "lo primero…,
+     lo segundo…"). OBLIGATORIA siempre que enumere: es de lo que más gusta y nunca debe faltar; mientras dura,
+     no pongas otro efecto encima salvo las pegatinas "objeto". Cada punto, en 2 a 5 palabras,
      con el índice donde empieza a decirlo. Para "lista" deja word en -1 y text vacío.
    - "palabra": una palabra clave que salta gigante en pantalla un segundo.
    - "titular": la frase más potente del vídeo como titular de revista en la parte de arriba (text: 3 a 6
