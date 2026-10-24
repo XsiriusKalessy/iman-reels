@@ -195,6 +195,27 @@ def set_settings(body: SettingsIn):
     return config.public(config.save(data))
 
 
+class KeyTestIn(BaseModel):
+    provider: str
+    key: str = ""
+
+
+@app.post("/api/settings/test-key")
+def test_key(body: KeyTestIn):
+    """Prueba la clave escrita, o la guardada si la casilla está vacía."""
+    cfg = config.load()
+    key = body.key or cfg.get("anthropic_key" if body.provider == "claude" else "openai_key") or ""
+    if not key:
+        return {"ok": False, "message": "Pega primero tu clave en la casilla."}
+    try:
+        who = ai.test_key(body.provider, key)
+    except ValueError as e:
+        return {"ok": False, "message": str(e)}
+    except Exception as e:  # noqa: BLE001 - se lo explicamos a la persona
+        return {"ok": False, "message": ai.error_message(e)}
+    return {"ok": True, "message": f"✓ Funciona. Tu clave de {who} está lista y tiene saldo."}
+
+
 @app.get("/api/settings/export")
 def export_settings(claves: bool = False):
     return Response(portable.export(claves), media_type="application/zip",

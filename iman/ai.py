@@ -726,7 +726,8 @@ def fallback_hook(words: list[Word], max_words: int = 6) -> str:
 
 
 SETUP_AI = ("La IA incluida de Imán todavía no está activa. Ve a Ajustes › IA que edita, "
-            "elige «Mi Claude» y pega tu clave de Claude (empieza por sk-ant-).")
+            "elige «Mi Claude» y pega tu clave de Claude (empieza por sk-ant-). "
+            "Abre «Usar mi propia clave de IA»: ahí tienes la guía paso a paso.")
 
 
 def error_message(e: Exception) -> str:
@@ -740,9 +741,39 @@ def error_message(e: Exception) -> str:
         low = msg.lower()
         if type(e).__name__ == "AuthenticationError":
             return f"Tu clave de {who} no es válida. Cópiala otra vez en Ajustes › IA que edita."
+        if type(e).__name__ == "PermissionDeniedError":
+            return f"Tu clave de {who} no tiene permiso. Crea una clave nueva y pégala otra vez."
         if "credit" in low or "billing" in low or "quota" in low:
             return f"Tu cuenta de {who} no tiene saldo. Añade saldo y vuelve a probar."
+        if type(e).__name__ == "RateLimitError":
+            return f"Tu cuenta de {who} ha llegado a su límite de gasto o de uso. Espera un minuto o sube el límite en tu cuenta."
         if type(e).__name__ in ("APIConnectionError", "APITimeoutError"):
             return f"No hay conexión con {who}. Revisa internet y vuelve a probar."
         return f"{who} ha fallado: {msg[:200]}"
     return f"Algo ha fallado: {msg[:200]}"
+
+
+KEY_TEST_MODEL = "claude-haiku-5-5"  # la prueba cuesta una milésima de céntimo
+
+
+def test_key(provider: str, key: str) -> str:
+    """Comprueba de verdad que la clave funciona y tiene saldo. Lanza el error de la API si no."""
+    key = key.strip()
+    if provider == "claude":
+        if not key.startswith("sk-ant-"):
+            raise ValueError("Esa no es una clave de Claude: tiene que empezar por sk-ant-. "
+                             "Ojo, la licencia de Imán (IMAN-…) va en «Tu licencia», no aquí.")
+        import anthropic
+
+        anthropic.Anthropic(api_key=key, max_retries=0, timeout=20).messages.create(
+            model=KEY_TEST_MODEL, max_tokens=1, messages=[{"role": "user", "content": "hola"}])
+        return "Claude"
+    if provider == "openai":
+        if not key.startswith("sk-"):
+            raise ValueError("Esa no es una clave de OpenAI: tiene que empezar por sk-.")
+        from openai import OpenAI
+
+        OpenAI(api_key=key, max_retries=0, timeout=20).chat.completions.create(
+            model="gpt-4o-mini", max_tokens=1, messages=[{"role": "user", "content": "hola"}])
+        return "ChatGPT"
+    raise ValueError("Elige Claude o ChatGPT")

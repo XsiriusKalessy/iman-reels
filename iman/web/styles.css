@@ -322,3 +322,10 @@ label.color input { width: 44px; height: 34px; padding: 2px; margin: 0; border-r
 .faq p { color: var(--muted); margin: 8px 0 2px; font-size: 14px; }
 .ghost.button { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: var(--text); cursor: pointer; font-size: 14px; }
 .warn-text { color: #ffb4a8; }
+
+/* guía para conseguir tu propia clave */
+.guide { margin: 10px 0 14px; padding: 10px 14px; border: 1px solid var(--line, rgba(127,127,127,.25)); border-radius: 12px; }
+.guide summary { cursor: pointer; font-weight: 600; }
+.howto { margin: 10px 0 6px; padding-left: 20px; display: grid; gap: 8px; font-size: 14px; line-height: 1.45; }
+.howto a { text-decoration: underline; }
+.hint.ok { color: #2fa36b; }

@@ -86,7 +86,7 @@
         <details><summary>¿En vertical u horizontal?</summary><p>Mejor vertical. Si grabas en horizontal, Imán lo encuadra solo, pero pierdes calidad en los lados.</p></details>
         <details><summary>¿Cuánto tarda en editarse?</summary><p>Un reel de un minuto suele tardar entre uno y tres minutos, según tu ordenador. La primera vez algo más, porque descarga el modelo que transcribe.</p></details>
         <details><summary>¿Se sube mi vídeo a algún sitio?</summary><p>No. El vídeo se edita en tu ordenador. A la IA solo le llega el texto de lo que dices.</p></details>
-        <details><summary>¿Por qué me sale un error al pedir ideas?</summary><p>Revisa en Ajustes › IA que edita que tengas elegida «Mi Claude» con tu clave pegada, y que tu cuenta tenga saldo.</p></details>
+        <details><summary>¿Por qué me sale un error al pedir ideas?</summary><p>Revisa en Ajustes › IA que edita que tengas elegida «Mi Claude» con tu clave pegada, y que tu cuenta tenga saldo. En «Usar mi propia clave de IA» tienes la guía paso a paso y el botón «Probar mi clave», que te dice exactamente qué falla.</p></details>
       </div>
     </section>
 
@@ -291,9 +291,35 @@
       </div>
       <details id="own-keys">
         <summary>Usar mi propia clave de IA</summary>
-        <p class="hint">Solo si prefieres pagar la IA aparte. Las claves se guardan solo en este ordenador.</p>
-        <label>Clave de Anthropic (Claude)<input name="anthropic_key" type="password" placeholder="sk-ant-…" autocomplete="off"></label>
-        <label>Clave de OpenAI (ChatGPT)<input name="openai_key" type="password" placeholder="sk-…" autocomplete="off"></label>
+        <p class="hint">Así la IA la pagas tú directamente a Claude, a unos 5 céntimos por reel. La clave se guarda solo en este ordenador.</p>
+        <details class="guide" open>
+          <summary>Cómo conseguir tu clave de Claude (5 minutos)</summary>
+          <ol class="howto">
+            <li><b>Crea tu cuenta</b> en <a href="https://console.anthropic.com/" target="_blank" rel="noopener">la consola de Claude</a>. Vale tu correo de siempre. Es distinta de la app de Claude: aunque pagues Claude Pro, aquí hay que poner saldo aparte.</li>
+            <li><b>Pon saldo.</b> En <a href="https://console.anthropic.com/settings/billing" target="_blank" rel="noopener">Billing</a>, pulsa «Buy credits». Con 5 $ tienes para unos 80 reels. Si es de empresa, pon los datos fiscales para la factura.</li>
+            <li><b>Ponle un tope</b> (opcional) en <a href="https://console.anthropic.com/settings/limits" target="_blank" rel="noopener">Limits</a>, por ejemplo 10 $ al mes, y así nunca gastas de más.</li>
+            <li><b>Crea la clave.</b> En <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">API keys</a>, pulsa «Create key», ponle de nombre «Imán» y pulsa «Copiar». Solo se ve una vez: si la pierdes, crea otra.</li>
+            <li><b>Pégala aquí abajo</b> y pulsa «Probar mi clave». Después, «Guardar».</li>
+          </ol>
+          <p class="hint">No la mandes por WhatsApp ni en capturas: quien la tenga puede gastar tu saldo. Si se te escapa, bórrala en API keys y crea otra.</p>
+        </details>
+        <label>Clave de Anthropic (Claude)
+          <span class="row tight"><input name="anthropic_key" type="password" placeholder="sk-ant-…" autocomplete="off"><button class="ghost" type="button" data-test-key="claude">Probar mi clave</button></span>
+        </label>
+        <p class="hint" id="test-claude" hidden></p>
+        <details class="guide">
+          <summary>Prefiero ChatGPT</summary>
+          <ol class="howto">
+            <li>Entra en <a href="https://platform.openai.com/" target="_blank" rel="noopener">la plataforma de OpenAI</a> (distinta de ChatGPT Plus).</li>
+            <li>Pon saldo en <a href="https://platform.openai.com/settings/organization/billing" target="_blank" rel="noopener">Billing</a>.</li>
+            <li>Crea la clave en <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">API keys</a> y cópiala.</li>
+            <li>Pégala aquí, pruébala, marca «Mi ChatGPT» arriba y guarda.</li>
+          </ol>
+          <label>Clave de OpenAI (ChatGPT)
+            <span class="row tight"><input name="openai_key" type="password" placeholder="sk-…" autocomplete="off"><button class="ghost" type="button" data-test-key="openai">Probar mi clave</button></span>
+          </label>
+          <p class="hint" id="test-openai" hidden></p>
+        </details>
       </details>
       <h3>Lo que Imán recuerda de ti</h3>
       <p class="hint" id="memory-empty">Aún nada. Marca «Recordarlo para mis próximos reels» cuando le pidas algo y lo aplicará siempre.</p>

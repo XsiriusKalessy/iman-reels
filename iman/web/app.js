@@ -169,6 +169,19 @@ $("#license-off").onclick = async () => {
   const s = await api("/api/license", { method: "DELETE" });
   state.settings = s; renderLicense(s.license);
 };
+document.querySelectorAll("[data-test-key]").forEach(btn => btn.onclick = async () => {
+  const provider = btn.dataset.testKey, f = $("#settings-form");
+  const out = $("#test-" + provider);
+  btn.disabled = true; btn.textContent = "Probando…";
+  try {
+    const r = await api("/api/settings/test-key", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, key: f[provider === "claude" ? "anthropic_key" : "openai_key"].value.trim() }) });
+    out.textContent = r.message; out.classList.toggle("error", !r.ok); out.classList.toggle("ok", r.ok);
+    if (r.ok) f.provider.value = provider;  // si funciona, la dejamos elegida
+  } catch (err) {
+    out.textContent = err.message; out.classList.add("error");
+  } finally { out.hidden = false; btn.disabled = false; btn.textContent = "Probar mi clave"; }
+});
 $("#open-settings").onclick = () => $("#settings").showModal();
 document.addEventListener("click", e => { if (e.target.id === "hint-settings") { e.preventDefault(); $("#settings").showModal(); } });
 $("#save-settings").onclick = async e => {
