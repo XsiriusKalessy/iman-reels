@@ -46,8 +46,29 @@ def _fix_streams() -> None:
     sys.stderr = sys.stderr or log
 
 
+def _hide_consoles() -> None:
+    """En Windows, la app no tiene consola y cada ffmpeg que lanza abriría una ventana negra.
+    Hacemos que todos los procesos hijos arranquen sin ventana."""
+    if sys.platform != "win32":
+        return
+    import subprocess
+
+    if getattr(subprocess.Popen, "_iman_hidden", False):
+        return
+    original = subprocess.Popen.__init__
+
+    def __init__(self, *args, **kwargs):
+        if not kwargs.get("creationflags"):
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+        original(self, *args, **kwargs)
+
+    subprocess.Popen.__init__ = __init__
+    subprocess.Popen._iman_hidden = True
+
+
 def main() -> None:
     _fix_streams()
+    _hide_consoles()
     port = PORT
     if _running(port):
         webbrowser.open(f"http://localhost:{port}")
@@ -84,6 +105,7 @@ if __name__ == "__main__":
         # Como en la app de ventana de Windows: sin stdout ni stderr, el servidor tiene que arrancar igual.
         out, sys.stdout, sys.stderr = sys.stdout, None, None
         _fix_streams()
+        _hide_consoles()
         import uvicorn
 
         uvicorn.Config(server.app, host="127.0.0.1", port=PORT, log_level="warning").configure_logging()
