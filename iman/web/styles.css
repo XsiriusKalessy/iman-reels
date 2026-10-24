@@ -372,3 +372,8 @@ label.color input { width: 44px; height: 34px; padding: 2px; margin: 0; border-r
 .palette span { width: 34px; height: 34px; display: block; }
 .palette.on { border-color: var(--accent); }
 .palettes .hint { flex-basis: 100%; margin: 4px 0 0; }
+.checks { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; }
+.checks li { color: var(--text); font-size: 14px; }
+.checks li.ok { opacity: .85; }
+.checks li.warn { color: #ffb347; }
+.checks li small { display: block; color: var(--muted); margin-left: 18px; }

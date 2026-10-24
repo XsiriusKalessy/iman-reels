@@ -713,6 +713,9 @@ function showResult(j) {
   $("#hook-box").innerHTML = (r.ai_warning ? `<div class="card warn"><p>${esc(r.ai_warning)}</p><p class="hint">El reel está cortado y con subtítulos, pero sin los efectos de la IA.</p></div>` : "")
     + (p.hook_title ? `<div class="card"><h4>${esc(p.hook_title)}</h4><p class="hint">Gancho en pantalla</p></div>` : "")
     + (p.hook_line ? `<div class="card"><p>«${esc(p.hook_line)}»</p><p class="hint">Si quieres regrabar el arranque, prueba con esta frase.</p></div>` : "");
+  const checks = r.checks || [];
+  $("#check-box").hidden = !checks.length;
+  $("#check-list").innerHTML = checks.map(c => `<li class="${c.ok ? "ok" : "warn"}">${c.ok ? "✓" : "!"} ${esc(c.text)}${c.ok || !c.tip ? "" : `<small>${esc(c.tip)}</small>`}</li>`).join("");
 }
 async function reedit(changes) {
   if (!state.job || state.job.status === "working") return;

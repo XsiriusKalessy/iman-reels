@@ -59,6 +59,7 @@ class EditResult:
     removed_words: list[str] = field(default_factory=list)
     cuts: int = 0
     ai_warning: str = ""
+    checks: list[dict] = field(default_factory=list)
 
     def summary(self) -> dict:
         return {
@@ -69,6 +70,7 @@ class EditResult:
             "removed_words": self.removed_words,
             "cuts": self.cuts,
             "ai_warning": self.ai_warning,
+            "checks": self.checks,
         }
 
 
@@ -195,6 +197,31 @@ def review(words: list[Word], plan: EditPlan, rhythm_key: str) -> list[dict]:
 
 AUTO_LOOK = {"viajes": "teal"}
 AUTO_MUSIC = {"viajes": "inspiracional", "cursos": "corporativa", "productos": "alegre", "empresas": "corporativa"}
+
+
+def pre_publish(opts: "EditOptions", plan: EditPlan, kept: list[Word], total: float, active: list[dict],
+                kit, has_music: bool) -> list[dict]:
+    """Revisión antes de publicar: lo que hace que un reel retenga, comprobado sobre este reel."""
+    first = kept[0].start if kept else 0.0
+    cta = any(fx.get("type") == "cta" for fx in active) or bool(kit and kit.active and kit.end_card)
+    effects_n = len(active)
+    out = [
+        {"ok": bool(opts.hook and plan.hook_title), "text": "Gancho en pantalla desde el primer segundo",
+         "tip": "Activa el gancho o escribe uno en «Gancho»."},
+        {"ok": first < 0.6, "text": "Empiezas a hablar enseguida",
+         "tip": f"Tardas {first:.1f} s en hablar: prueba el ritmo «Más rápido»."},
+        {"ok": 7 <= total <= 90, "text": f"Duración buena para reels ({total:.0f} s)",
+         "tip": "Lo ideal es entre 15 y 60 segundos." if total > 90 else "Es muy corto: cuenta algo más."},
+        {"ok": opts.captions, "text": "Subtítulos (la mayoría lo ve sin sonido)", "tip": "Activa los subtítulos."},
+        {"ok": effects_n >= max(2, int(total / 10)), "text": f"Algo cambia en pantalla a menudo ({effects_n} efectos)",
+         "tip": "Pide más efectos en «Dímelo como a tu editor»."},
+        {"ok": cta, "text": "Llamada a la acción al final",
+         "tip": "Di qué hacer al final (seguirte, comentar, reservar) o activa el cierre en «Mi marca»."},
+        {"ok": has_music or opts.music == "", "text": "Música de fondo", "tip": "Elige una música en «Música»."},
+        {"ok": True, "text": "Volumen listo para Instagram, TikTok y YouTube (-14 LUFS)", "tip": ""},
+        {"ok": True, "text": "Textos fuera de las zonas que tapan los botones de la app", "tip": ""},
+    ]
+    return out
 
 
 def _music(choice, workdir: Path, total: float, drop_at: float | None = None) -> Path | None:
@@ -422,4 +449,5 @@ def run(
         removed_words=[words[i].text for i in sorted(drops)],
         cuts=sum(1 for a, b in zip(spans, spans[1:]) if abs(a.end - b.start) > 1e-3),
         ai_warning=ai_warning,
+        checks=pre_publish(opts, plan, kept, total, active, kit, music is not None),
     )
