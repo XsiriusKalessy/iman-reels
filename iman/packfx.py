@@ -202,6 +202,57 @@ def ruta_events(effect: dict, clock: WordClock, style: Style, duration: float) -
     return lines, Window(start, end)
 
 
+def viaje_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Itinerario de varias paradas: la ruta se dibuja de ciudad en ciudad, con el avión, los nombres y las fechas."""
+    stops = [x.strip()[:16] for x in effect["text"].replace("→", "›").replace(">", "›").split("›") if x.strip()][:6]
+    if len(stops) < 2:
+        return [], None
+    span = _span(effect, clock, duration, max(4.0, 1.3 * len(stops)), 2.6)
+    if not span:
+        return [], None
+    start, end = span
+    acc = _accent(style)
+    title, dates = effect.get("title", "").strip()[:28], effect.get("subtitle", "").strip()[:28]
+    n = len(stops)
+    top, bottom = 560, 1180
+    pts = [(250 if k % 2 == 0 else 830, top + (bottom - top) * k / (n - 1)) for k in range(n)]
+    leg = min(1.1, (end - start) * 0.75 / (n - 1))  # segundos por tramo
+    t = f"{_ts(start)},{_ts(end)}"
+    lines = [_dim(start, end, "30")]
+    if title:
+        size = textfit.fit(title, "Anton", 96, 860, 56)
+        lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an8\\pos(540,300)\\fnAnton\\fs{size:.0f}\\bord0\\shad0"
+                     f"\\c&H00FFFFFF&\\fad(200,200)\\fscx90\\fscy90\\t(0,220,\\fscx100\\fscy100)}}{_esc(title.upper())}")
+    if dates:
+        lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an8\\pos(540,{420 if title else 330})\\fnCaveat\\fs80\\bord0\\shad0"
+                     f"\\c{acc}&\\fad(300,200)}}{_esc(dates)}")
+    for k, (x0, y0) in enumerate(pts):
+        when = start + k * leg
+        ms = int((when - start) * 1000)
+        lines.append(f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an5\\pos({x0:.0f},{y0:.0f})\\bord0\\shad0\\1c&H00FFFFFF&\\alpha&HFF&"
+                     f"\\fscx40\\fscy40\\t({ms},{ms + 200},\\alpha&H00&\\fscx100\\fscy100)\\fad(0,200)\\p1}}{_circle(40)}")
+        an = 4 if k % 2 == 0 else 6
+        nx = x0 + (40 if k % 2 == 0 else -40)
+        size = textfit.fit(stops[k], "Figtree ExtraBold", 66, 360, 40)
+        lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an{an}\\pos({nx:.0f},{y0:.0f})\\fnFigtree ExtraBold\\fs{size:.0f}\\bord0"
+                     f"\\shad2\\c&H00FFFFFF&\\alpha&HFF&\\t({ms},{ms + 220},\\alpha&H00&)\\fad(0,200)}}{_esc(stops[k])}")
+        if k == n - 1:
+            break
+        x1, y1 = pts[k + 1]
+        steps = 12
+        for j in range(1, steps):
+            u = j / steps
+            px, py = x0 + (x1 - x0) * u, y0 + (y1 - y0) * u
+            dms = ms + int(u * leg * 1000)
+            lines.append(f"Dialogue: 4,{t},Sub,,0,0,0,,{{\\an5\\pos({px:.0f},{py:.0f})\\bord0\\shad0\\1c{acc}&\\alpha&HFF&"
+                         f"\\t({dms},{dms + 60},\\alpha&H00&)\\fad(0,200)\\p1}}{_circle(12)}")
+        ang = -math.degrees(math.atan2(y1 - y0, x1 - x0))
+        b = when + leg if k < n - 2 else end
+        lines.append(f"Dialogue: 7,{_ts(when)},{_ts(b)},Sub,,0,0,0,,{{\\an5\\move({x0:.0f},{y0:.0f},{x1:.0f},{y1:.0f},0,"
+                     f"{int(leg * 1000)})\\frz{ang:.0f}\\bord0\\shad0\\1c&H00FFFFFF&\\fscx130\\fscy130\\p1}}{_PLANE}")
+    return lines, Window(start, end)
+
+
 def testimonio_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
     """Tarjeta de reseña: cinco estrellas, la frase del alumno o cliente y su nombre."""
     span = _span(effect, clock, duration, 3.4, 2.2)
@@ -295,6 +346,7 @@ PACK_BUILDERS = {
     "ubicacion": ubicacion_events,
     "oferta": oferta_events,
     "ruta": ruta_events,
+    "viaje": viaje_events,
     "testimonio": testimonio_events,
     "plazas": plazas_events,
     "precio": precio_events,

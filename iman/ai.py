@@ -17,11 +17,11 @@ OPENAI_MODEL = "gpt-4o"
 EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "color", "comentario",
                 "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                 "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque", "aparece",
-                "objeto"]
+                "objeto", "viaje"]
 FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
                    "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                    "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque",
-                   "aparece", "objeto")
+                   "aparece", "objeto", "viaje")
 LISTA_LOOKS = ("checklist", "capitulos", "itinerario")
 TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
@@ -171,6 +171,10 @@ Tu trabajo:
      "mi socio"). Cuando presenta algo concreto: un precio, un sitio, una persona.
    En "lista", look "itinerario" muestra los días de un viaje en una línea de tiempo; look "capitulos" muestra un índice numerado que se ilumina por partes; look "checklist" muestra casillas arriba que se marcan al decir cada punto (bueno para
    "lo que hace" o "lo que no necesitas"); vacío muestra la lista grande en el centro.
+   - "viaje": itinerario de un viaje con varias paradas: la ruta se dibuja de ciudad en ciudad con un avión
+     (text: las paradas en orden separadas por "›", p. ej. "Tokio › Kioto › Gero › Osaka"; title: el viaje en
+     2 a 4 palabras, p. ej. "Japón en grupo"; subtitle: las fechas, p. ej. "18–29 nov", o vacío). Cuando el
+     creador cuenta el recorrido de un viaje. Mejor que "ruta" si hay más de dos sitios.
    - "objeto": pegatina con el dibujo de una cosa concreta que el creador nombra (text: UN emoji que la dibuje,
      p. ej. 🔌 adaptador, 🧦 calcetines, 💊 medicinas, 📱 móvil, 💶 dinero, ✈️ vuelo, 🍣 comida, 🏨 hotel;
      subtitle: el nombre en 1 a 3 palabras). Dura unos 2 segundos. Úsalo cada vez que nombre objetos, sobre todo

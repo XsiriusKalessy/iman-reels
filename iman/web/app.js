@@ -469,7 +469,7 @@ const CHAT_IDEAS = {
   corto: "Déjalo en menos de 30 segundos con lo mejor",
 };
 const SECTOR_IDEAS = {
-  viajes: ["Pon una cuenta atrás con los días que quedan para el viaje", "Al final, pon «Plazas limitadas» y que nos escriban por privado", "Pon la ruta del viaje con las ciudades en pantalla"],
+  viajes: ["Pon el itinerario del viaje con la ruta de ciudad en ciudad y las fechas", "Pon una cuenta atrás con los días que quedan para el viaje", "Al final, pon «Plazas limitadas» y que nos escriban por privado"],
   cursos: ["Al final, invita a apuntarse al curso con un enlace en la bio", "Pon en pantalla los 3 pasos que explico"],
   productos: ["Que salga el precio en grande cuando lo diga", "Termina con «pídelo por privado»"],
   empresas: ["Pon un dato o cifra de clientes en grande", "Termina con «pide tu presupuesto sin compromiso»"],
@@ -517,7 +517,7 @@ $("#chat-ideas").onclick = e => {
 const FX_NAMES = { lista: "Lista", palabra: "Palabra gigante", titular: "Titular", cifra: "Cifra", frase: "Frase", tecleo: "Texto que se escribe",
   color: "Golpe de color", comentario: "Comentario", contador: "Contador", portada: "Portada de revista", cta: "Llamada a la acción",
   dato: "Dato", bruto: "Toma en bruto", fantasma: "Eco", pagina: "Página de revista", detras: "Texto detrás de ti",
-  fondo: "Fondo de color", desenfoque: "Fondo desenfocado", ubicacion: "Ubicación", objeto: "Objeto", oferta: "Oferta", ruta: "Ruta",
+  fondo: "Fondo de color", desenfoque: "Fondo desenfocado", ubicacion: "Ubicación", objeto: "Objeto", viaje: "Itinerario del viaje", oferta: "Oferta", ruta: "Ruta",
   testimonio: "Testimonio", plazas: "Plazas", precio: "Precio", apoyo: "Vídeo de apoyo",
   sube: "Sube con tu dedo", choque: "El choque", aparece: "Aparece donde señalas" };
 function renderEffects(j) {
