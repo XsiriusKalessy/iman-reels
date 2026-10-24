@@ -62,12 +62,45 @@ def _text(draw, xy, lines, font, lh, fill, anchor="la"):
     return y
 
 
-def _cover(img: Image.Image, size: tuple[int, int]) -> Image.Image:
+def _cover(img: Image.Image, size: tuple[int, int], face: tuple[float, float] | None = None,
+           at: tuple[float, float] = (0.5, 0.33), zoom: float = 1.0) -> Image.Image:
+    """Recorta la foto a `size` sin deformarla. Con `face` (x, y de la cara, 0-1) la deja en el punto `at`
+    del recorte, para no cortar nunca la cara por la mitad."""
     w, h = size
-    s = max(w / img.width, h / img.height)
+    s = max(w / img.width, h / img.height) * zoom
     img = img.resize((round(img.width * s), round(img.height * s)), Image.LANCZOS)
-    x, y = (img.width - w) // 2, (img.height - h) // 3
+    if face is None:
+        x, y = (img.width - w) // 2, (img.height - h) // 3
+    else:
+        x = int(min(img.width - w, max(0, face[0] * img.width - at[0] * w)))
+        y = int(min(img.height - h, max(0, face[1] * img.height - at[1] * h)))
     return img.crop((x, y, x + w, y + h))
+
+
+def _face(img: Image.Image | None) -> tuple[float, float] | None:
+    if img is None:
+        return None
+    from . import segment
+
+    found = segment.subject(img)
+    return (found[0], found[2]) if found else None
+
+
+def _clean(text: str, family: str) -> str:
+    """Quita lo que la fuente no sabe dibujar (emojis, símbolos raros): si no, sale un cuadradito."""
+    from .textfit import _metrics
+
+    cmap = _metrics(family)[0]
+    out = "".join(ch for ch in text if ch.isspace() or ord(ch) in cmap)
+    return " ".join(out.split())
+
+
+def _handle(raw: str) -> str:
+    """El @ de Instagram solo lleva letras, números, puntos y guiones bajos."""
+    import re
+
+    h = re.sub(r"[^A-Za-z0-9._]", "", (raw or "").replace("@", " ").split()[0] if (raw or "").strip() else "")
+    return f"@{h}" if h else ""
 
 
 def _shade(img: Image.Image, top: float = 0.35, strength: int = 215) -> Image.Image:
@@ -95,7 +128,7 @@ class Look:
         self.accent = b.primary if brand_mod.is_hex(b.primary or "") else RED
         self.on_accent = brand_mod.ink_on(self.accent)
         self.title = brand_mod.font_family(b.font) or "Playfair Display ExtraBold"
-        self.handle = b.handle.strip()
+        self.handle = _handle(b.handle)
         self.cta = b.cta.strip()
         self.logo = brand_mod.logo_card() if b.logo_path else None
 
@@ -103,8 +136,12 @@ class Look:
 def carousel_slide(i: int, n: int, slide: dict, look: Look, frame: Image.Image | None) -> Image.Image:
     W, H = CAROUSEL
     first, last = i == 0, i == n - 1
+    slide = {"title": _clean(slide.get("title", ""), look.title), "body": _clean(slide.get("body", ""), BODY_FONT)}
+    face = _face(frame)
+    if not first and not last and frame is not None:
+        return _photo_slide(i, n, slide, look, frame, face)
     if first and frame is not None:
-        img = _shade(_cover(frame, CAROUSEL), top=0.25)
+        img = _shade(_cover(frame, CAROUSEL, face, (0.5, 0.3)), top=0.25)
         fg, sub = "#FFFFFF", "#E6E6E6"
     elif last:
         img = Image.new("RGB", CAROUSEL, look.accent)
@@ -154,18 +191,47 @@ def carousel_slide(i: int, n: int, slide: dict, look: Look, frame: Image.Image |
     return img
 
 
+def _photo_slide(i: int, n: int, slide: dict, look: Look, frame: Image.Image, face) -> Image.Image:
+    """Diapositiva con la foto entera a sangre: la cara arriba, sin cortar, y el texto abajo sobre un degradado."""
+    W, H = CAROUSEL
+    img = _shade(_cover(frame, CAROUSEL, face, (0.5, 0.27)), top=0.3, strength=235)
+    d = ImageDraw.Draw(img)
+    small = _font(BODY_FONT, 30)
+    max_w = W - 2 * MARGIN
+    tf, tl, tlh = _fit(d, slide["title"], look.title, 92, max_w, 300)
+    bf, bl, blh = (_fit(d, slide["body"], BODY_FONT, 42, max_w, 230, 1.32) if slide["body"] else (None, [], 0))
+    block = len(tl) * tlh + (30 + len(bl) * blh if bl else 0)
+    y = H - MARGIN - 40 - block
+    d.rectangle((MARGIN, y - 40, MARGIN + 90, y - 32), fill=look.accent)
+    y = _text(d, (MARGIN, y), tl, tf, tlh, "#FFFFFF")
+    if bl:
+        _text(d, (MARGIN, y + 30), bl, bf, blh, "#E6E6E6")
+    _pill(d, (MARGIN, MARGIN - 10), f"{i + 1:02d} / {n:02d}", small, (0, 0, 0, 140), "#FFFFFF")
+    if look.handle:
+        d.text((W - MARGIN, MARGIN), look.handle, font=small, fill="#FFFFFF", anchor="ra")
+    d.text((W - MARGIN, H - MARGIN + 10), "→", font=_font(BODY_FONT, 56), fill="#FFFFFF", anchor="rs")
+    return img
+
+
 def story(story_: dict, look: Look, frame: Image.Image | None) -> Image.Image:
     W, H = STORY
+    story_ = {"text": _clean(story_.get("text", ""), look.title), "sticker": _clean(story_.get("sticker", ""), BODY_FONT)}
+    face = _face(frame)
+    # El titular va donde no estás: abajo si tu cara queda arriba y, si no, arriba; siempre sobre un degradado.
+    on_top = face is not None and face[1] > 0.45
     if frame is not None:
-        img = _cover(frame, STORY).filter(ImageFilter.GaussianBlur(2))
-        img = _shade(img, top=0.0, strength=150)
+        img = _cover(frame, STORY, face, (0.5, 0.3))
+        if on_top:
+            img = _shade(img.transpose(Image.FLIP_TOP_BOTTOM), top=0.35, strength=235).transpose(Image.FLIP_TOP_BOTTOM)
+        else:
+            img = _shade(img, top=0.35, strength=235)
     else:
         img = Image.new("RGB", STORY, INK)
     d = ImageDraw.Draw(img)
     max_w = W - 2 * MARGIN
-    tf, tl, tlh = _fit(d, story_["text"], look.title, 100, max_w, 700)
+    tf, tl, tlh = _fit(d, story_["text"], look.title, 100, max_w, 560 if frame is not None else 700)
     block = len(tl) * tlh
-    y = (H - block) // 2
+    y = (H - block) // 2 if frame is None else (300 if on_top else min(int(H * 0.7) - block // 3, H - 330 - block))
     if story_["sticker"]:
         sf = _font(BODY_FONT, 44)
         sw = d.textlength(story_["sticker"], font=sf) + 52

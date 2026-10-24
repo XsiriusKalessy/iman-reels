@@ -103,3 +103,33 @@ def person_masks(video: Path, out: Path, windows: list[tuple[float, float]], fps
     if writer.returncode != 0:
         raise RuntimeError("No he podido recortar a la persona")
     return out
+
+
+def subject(img) -> tuple[float, float, float] | None:
+    """Dónde está la persona en una foto (PIL): (centro x de la cabeza, alto de la cabeza, alto de la cara),
+    en proporción a la imagen. None si no hay nadie o no está el modelo."""
+    if not available():
+        return None
+    try:
+        import mediapipe as mp
+        from mediapipe.tasks.python import BaseOptions, vision
+
+        small = np.ascontiguousarray(np.asarray(img.convert("RGB").resize((MASK_W, MASK_H))))
+        opts = vision.ImageSegmenterOptions(base_options=BaseOptions(model_asset_path=str(MODEL)),
+                                            output_confidence_masks=True, output_category_mask=False)
+        with vision.ImageSegmenter.create_from_options(opts) as seg:
+            conf = seg.segment(mp.Image(image_format=mp.ImageFormat.SRGB, data=small)).confidence_masks[0]
+            m = conf.numpy_view().reshape(MASK_H, MASK_W) > 0.5
+    except Exception:  # noqa: BLE001
+        return None
+    rows = np.nonzero(m.sum(axis=1) > MASK_W * 0.03)[0]
+    if len(rows) < MASK_H * 0.1:
+        return None
+    top = rows[0]
+    head = m[top: top + int(MASK_H * 0.12)]
+    cols = np.nonzero(head.any(axis=0))[0]
+    cx = (cols[0] + cols[-1]) / 2 / MASK_W if len(cols) else 0.5
+    # La cara cae más o menos un cuarto del ancho de la cabeza por debajo de la coronilla.
+    width = (cols[-1] - cols[0]) / MASK_W if len(cols) else 0.3
+    face = top / MASK_H + max(0.06, width * 0.55 * MASK_W / MASK_H)
+    return float(cx), float(top / MASK_H), float(min(0.95, face))

@@ -183,3 +183,11 @@ def test_brand_backgrounds_are_dark_with_brand_light(tmp_path, variant):
     assert 12 < mean < 120  # oscuro, pero no negro: lleva la luz de la marca
     r, g, b = max(px, key=sum)
     assert r > b + 15  # el tono de la marca (dorado) se nota
+
+
+def test_kit_text_has_no_tofu_and_clean_handle():
+    from iman import kit
+
+    assert kit._clean("Japón 🇯🇵 Lo explico ✈️", "Playfair Display ExtraBold") == "Japón Lo explico"
+    assert kit._handle("@viajesxsirius🇯🇵") == "@viajesxsirius"
+    assert kit._handle("viajes.xsirius?") == "@viajes.xsirius" and kit._handle("") == ""

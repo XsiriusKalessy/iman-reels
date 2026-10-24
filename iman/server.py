@@ -853,10 +853,27 @@ def make_kit(job_id: str, body: KitIn):
     dur = float(job["result"]["duration_in"])
     first = words[0].start if words else 0.5
     t0 = body.cover_t if body.cover_t is not None else first + 0.4
-    frames = [media.thumbnail(src, workdir / f"kit-frame-{k}.jpg", max(0.0, min(t, dur - 0.1)))
+    frames = [media.thumbnail(src, workdir / f"kit-frame-{k}.jpg", max(0.0, min(t, dur - 0.1))) if k == 0 else
+              _sharpest(src, workdir, k, t, dur)
               for k, t in enumerate([t0, dur * 0.25, dur * 0.45, dur * 0.65, dur * 0.85])]
     names = kit.render(data, outdir, b, frames)
     return {**names, "reply": data.get("reply", ""), "version": int(time.time())}
+
+
+def _sharpest(src: Path, workdir: Path, k: int, t: float, dur: float) -> Path:
+    """De tres fotogramas seguidos, el más nítido (sin movimiento ni media palabra borrosa)."""
+    from PIL import Image, ImageFilter, ImageStat
+
+    best, score = None, -1.0
+    for j, dt in enumerate((-0.3, 0.0, 0.3)):
+        p = media.thumbnail(src, workdir / f"kit-frame-{k}-{j}.jpg", max(0.0, min(t + dt, dur - 0.1)))
+        with Image.open(p) as im:
+            sc = ImageStat.Stat(im.convert("L").resize((270, 480)).filter(ImageFilter.FIND_EDGES)).var[0]
+        if sc > score:
+            best, score = p, sc
+    out = workdir / f"kit-frame-{k}.jpg"
+    shutil.copyfile(best, out)
+    return out
 
 
 @app.get("/api/jobs/{job_id}/kit/{name}")
