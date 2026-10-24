@@ -40,9 +40,25 @@ def _local(audio: Path, language: str | None, model: str) -> list[Word]:
         from faster_whisper import WhisperModel
     except ImportError as e:  # pragma: no cover
         raise RuntimeError("Falta faster-whisper: pip install faster-whisper") from e
-    wm = WhisperModel(model, device="auto", compute_type="auto")
+    pcm = _pcm(audio)
+    try:
+        return _whisper_words(WhisperModel(model, device="auto", compute_type="auto"), pcm, language)
+    except (RuntimeError, OSError) as e:
+        # Con tarjeta NVIDIA, ctranslate2 elige CUDA, pero la app no lleva sus librerías
+        # (cublas64_12.dll…). Entonces tiramos del procesador, que siempre está.
+        if not _gpu_problem(e):
+            raise
+        return _whisper_words(WhisperModel(model, device="cpu", compute_type="int8"), pcm, language)
+
+
+def _gpu_problem(e: Exception) -> bool:
+    msg = str(e).lower()
+    return any(k in msg for k in ("cublas", "cudnn", "cuda", "cudart", "nvrtc", "gpu"))
+
+
+def _whisper_words(wm, pcm, language: str | None) -> list[Word]:
     segments, _ = wm.transcribe(
-        _pcm(audio), language=language, word_timestamps=True, vad_filter=False,
+        pcm, language=language, word_timestamps=True, vad_filter=False,
         # Sin VAD ni "condition_on_previous_text" para no perder muletillas ni tomas falsas.
         condition_on_previous_text=False,
         initial_prompt="Eh, em, o sea, bueno... Transcribe literalmente, con muletillas y repeticiones.",
