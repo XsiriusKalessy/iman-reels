@@ -397,7 +397,7 @@ REVISE_SCHEMA = {
             "properties": {
                 "rhythm": {"type": "string", "enum": ["", "rapido", "dinamico", "natural", "sin_tocar"]},
                 "style": {"type": "string", "enum": ["", "impacto", "editorial", "palabra", "karaoke", "caja", "neon", "gigante",
-                                                    "mezcla", "minimal", "elegante", "manuscrita", "marcador"]},
+                                                    "mezcla", "minimal", "elegante", "manuscrita", "marcador", "hormozi", "bebas", "comic", "bloque"]},
             },
             "required": ["rhythm", "style"],
             "additionalProperties": False,

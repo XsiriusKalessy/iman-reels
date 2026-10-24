@@ -15,6 +15,10 @@ FILES = {
     "Caveat": "Caveat-Bold.ttf",
     "Figtree SemiBold": "Figtree-SemiBold.ttf",
     "Figtree ExtraBold": "Figtree-ExtraBold.ttf",
+    "Bebas Neue": "BebasNeue-Regular.ttf",
+    "Archivo Black": "ArchivoBlack-Regular.ttf",
+    "Bangers": "Bangers-Regular.ttf",
+    "Poppins ExtraBold": "Poppins-ExtraBold.ttf",
 }
 
 

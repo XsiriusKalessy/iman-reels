@@ -20,6 +20,10 @@ FONTS = {  # nombre visible -> fuente incluida
     "Condensada": "Anton",
     "Elegante": "Playfair Display ExtraBold",
     "Manuscrita": "Caveat",
+    "Bebas": "Bebas Neue",
+    "Hormozi": "Poppins ExtraBold",
+    "Bloque": "Archivo Black",
+    "Cómic": "Bangers",
 }
 
 

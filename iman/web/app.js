@@ -41,7 +41,8 @@ async function loadOptions() {
 }
 // Galería de estilos: cada tarjeta enseña el texto moviéndose como saldrá en el reel.
 const CSS_FONT = { "Montserrat Black": "Iman Impacto", "Anton": "Iman Condensada", "Playfair Display ExtraBold": "Iman Elegante",
-  "Caveat": "Iman Manuscrita", "Figtree ExtraBold": "Iman Moderna", "Figtree SemiBold": "Iman Ligera" };
+  "Caveat": "Iman Manuscrita", "Figtree ExtraBold": "Iman Moderna", "Figtree SemiBold": "Iman Ligera",
+  "Bebas Neue": "Iman Bebas", "Archivo Black": "Iman Bloque", "Bangers": "Iman Comic", "Poppins ExtraBold": "Iman Hormozi" };
 function stylePreview(s) {
   const L = s.look;
   if (!L) return "";

@@ -139,6 +139,10 @@ details[open] summary { margin-bottom: 8px; }
 @font-face { font-family: "Iman Manuscrita"; src: url(/fonts/Caveat-Bold.ttf); }
 @font-face { font-family: "Iman Moderna"; src: url(/fonts/Figtree-ExtraBold.ttf); }
 @font-face { font-family: "Iman Ligera"; src: url(/fonts/Figtree-SemiBold.ttf); }
+@font-face { font-family: "Iman Bebas"; src: url(/fonts/BebasNeue-Regular.ttf); }
+@font-face { font-family: "Iman Bloque"; src: url(/fonts/ArchivoBlack-Regular.ttf); }
+@font-face { font-family: "Iman Comic"; src: url(/fonts/Bangers-Regular.ttf); }
+@font-face { font-family: "Iman Hormozi"; src: url(/fonts/Poppins-ExtraBold.ttf); }
 dialog.wide { width: min(880px, 94vw); }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 99px; background: var(--line); vertical-align: -1px; margin-right: 4px; }
 .brand-grid { display: grid; grid-template-columns: 1fr 300px; gap: 28px; margin-top: 14px; }

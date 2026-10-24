@@ -101,6 +101,27 @@ STYLES: dict[str, Style] = {
         16, 0, True, "Montserrat Black", 96, rgb("#FFE14D"), rgb("#111111"), max_words=3, max_chars=16, y=1360,
         pop=False, box=rgb("#FFE14D"), entry="muelle",
     ),
+    # Arsenal de retención: fuentes libres (OFL) muy legibles en pantallas pequeñas.
+    "hormozi": Style(
+        "hormozi", "Hormozi", "Poppins ExtraBold", 82, rgb("#FFFFFF"), rgb("#2BE36B"), rgb("#000000"),
+        8, 0, True, "Poppins ExtraBold", 100, rgb("#2BE36B"), rgb("#000000"), max_words=2, max_chars=16, y=1320,
+        pop=True, entry="pop",
+    ),
+    "bebas": Style(
+        "bebas", "Bebas", "Bebas Neue", 150, rgb("#FFFFFF"), rgb("#FFD23F"), rgb("#000000"),
+        5, 2, True, "Bebas Neue", 150, rgb("#FFD23F"), rgb("#111111"), max_words=2, max_chars=16, y=1300,
+        pop=False, entry="pop",
+    ),
+    "comic": Style(
+        "comic", "Cómic", "Bangers", 120, rgb("#FFFFFF"), rgb("#FF4F7B"), rgb("#111111"),
+        7, 4, True, "Bangers", 130, rgb("#FFE14D"), rgb("#111111"), max_words=2, max_chars=16, y=1300,
+        pop=False, entry="muelle",
+    ),
+    "bloque": Style(
+        "bloque", "Bloque", "Archivo Black", 76, rgb("#FFFFFF"), rgb("#FF5547"), rgb("#111111"),
+        14, 0, True, "Archivo Black", 92, rgb("#FFFFFF"), rgb("#111111"), max_words=3, max_chars=16, y=1360,
+        pop=False, box=rgb("#111111"), entry="pop",
+    ),
 }
 
 # Animaciones de entrada (ASS): suaves, con un pequeño rebote o desenfoque, como el motion de las apps modernas.
