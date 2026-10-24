@@ -111,6 +111,7 @@ def _transcribe(src: Path, workdir: Path, cfg: dict, progress: Progress) -> list
     words = transcribe(
         audio, cfg.get("transcriber", "local"), cfg.get("language") or None,
         cfg.get("whisper_model", "small"), cfg.get("openai_key") or None,
+        on_progress=lambda f: progress("Escuchando lo que dices", round(0.10 + 0.25 * f, 3)),
     )
     transcript_file.write_text(json.dumps([w.__dict__ for w in words], ensure_ascii=False, indent=1))
     return words

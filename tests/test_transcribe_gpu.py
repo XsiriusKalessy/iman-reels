@@ -7,7 +7,7 @@ def test_falls_back_to_cpu_when_cuda_libs_are_missing(monkeypatch, tmp_path):
     devices = []
 
     class FakeModel:
-        def __init__(self, model, device, compute_type):
+        def __init__(self, model, device, compute_type, **kw):
             self.device = device
             devices.append(device)
 
@@ -21,3 +21,6 @@ def test_falls_back_to_cpu_when_cuda_libs_are_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(transcribe, "_pcm", lambda a: np.zeros(16000, dtype=np.float32))
     assert transcribe._local(tmp_path / "a.wav", "es", "tiny") == []
     assert devices == ["auto", "cpu"]
+    transcribe._local(tmp_path / "a.wav", "es", "tiny")  # la segunda vez, directo a la CPU
+    assert devices == ["auto", "cpu", "cpu"]
+    monkeypatch.setattr(transcribe, "_cpu_only", False)
