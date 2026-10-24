@@ -477,3 +477,14 @@ def test_looks_and_new_templates(sample, tmp_path, look):
                        cfg, words=TAKE, plan=EditPlan(effects=fx))
     assert media.LOOKS[look].split("=")[0] in (tmp_path / "w" / "reel.filters.txt").read_text(encoding="utf-8")
     assert abs(media.probe(res.video).duration - res.duration_out) < 0.3
+
+
+def test_whip_and_glitch_transitions_render(sample, tmp_path):
+    from iman.models import Span
+
+    spans = [Span(0.0, 1.5), Span(2.0, 3.5), Span(4.0, 5.5), Span(6.0, 7.5), Span(8.0, 9.5)]
+    trans = media.transition_plan(spans)
+    assert set(trans.values()) == {"whip", "glitch"}
+    info = media.probe(sample)
+    out = media.render(sample, tmp_path / "t.mp4", spans, info, None, preset="ultrafast", transitions=trans)
+    assert abs(media.probe(out).duration - 7.5) < 0.3

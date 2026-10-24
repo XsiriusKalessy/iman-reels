@@ -401,6 +401,7 @@ $("#go").onclick = async () => {
   fd.append("sfx", $("#sfx").checked);
   fd.append("punch", $("#punch").checked);
   fd.append("barra", $("#barra").checked);
+  fd.append("transiciones", $("#transiciones").checked);
   fd.append("look", $("#look").value);
   const ms = $("#music-style").value;
   if (ms === "mia" && $("#music-file").files[0]) fd.append("music_file", $("#music-file").files[0]);
@@ -810,6 +811,52 @@ $("#swatches").onclick = e => {
   if (!c) return;
   // Clic: principal. Mayúsculas + clic: secundario.
   brandForm[e.shiftKey ? "secondary" : "primary"].value = c;
+  previewBrand();
+};
+// Paletas de 3 colores armónicos: según el sector y el color que ya tengas (o uno de partida).
+const SECTOR_PALETTES = {
+  viajes: [["#0E7C86", "#F4A259", "#F7EFE5"], ["#1D3557", "#E63946", "#F1FAEE"], ["#264653", "#E9C46A", "#F4F1EA"]],
+  cursos: [["#3A0CA3", "#F72585", "#F8F7FF"], ["#14213D", "#FCA311", "#F5F5F5"], ["#2B2D42", "#EF233C", "#EDF2F4"]],
+  productos: [["#111111", "#FF5547", "#FFF4E8"], ["#2D6A4F", "#F4A261", "#FAF7F0"], ["#5F0F40", "#FB8B24", "#FFF8F0"]],
+  empresas: [["#0B3954", "#087E8B", "#F5F7FA"], ["#1B263B", "#C9A227", "#F4F4F4"], ["#22223B", "#4A4E69", "#F2E9E4"]],
+};
+function hsl(h, s, l) {
+  l /= 100; const a = s * Math.min(l, 1 - l) / 100;
+  const f = n => { const k = (n + h / 30) % 12; const c = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(255 * c).toString(16).padStart(2, "0"); };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
+function hueOf(hex) {
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  if (!d) return 0;
+  const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return (h * 60 + 360) % 360;
+}
+function makePalettes() {
+  const sector = brandForm.sector.value;
+  const base = brandForm.primary.value && brandForm.primary.value !== "#000000" ? brandForm.primary.value : null;
+  const h = base ? hueOf(base) : Math.floor(Math.random() * 360);
+  const harmonic = [
+    [hsl(h, 70, 38), hsl((h + 180) % 360, 80, 58), hsl(h, 30, 95)],  // complementarios
+    [hsl(h, 65, 35), hsl((h + 35) % 360, 75, 55), hsl((h + 10) % 360, 25, 94)],  // análogos
+    [hsl(h, 70, 40), hsl((h + 120) % 360, 70, 55), hsl((h + 240) % 360, 20, 95)],  // tríada
+  ];
+  return [...(SECTOR_PALETTES[sector] || []), ...harmonic];
+}
+$("#palette-btn").onclick = () => {
+  const box = $("#palettes");
+  box.innerHTML = makePalettes().map(p => `<button type="button" class="palette" data-p="${p.join(",")}" title="Usar estos colores">
+    ${p.map(c => `<span style="background:${c}"></span>`).join("")}</button>`).join("")
+    + `<p class="hint">Principal, secundario y fondo claro. Pulsa una para usarla; vuelve a pedir para ver más.</p>`;
+  box.hidden = false;
+};
+$("#palettes").onclick = e => {
+  const b = e.target.closest(".palette");
+  if (!b) return;
+  const [p1, p2] = b.dataset.p.split(",");
+  brandForm.primary.value = p1; brandForm.secondary.value = p2;
+  $$("#palettes .palette").forEach(x => x.classList.toggle("on", x === b));
   previewBrand();
 };
 function brandError(msg) { $("#brand-error").textContent = msg || ""; $("#brand-error").hidden = !msg; }

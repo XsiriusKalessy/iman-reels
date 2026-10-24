@@ -171,6 +171,7 @@
           <label class="check"><input type="checkbox" id="voice" checked> Mejorar la voz (menos ruido, volumen estable)</label>
           <label class="check"><input type="checkbox" id="sfx" checked> Efectos de sonido (golpe al empezar, whoosh y pops en cada efecto)</label>
           <label class="check"><input type="checkbox" id="punch" checked> Zoom de entrada en el primer medio segundo</label>
+          <label class="check"><input type="checkbox" id="transiciones" checked> Transiciones en los cortes (barrido y glitch)</label>
           <label class="check"><input type="checkbox" id="barra"> Barra de progreso arriba (se llena hasta el final y engancha)</label>
           <div class="music-row">
             <label>🎵 Música de fondo
@@ -403,6 +404,8 @@
           <div>
             <h3>Colores</h3>
             <div class="swatches" id="swatches"></div>
+            <button class="ghost small" id="palette-btn" type="button">🎨 ¿No tienes colores? Propónmelos</button>
+            <div class="palettes" id="palettes" hidden></div>
             <div class="row tight">
               <label class="color">Principal<input type="color" name="primary"></label>
               <label class="color">Secundario<input type="color" name="secondary"></label>

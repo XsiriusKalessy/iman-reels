@@ -46,6 +46,7 @@ class EditOptions:
     music: bool | str = "auto"
     punch: bool = True  # zoom rápido de entrada en el primer medio segundo
     barra: bool = False  # barra de progreso arriba que se llena hasta el final (retención)
+    transiciones: bool = True  # whip y glitch en uno de cada dos cortes
     look: str = "auto"  # "auto" = el que recomienda la IA; o color y textura de un clic (media.LOOKS): "calido", "teal", "cine", "grano", "retro", "bn"…
 
 
@@ -378,10 +379,13 @@ def run(
     if whole:
         segs = [whole, *segs]  # va primero: los efectos de fondo del plan se pintan encima
     hush = _hush_windows(plan.silence, words, clock) if (opts.sfx or opts.music) else []
+    trans = media.transition_plan(spans) if opts.transiciones and not voice_only else {}
     sound = None
     if opts.sfx:
         evs = _sfx_events(active if opts.effects else [], clock, bool(opts.hook and plan.hook_title), beats, spans,
                           hush)
+        starts = [sum(sp.duration for sp in spans[:i]) for i in range(len(spans))]
+        evs = sorted(evs + [(starts[i], "whoosh" if k == "whip" else "click", 0.45) for i, k in trans.items()])
         if evs:
             sound = sfx.bed(evs, total, workdir / "sfx.wav")
     choice = opts.music
@@ -395,7 +399,7 @@ def run(
     if look == "auto":
         look = plan.color if plan.color in media.LOOKS else AUTO_LOOK.get(opts.pack, "natural")
         plan.color = look
-    av = dict(sfx_bed=sound, music=music, punch=punch, hush=hush, look=look)
+    av = dict(sfx_bed=sound, music=music, punch=punch, hush=hush, look=look, transitions=trans)
     if segs and segment.available():
         # Dos pasadas: primero el reel limpio, luego la persona recortada encima de lo que va detrás.
         base = media.render(src, workdir / "base.mp4", spans, info, None, opts.size, opts.fit, opts.voice, zoom,

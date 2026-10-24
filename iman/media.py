@@ -123,6 +123,24 @@ LOOKS = {
     "bn": "hue=s=0,eq=contrast=1.18,noise=alls=12:allf=t,vignette=PI/5",
 }
 
+# Transiciones en los cortes: un barrido con desenfoque de movimiento (whip) o un glitch de 0,1 s.
+TRANSITIONS = {
+    "whip": "avgblur=sizeX=56:sizeY=1:enable='lt(t,0.12)'",
+    "glitch": "rgbashift=rh=-18:gh=6:bh=18:enable='lt(t,0.1)',noise=alls=45:allf=t:enable='lt(t,0.1)'",
+}
+
+
+def transition_plan(spans: list[Span]) -> dict[int, str]:
+    """En qué tramos entra una transición: uno de cada dos cortes de verdad, alternando whip y glitch."""
+    out, n = {}, 0
+    for i in range(1, len(spans)):
+        if abs(spans[i - 1].end - spans[i].start) > 1e-3:
+            n += 1
+            if n % 2 == 0:
+                out[i] = "whip" if (n // 2) % 2 else "glitch"
+    return out
+
+
 ZOOM = 1.15  # plano cerrado: un 15 % más de cerca
 
 SIZES = {"1080": (1080, 1920), "4k": (2160, 3840)}
@@ -254,6 +272,7 @@ def build_filtergraph(
     punch: bool = False,
     hush: list[tuple[float, float]] | None = None,
     look: str = "",
+    transitions: dict[int, str] | None = None,
 ) -> str:
     """`tail`: segundos extra al final (último fotograma congelado y silencio) para el cierre de marca.
     `sfx_bed`: pista con los efectos de sonido; `music`: tu música, que baja sola cuando hablas.
@@ -267,7 +286,8 @@ def build_filtergraph(
         d = sp.duration
         fade = min(0.012, d / 4)
         zoom = f",crop=iw/{ZOOM}:ih/{ZOOM},scale={w0}:{h0}" if zooms[i] else ""
-        parts.append(f"[0:v]trim=start={sp.start:.3f}:end={sp.end:.3f},setpts=PTS-STARTPTS{zoom},setsar=1[v{i}]")
+        tr = "," + TRANSITIONS[transitions[i]] if transitions and i in transitions else ""
+        parts.append(f"[0:v]trim=start={sp.start:.3f}:end={sp.end:.3f},setpts=PTS-STARTPTS{zoom},setsar=1{tr}[v{i}]")
         # Microfundidos solo en los cortes de verdad, no donde un tramo sigue al anterior.
         fades = []
         if i == 0 or abs(spans[i - 1].end - sp.start) > 1e-3:
@@ -365,9 +385,10 @@ def render(
     punch: bool = False,
     hush: list[tuple[float, float]] | None = None,
     look: str = "",
+    transitions: dict[int, str] | None = None,
 ) -> Path:
     graph = build_filtergraph(spans, info, ass_path, size, fit, voice, zooms, overlays, tail, sfx_bed, music, punch,
-                              hush, look)
+                              hush, look, transitions)
     script = dst.with_suffix(".filters.txt")
     script.write_text(graph, encoding="utf-8")
     extra, _ = _image_inputs(overlays, 1)

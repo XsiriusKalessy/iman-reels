@@ -367,3 +367,8 @@ label.color input { width: 44px; height: 34px; padding: 2px; margin: 0; border-r
 .music-row select { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card, transparent); color: var(--text); min-width: 240px; }
 .quick-music { display: inline-flex; gap: 6px; align-items: center; color: var(--text); font-size: 14px; }
 .quick-music select { padding: 8px 10px; border-radius: 99px; border: 1px solid var(--line); background: transparent; color: var(--text); }
+.palettes { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.palette { display: flex; padding: 0; border: 2px solid var(--line); border-radius: 12px; overflow: hidden; cursor: pointer; background: none; }
+.palette span { width: 34px; height: 34px; display: block; }
+.palette.on { border-color: var(--accent); }
+.palettes .hint { flex-basis: 100%; margin: 4px 0 0; }
