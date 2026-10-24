@@ -698,7 +698,8 @@ def behind_events(effects: list[dict], clock: WordClock, style: Style, duration:
     return lines
 
 
-VIDEO_KINDS = {"bruto": (3.0, 2.0), "fantasma": (1.6, 0.8), "pagina": (2.6, 1.6), "apoyo": (3.0, 1.5)}
+VIDEO_KINDS = {"bruto": (3.0, 2.0), "fantasma": (1.6, 0.8), "pagina": (2.6, 1.6), "apoyo": (3.0, 1.5),
+               "objeto": (2.2, 1.0)}
 PERSON_TYPES = (*SEG_KINDS, "apoyo")  # necesitan a alguien delante de la cámara
 MEDIA_EXT = (".mp4", ".mov", ".m4v", ".webm", ".jpg", ".jpeg", ".png", ".webp")
 
@@ -755,6 +756,11 @@ def pagina_events(effect: dict, clock: WordClock, style: Style, duration: float)
     return lines, Window(start, end)
 
 
+def _floats(fx: dict) -> bool:
+    """Las pegatinas de objetos van por encima de lo demás: no acortan al efecto que esté en pantalla."""
+    return fx.get("type") == "objeto"
+
+
 def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=None,
               assets: dict[str, str] | None = None) -> list[VideoOp]:
     """Los efectos de vídeo de un plan, en tiempos del reel. `src_of(t)` da el segundo de la toma original.
@@ -765,7 +771,8 @@ def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=Non
         kind = fx.get("type")
         if kind not in VIDEO_KINDS:
             continue
-        later = [t for j, t in enumerate(starts) if j != i and t is not None and starts[i] is not None and t > starts[i]]
+        later = [t for j, t in enumerate(starts) if j != i and t is not None and starts[i] is not None and t > starts[i]
+                 and (kind == "objeto" or not _floats(effects[j]))]
         span = _span({**fx, "_next": min(later) if later else None}, clock, duration, *VIDEO_KINDS[kind])
         if not span:
             continue
@@ -776,6 +783,14 @@ def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=Non
             path = (assets or {}).get(str(fx.get("text", "")).strip(), "")
             if not path:
                 continue
+        if kind == "objeto":
+            from . import stickers
+
+            n_obj = sum(1 for o in ops if o.kind == "objeto")
+            png = stickers.render(str(fx.get("text", "")), str(fx.get("subtitle", "")), -5.0 if n_obj % 2 else 5.0)
+            if not png:
+                continue
+            path = str(png)
         ops.append(VideoOp(kind, span[0], span[1], max(0.0, src - 0.5), path=path))
     return ops
 
@@ -798,7 +813,8 @@ def build_effects(effects: list[dict], clock: WordClock, style: Style, duration:
     starts = [clock.at(int(fx.get("word", fx.get("items", [{}])[0].get("at_word", -1) if fx.get("items") else -1)))
               for fx in effects or []]
     for i, fx in enumerate(effects or []):
-        later = [t for j, t in enumerate(starts) if j != i and t is not None and starts[i] is not None and t > starts[i]]
+        later = [t for j, t in enumerate(starts) if j != i and t is not None and starts[i] is not None and t > starts[i]
+                 and not _floats(effects[j])]
         fx = {**fx, "_next": min(later) if later else None, "_from": source_duration}
         builder = BUILDERS.get(fx.get("type")) or _pack_builders().get(fx.get("type"))
         if not builder:

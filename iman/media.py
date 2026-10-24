@@ -181,6 +181,15 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx
             parts.append(f"[rg{k}][fc{k}]overlay={ring}:{ring}:shortest=1[bb{k}]")
             parts.append(f"[m{k}][br{k}]overlay=0:0:{on}:eof_action=pass[t{k}]")
             parts.append(f"[t{k}][bb{k}]overlay=x=W-w-{int(48 * k_scale)}:y={int(250 * k_scale)}:{on}:eof_action=pass[o{k}]")
+        elif op.kind == "objeto" and images and id(op) in images:
+            # Pegatina del objeto que se nombra: entra subiendo y con fundido, alternando lado.
+            n_obj = sum(1 for o in ops[:k] if o.kind == "objeto")
+            sw = int(400 * k_scale)
+            parts.append(f"{images[id(op)]}scale={sw}:-1,format=rgba,loop=-1:1,fps=30,setpts=N/30/TB,"
+                         f"fade=t=in:st={a:.3f}:d=0.2:alpha=1,fade=t=out:st={b - 0.2:.3f}:d=0.2:alpha=1[ob{k}]")
+            x = f"W-w-{int(50 * k_scale)}" if n_obj % 2 == 0 else f"{int(50 * k_scale)}"
+            y = f"{int(860 * k_scale)}+{int(90 * k_scale)}*max(0,1-(t-{a:.3f})/0.25)"
+            parts.append(f"{cur}[ob{k}]overlay=x={x}:y='{y}':{on}:shortest=1[o{k}]")
         elif op.kind in ("logo", "logo_end") and images and id(op) in images:
             # Logo de la marca: pequeño en la esquina (zona segura de Instagram) o grande en el cierre.
             lw = int((150 if op.kind == "logo" else 420) * k_scale)

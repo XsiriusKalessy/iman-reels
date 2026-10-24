@@ -497,7 +497,7 @@ $("#chat-ideas").onclick = e => {
 const FX_NAMES = { lista: "Lista", palabra: "Palabra gigante", titular: "Titular", cifra: "Cifra", frase: "Frase", tecleo: "Texto que se escribe",
   color: "Golpe de color", comentario: "Comentario", contador: "Contador", portada: "Portada de revista", cta: "Llamada a la acción",
   dato: "Dato", bruto: "Toma en bruto", fantasma: "Eco", pagina: "Página de revista", detras: "Texto detrás de ti",
-  fondo: "Fondo de color", desenfoque: "Fondo desenfocado", ubicacion: "Ubicación", oferta: "Oferta", ruta: "Ruta",
+  fondo: "Fondo de color", desenfoque: "Fondo desenfocado", ubicacion: "Ubicación", objeto: "Objeto", oferta: "Oferta", ruta: "Ruta",
   testimonio: "Testimonio", plazas: "Plazas", precio: "Precio", apoyo: "Vídeo de apoyo",
   sube: "Sube con tu dedo", choque: "El choque", aparece: "Aparece donde señalas" };
 function renderEffects(j) {

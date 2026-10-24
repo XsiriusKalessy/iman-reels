@@ -351,3 +351,18 @@ def test_long_video_to_several_reels(tmp_path, monkeypatch):
         assert media.probe(tmp_path / "jobs" / cl["id"] / "reel.mp4").duration > 10
     lib = c.get("/api/reels").json()["reels"]
     assert {r["id"] for r in lib} == {cl["id"] for cl in clips}
+
+
+def test_object_stickers_over_a_list(sample, tmp_path, monkeypatch):
+    from iman.models import EditPlan
+
+    monkeypatch.setattr("iman.stickers.HOME", tmp_path / "home")
+    fx = [{"type": "lista", "title": "", "items": [{"text": "Adaptador", "at_word": 3}, {"text": "Calcetines", "at_word": 7}],
+           "until_word": 12, "look": "checklist"},
+          {"type": "objeto", "word": 3, "text": "🔌", "subtitle": "Adaptador"},
+          {"type": "objeto", "word": 7, "text": "🧦", "subtitle": "Calcetines 🇯🇵"}]
+    cfg = {"provider": "none", "anthropic_key": "", "openai_key": "", "claude_model": "", "openai_model": ""}
+    res = pipeline.run(sample, tmp_path / "w", pipeline.EditOptions(), cfg, words=TAKE, plan=EditPlan(effects=fx))
+    assert len(list((tmp_path / "home" / "cache" / "stickers").glob("*.png"))) == 2
+    info = media.probe(res.video)
+    assert (info.width, info.height) == (1080, 1920) and abs(info.duration - res.duration_out) < 0.3

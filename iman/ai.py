@@ -16,11 +16,12 @@ OPENAI_MODEL = "gpt-4o"
 
 EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "color", "comentario",
                 "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
-                "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque", "aparece"]
+                "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque", "aparece",
+                "objeto"]
 FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
                    "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                    "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque",
-                   "aparece")
+                   "aparece", "objeto")
 LISTA_LOOKS = ("checklist", "capitulos", "itinerario")
 TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
@@ -47,7 +48,7 @@ EDIT_SCHEMA = {
         "emphasis": {"type": "array", "items": {"type": "integer"}},
         "effects": {
             "type": "array",
-            "description": "Efectos en pantalla. Úsalos con moderación: 0 a 3 por reel.",
+            "description": "Efectos en pantalla, variados: uno cada 5 a 8 segundos (en un reel de 60 s, de 7 a 11).",
             "items": {
                 "type": "object",
                 "properties": {
@@ -77,7 +78,7 @@ EDIT_SCHEMA = {
         },
         "zooms": {
             "type": "array",
-            "description": "Rangos [desde, hasta] de palabras donde acercar la cámara para dar énfasis (0 a 4).",
+            "description": "Rangos [desde, hasta] de palabras donde acercar la cámara para dar énfasis (3 a 8).",
             "items": {
                 "type": "object",
                 "properties": {"from": {"type": "integer"}, "to": {"type": "integer"}},
@@ -107,7 +108,12 @@ Tu trabajo:
    con las palabras del propio creador cuando sea posible. Sin emojis ni comillas.
 3. hook_line: una frase de gancho alternativa por si el creador quiere regrabar el arranque.
 4. emphasis: índices de 3 a 8 palabras clave que conviene resaltar en los subtítulos (cifras, conceptos clave).
-5. effects: solo si aportan.
+5. effects: el reel tiene que entrar por los ojos, como los de los creadores que más enganchan. Pon un efecto
+   cada 5 a 8 segundos (en un reel de 60 s, de 7 a 11), repartidos de principio a fin y MUY variados: mezcla
+   textos grandes (titular, palabra, cifra, frase), efectos de vídeo (detras, fondo, desenfoque, fantasma, pagina),
+   tarjetas (ubicacion, dato, lista, objeto) y un cierre (cta). Que el primer segundo ya tenga algo potente
+   (detras, titular o color). No repitas el mismo tipo dos veces seguidas. Que cada uno tenga sentido con lo
+   que se dice en ese momento: nada de relleno.
    - "lista": cuando el creador enumera pasos o razones ("uno…, dos…, tres…"). Cada punto, en 2 a 5 palabras,
      con el índice donde empieza a decirlo. Para "lista" deja word en -1 y text vacío.
    - "palabra": una palabra clave que salta gigante en pantalla un segundo.
@@ -165,9 +171,15 @@ Tu trabajo:
      "mi socio"). Cuando presenta algo concreto: un precio, un sitio, una persona.
    En "lista", look "itinerario" muestra los días de un viaje en una línea de tiempo; look "capitulos" muestra un índice numerado que se ilumina por partes; look "checklist" muestra casillas arriba que se marcan al decir cada punto (bueno para
    "lo que hace" o "lo que no necesitas"); vacío muestra la lista grande en el centro.
-   Rellena siempre todos los campos: los que no use el tipo van vacíos, [] o -1. Como mucho uno de cada
-   tipo y nunca dos efectos a la vez.
-6. zooms: rangos cortos (una frase) donde acercar la cámara para subrayar una idea fuerte.
+   - "objeto": pegatina con el dibujo de una cosa concreta que el creador nombra (text: UN emoji que la dibuje,
+     p. ej. 🔌 adaptador, 🧦 calcetines, 💊 medicinas, 📱 móvil, 💶 dinero, ✈️ vuelo, 🍣 comida, 🏨 hotel;
+     subtitle: el nombre en 1 a 3 palabras). Dura unos 2 segundos. Úsalo cada vez que nombre objetos, sobre todo
+     al enumerar (uno por cosa, aunque haya una "lista" a la vez: es la única excepción).
+   Rellena siempre todos los campos: los que no use el tipo van vacíos, [] o -1. Cada tipo como mucho dos
+   veces (portada, detras, contador, comentario y cta una sola; objeto y apoyo, las que hagan falta) y nunca
+   dos efectos a la vez, salvo objeto con lista.
+6. zooms: rangos cortos (una frase) donde acercar la cámara para subrayar una idea fuerte: de 3 a 8, para
+   que el plano no se quede quieto.
 7. pauses: los silencios se cortan, pero no por segundos: con sentido. Si el creador hace una pausa a propósito
    para dar fuerza (antes de revelar un dato, tras una pregunta, antes del remate), pon el índice de la palabra
    tras la que va esa pausa y se respetará. Solo las que de verdad suman.
