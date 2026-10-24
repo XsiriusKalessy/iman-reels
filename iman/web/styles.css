@@ -138,6 +138,7 @@ details[open] summary { margin-bottom: 8px; }
 @font-face { font-family: "Iman Elegante"; src: url(/fonts/PlayfairDisplay-ExtraBold.ttf); }
 @font-face { font-family: "Iman Manuscrita"; src: url(/fonts/Caveat-Bold.ttf); }
 @font-face { font-family: "Iman Moderna"; src: url(/fonts/Figtree-ExtraBold.ttf); }
+@font-face { font-family: "Iman Ligera"; src: url(/fonts/Figtree-SemiBold.ttf); }
 dialog.wide { width: min(880px, 94vw); }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 99px; background: var(--line); vertical-align: -1px; margin-right: 4px; }
 .brand-grid { display: grid; grid-template-columns: 1fr 300px; gap: 28px; margin-top: 14px; }
@@ -338,3 +339,26 @@ label.color input { width: 44px; height: 34px; padding: 2px; margin: 0; border-r
 .picked-row { margin-top: 8px; text-align: center; }
 .picked-row a { text-decoration: underline; }
 .quick.ideas button.on { border-color: var(--accent); color: var(--accent); }
+
+/* galería de estilos de texto, con su animación de entrada en bucle */
+#styles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+.style-card > span { display: flex; flex-direction: column; gap: 8px; align-items: stretch; text-align: center; padding: 8px; }
+.sp { position: relative; display: block; aspect-ratio: 9 / 13; border-radius: 10px; overflow: hidden;
+  background: radial-gradient(120% 80% at 50% 25%, #6b5a52 0%, #2c2623 55%, #151312 100%); }
+.sp-face { position: absolute; left: 50%; top: 18%; width: 46%; aspect-ratio: 3 / 4; translate: -50% 0; border-radius: 50% 50% 44% 44%;
+  background: linear-gradient(#c9a58c, #a78169); opacity: .55; }
+.sp-text { position: absolute; left: 50%; bottom: 14%; translate: -50% 0; width: max-content; font-style: normal; line-height: 1.05; max-width: 92%;
+  animation: 2.4s cubic-bezier(.2, .9, .3, 1.2) infinite; }
+.sp-text b { font-weight: inherit; }
+.e-pop { animation-name: sp-pop; }
+.e-muelle { animation-name: sp-muelle; }
+.e-sube { animation-name: sp-sube; animation-timing-function: cubic-bezier(.16, 1, .3, 1); }
+.e-enfoque { animation-name: sp-enfoque; animation-timing-function: cubic-bezier(.16, 1, .3, 1); }
+@keyframes sp-pop { 0% { transform: scale(.8); opacity: 0 } 8% { transform: scale(1); opacity: 1 } 85% { opacity: 1 } 100% { opacity: 0 } }
+@keyframes sp-muelle { 0% { transform: scale(.5); opacity: 0 } 7% { transform: scale(1.16); opacity: 1 } 12% { transform: scale(.95) }
+  16% { transform: scale(1) } 85% { opacity: 1 } 100% { opacity: 0 } }
+@keyframes sp-sube { 0% { transform: translateY(14px); filter: blur(5px); opacity: 0 } 12% { transform: none; filter: blur(0); opacity: 1 }
+  85% { opacity: 1 } 100% { opacity: 0 } }
+@keyframes sp-enfoque { 0% { transform: scale(1.1); filter: blur(10px); opacity: 0 } 16% { transform: none; filter: blur(0); opacity: 1 }
+  85% { opacity: 1 } 100% { opacity: 0 } }
+@media (prefers-reduced-motion: reduce) { .sp-text { animation: none; } }

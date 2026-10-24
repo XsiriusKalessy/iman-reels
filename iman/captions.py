@@ -30,6 +30,11 @@ class Style:
     y: int = 1340  # altura de los subtítulos
     pop: bool = True  # la palabra activa crece un poco
     box: str = ""  # color de caja detrás de cada bloque (vacío = sin caja)
+    # Cómo entra cada bloque: pop (crece), muelle (rebota), sube (sube desenfocado), enfoque (se enfoca).
+    entry: str = "pop"
+    # Si tiene fuente alternativa, las palabras destacadas salen solas, enormes y con esa fuente.
+    alt_font: str = ""
+    alt_size: int = 0
 
 
 def rgb(hex6: str) -> str:
@@ -66,7 +71,50 @@ STYLES: dict[str, Style] = {
         "neon", "Neón", "Anton", 96, rgb("#FFFFFF"), rgb("#39FF88"), rgb("#0A0A0A"),
         5, 0, True, "Anton", 112, rgb("#39FF88"), rgb("#0A0A0A"), max_words=2, max_chars=14,
     ),
+    "gigante": Style(
+        "gigante", "Gigante", "Anton", 230, rgb("#FFFFFF"), rgb("#FFE14D"), rgb("#000000"),
+        7, 0, True, "Anton", 112, rgb("#FFE14D"), rgb("#111111"), max_words=1, max_chars=40, y=1230,
+        pop=False, entry="muelle",
+    ),
+    "mezcla": Style(
+        "mezcla", "Mezcla", "Figtree ExtraBold", 68, rgb("#FFFFFF"), rgb("#FF4F7B"), rgb("#000000"),
+        2, 3, False, "Figtree ExtraBold", 84, rgb("#FFFFFF"), rgb("#141518"), max_words=5, max_chars=26, y=1320,
+        pop=False, entry="sube", alt_font="Playfair Display ExtraBold", alt_size=150,
+    ),
+    "minimal": Style(
+        "minimal", "Minimal", "Figtree SemiBold", 66, rgb("#FFFFFF"), rgb("#FFD84D"), rgb("#000000"),
+        0, 3, False, "Figtree ExtraBold", 84, rgb("#FFFFFF"), rgb("#141518"), max_words=5, max_chars=28, y=1340,
+        pop=False, entry="sube",
+    ),
+    "elegante": Style(
+        "elegante", "Elegante", "Playfair Display ExtraBold", 86, rgb("#FFFFFF"), rgb("#F2C46D"), rgb("#000000"),
+        0, 3, False, "Playfair Display ExtraBold", 92, rgb("#F4ECDF"), rgb("#1A1A1A"), max_words=3, max_chars=20,
+        pop=False, entry="enfoque",
+    ),
+    "manuscrita": Style(
+        "manuscrita", "Manuscrita", "Caveat", 140, rgb("#FFFFFF"), rgb("#FFE14D"), rgb("#000000"),
+        0, 4, False, "Caveat", 120, rgb("#FFFFFF"), rgb("#141518"), max_words=3, max_chars=22, y=1300,
+        pop=False, entry="sube",
+    ),
+    "marcador": Style(
+        "marcador", "Marcador", "Montserrat Black", 74, rgb("#111111"), rgb("#E0322C"), rgb("#FFE14D"),
+        16, 0, True, "Montserrat Black", 96, rgb("#FFE14D"), rgb("#111111"), max_words=3, max_chars=16, y=1360,
+        pop=False, box=rgb("#FFE14D"), entry="muelle",
+    ),
 }
+
+# Animaciones de entrada (ASS): suaves, con un pequeño rebote o desenfoque, como el motion de las apps modernas.
+ENTRIES = {
+    "pop": r"\fscx82\fscy82\t(0,110,\fscx100\fscy100)",
+    "muelle": r"\fscx55\fscy55\t(0,120,\fscx116\fscy116)\t(120,200,\fscx95\fscy95)\t(200,260,\fscx100\fscy100)",
+    "sube": r"\alpha&HFF&\blur6\t(0,180,\alpha&H00&\blur0)",
+    "enfoque": r"\alpha&HFF&\blur16\fscx108\fscy108\t(0,240,\alpha&H00&\blur0\fscx100\fscy100)",
+}
+
+
+def _place(entry: str, y: int) -> str:
+    """Posición del bloque; «sube» entra desde 36 px más abajo."""
+    return f"\\move(540,{y + 36},540,{y},0,180)" if entry == "sube" else f"\\pos(540,{y})"
 
 
 def _ts(t: float) -> str:
@@ -164,7 +212,25 @@ def build_ass(
         anim = r"{\pos(540,560)\fad(120,200)\fscx70\fscy70\t(0,180,\fscx104\fscy104)\t(180,260,\fscx100\fscy100)}"
         lines.append(f"Dialogue: 2,{_ts(0)},{_ts(hook_end)},Hook,,0,0,0,,{anim}{title}")
 
-    for group in group_words(words, style.max_words, style.max_chars):
+    groups = group_words(words, style.max_words, style.max_chars)
+    if style.alt_font and emphasis:
+        # Las palabras destacadas salen solas, con la fuente alternativa.
+        split = []
+        for g in groups:
+            cur = []
+            for k in g:
+                if k in emphasis:
+                    if cur:
+                        split.append(cur)
+                    split.append([k])
+                    cur = []
+                else:
+                    cur.append(k)
+            if cur:
+                split.append(cur)
+        groups = split
+    for group in groups:
+        solo = bool(style.alt_font) and len(group) == 1 and group[0] in emphasis
         g_start = words[group[0]].start
         g_end = words[group[-1]].end
         # Cada bloque dura hasta que empieza el siguiente (máx. 0.6 s de cola).
@@ -193,11 +259,14 @@ def build_ass(
                     parts.append(r"{\c" + style.accent + "&}" + txt + r"{\c" + style.text + "&}")
                 else:
                     parts.append(txt)
-            pop = r"\fscx82\fscy82\t(0,110,\fscx100\fscy100)" if pos == 0 else ""
-            y = style.y
+            entry = "muelle" if solo else style.entry
+            pop = ENTRIES.get(entry, ENTRIES["pop"]) if pos == 0 else ""
+            y = style.y - 40 if solo else style.y
+            place = _place(entry, y) if pos == 0 else f"\\pos(540,{y})"
+            font = f"\\fn{style.alt_font}\\fs{style.alt_size}\\c{style.accent}&" if solo else ""
             for a, b in visible(seg_start, seg_end):
                 lines.append(
-                    f"Dialogue: 1,{_ts(a)},{_ts(b)},{'Box' if style.box else 'Sub'},,0,0,0,,{{\\pos(540,{y}){pop}}}"
+                    f"Dialogue: 1,{_ts(a)},{_ts(b)},{'Box' if style.box else 'Sub'},,0,0,0,,{{{place}{font}{pop}}}"
                     + " ".join(parts)
                 )
     lines += extra_events or []

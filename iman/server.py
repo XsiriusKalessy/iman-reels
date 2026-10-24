@@ -122,7 +122,19 @@ def _styles() -> list[dict]:
     copystyle.register()
     mine = copystyle.custom()
     return [{"key": s.key, "label": s.label, "mine": s.key in mine, "rhythm": mine.get(s.key, {}).get("rhythm", ""),
-             "notes": mine.get(s.key, {}).get("notes", "")} for s in STYLES.values()]
+             "notes": mine.get(s.key, {}).get("notes", ""), "look": _style_look(s)} for s in STYLES.values()]
+
+
+def _hex(ass: str) -> str:
+    """'&H00BBGGRR' -> '#RRGGBB' para pintar la vista previa del estilo."""
+    h = (ass or "").replace("&H", "").replace("&", "")[-6:].rjust(6, "0")
+    return f"#{h[4:6]}{h[2:4]}{h[0:2]}"
+
+
+def _style_look(s) -> dict:
+    return {"font": s.font, "size": s.size, "text": _hex(s.text), "accent": _hex(s.accent), "outline": _hex(s.outline),
+            "outline_w": s.outline_w, "shadow": s.shadow, "upper": s.uppercase, "box": _hex(s.box) if s.box else "",
+            "words": s.max_words, "entry": getattr(s, "entry", "pop"), "alt_font": getattr(s, "alt_font", "")}
 
 
 @app.post("/api/styles/copy")

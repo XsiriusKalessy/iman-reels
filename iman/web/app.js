@@ -39,12 +39,28 @@ async function loadOptions() {
   $("#packs").onchange = () => applyPack(false);
   renderHooks(o.hook_templates);
 }
+// Galería de estilos: cada tarjeta enseña el texto moviéndose como saldrá en el reel.
+const CSS_FONT = { "Montserrat Black": "Iman Impacto", "Anton": "Iman Condensada", "Playfair Display ExtraBold": "Iman Elegante",
+  "Caveat": "Iman Manuscrita", "Figtree ExtraBold": "Iman Moderna", "Figtree SemiBold": "Iman Ligera" };
+function stylePreview(s) {
+  const L = s.look;
+  if (!L) return "";
+  const words = L.words <= 1 ? ["CAMBIA"] : L.words === 2 ? ["esto", "cambia"] : ["esto", "lo", "cambia", "todo"].slice(0, Math.min(4, L.words));
+  const px = Math.round(Math.min(L.words <= 1 ? 30 : 22, L.size * 0.2));
+  const stroke = L.outline_w ? `-webkit-text-stroke:${Math.min(3, L.outline_w / 3)}px ${L.outline};paint-order:stroke fill;` : "";
+  const shadow = L.shadow ? `text-shadow:0 ${L.shadow}px ${L.shadow * 2}px rgba(0,0,0,.6);` : "";
+  const box = L.box ? `background:${L.box};padding:2px 8px;border-radius:4px;` : "";
+  const txt = w => esc(L.upper ? w.toUpperCase() : w);
+  const html = words.map(w => w === "cambia" || w === "CAMBIA"
+    ? `<b style="color:${L.accent}${L.alt_font ? `;font-family:'Iman Elegante';font-size:1.5em` : ""}">${txt(w)}</b>` : txt(w)).join(" ");
+  return `<span class="sp"><i class="sp-face"></i><em class="sp-text e-${L.entry}" style="font-family:'${CSS_FONT[L.font] || "Iman Moderna"}';font-size:${px}px;color:${L.text};${stroke}${shadow}${box}">${html}</em></span>`;
+}
 function renderStyles(list, select) {
   const cur = select || $("input[name=style]:checked")?.value;
   $("#styles").innerHTML = list.map((s, i) => `
-    <label class="choice ${s.mine ? "mine" : ""}" ${s.notes ? `title="${esc(s.notes)}"` : ""}>
+    <label class="choice style-card ${s.mine ? "mine" : ""}" ${s.notes ? `title="${esc(s.notes)}"` : ""}>
       <input type="radio" name="style" value="${s.key}" data-rhythm="${s.rhythm || ""}" ${(cur ? s.key === cur : i === 0) ? "checked" : ""}>
-      <span>${esc(s.label)}${s.mine ? `<small>Copiado de un reel</small><button type="button" class="link forget" data-style-del="${s.key}" title="Borrar">✕</button>` : ""}</span></label>`).join("");
+      <span>${stylePreview(s)}${esc(s.label)}${s.mine ? `<small>Copiado de un reel</small><button type="button" class="link forget" data-style-del="${s.key}" title="Borrar">✕</button>` : ""}</span></label>`).join("");
 }
 $("#styles").onclick = async e => {
   const del = e.target.closest("[data-style-del]");
