@@ -363,7 +363,6 @@ function clearUpload() {
   const v = $("#preview"); v.pause(); v.removeAttribute("src"); v.hidden = true;
   $("#audio-picked").hidden = true; $(".drop-inner").hidden = false; $("#picked-row").hidden = true;
   $("#file").value = ""; $("#music-file").value = "";
-  $("#music-name").textContent = "Baja sola cuando hablas. Usa música que puedas usar (tuya, comprada o sin derechos).";
   canGo();
 }
 function newReel() {
@@ -401,7 +400,9 @@ $("#go").onclick = async () => {
   if (bg === "foto" && $("#bg-photo").files[0]) fd.append("background_photo", $("#bg-photo").files[0]);
   fd.append("sfx", $("#sfx").checked);
   fd.append("punch", $("#punch").checked);
-  if ($("#music-file").files[0]) fd.append("music_file", $("#music-file").files[0]);
+  const ms = $("#music-style").value;
+  if (ms === "mia" && $("#music-file").files[0]) fd.append("music_file", $("#music-file").files[0]);
+  else if (ms !== "mia") fd.append("music_style", ms);
   if (mode() !== "largo") state.broll.forEach(f => fd.append("broll", f));
   showWorking(mode() === "largo" ? "Subiendo tu vídeo largo" : "Subiendo tu vídeo", 0.01);
   go("result");
@@ -681,6 +682,10 @@ $("#clips").onclick = async e => {
   showResult(state.job);
 };
 function showResult(j) {
+  const om = j.options && j.options.music;
+  const used = om === "auto" ? (j.result.plan.music || "") : om === true ? "mia" : (om || "");
+  if (used === "mia" && !$("#re-music option[value=mia]")) $("#re-music").insertAdjacentHTML("beforeend", `<option value="mia">Mi música</option>`);
+  $("#re-music").value = used;
   $("#clips").hidden = true; $("#result-tools").hidden = false; $("#download").hidden = false;
   renderChat(j);
   renderChatIdeas(j);
@@ -720,9 +725,29 @@ $("#bg-choices").onchange = () => {
   $("#bg-photo-pick").hidden = !foto;
   if (foto && !$("#bg-photo").files[0]) $("#bg-photo").click();
 };
+api("/api/music").then(list => {
+  const opts = list.map(m => `<option value="${m.key}">${esc(m.label)}</option>`).join("");
+  $("#music-style").insertAdjacentHTML("beforeend", opts);
+  $("#re-music").insertAdjacentHTML("beforeend", opts);
+}).catch(() => {});
+$("#re-music").onchange = e => reedit({ music: e.target.value });
+$("#music-style").onchange = () => {
+  const v = $("#music-style").value;
+  $("#music-pick").hidden = v !== "mia";
+  $("#music-play").hidden = !v || v === "mia" || v === "auto";
+  const a = $("#music-audio"); a.pause(); $("#music-play").textContent = "▶ Escuchar";
+  if (v === "mia" && !$("#music-file").files[0]) $("#music-file").click();
+};
+$("#music-play").onclick = () => {
+  const a = $("#music-audio"), v = $("#music-style").value;
+  if (!a.paused) { a.pause(); $("#music-play").textContent = "▶ Escuchar"; return; }
+  a.src = `/api/music/${v}.wav`; a.play();
+  $("#music-play").textContent = "■ Parar";
+  a.onended = () => $("#music-play").textContent = "▶ Escuchar";
+};
 $("#music-file").onchange = e => {
   const f = e.target.files[0];
-  $("#music-name").textContent = f ? `✓ ${f.name} · baja sola cuando hablas` : "Baja sola cuando hablas.";
+  $("#music-name").textContent = f ? `✓ ${f.name} · baja sola cuando hablas` : "Elige tu canción.";
 };
 $("#bg-photo").onchange = e => {
   const f = e.target.files[0];

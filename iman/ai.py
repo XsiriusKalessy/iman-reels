@@ -27,6 +27,8 @@ TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
 LOOK_ENUM = ["", *TITULAR_LOOKS, *LISTA_LOOKS, "enfoque", *COLORS]
 
+MUSIC_STYLES = ["", "tranquila", "alegre", "cinematica", "tropical", "phonk", "corporativa", "epica", "emotiva", "inspiracional", "suspense", "acustica", "romantica"]
+
 EDIT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -91,13 +93,15 @@ EDIT_SCHEMA = {
             "description": "Índices de palabras tras las que la pausa da fuerza y NO se corta (0 a 4).",
             "items": {"type": "integer"},
         },
+        "music": {"type": "string", "enum": MUSIC_STYLES,
+                  "description": "Estilo de música de fondo que mejor encaja con el vídeo."},
         "silence": {
             "type": "array",
             "description": "Índice de la primera palabra de la frase más crítica (0 a 2): ahí se corta la música en seco.",
             "items": {"type": "integer"},
         },
     },
-    "required": ["hook_title", "hook_line", "drop", "emphasis", "effects", "zooms", "pauses", "silence"],
+    "required": ["hook_title", "hook_line", "drop", "emphasis", "effects", "zooms", "pauses", "silence", "music"],
     "additionalProperties": False,
 }
 
@@ -205,6 +209,12 @@ Tu trabajo:
    dato que cambia todo, el remate) y pon el índice de su primera palabra: justo antes se cortan en seco la
    música y los efectos, solo queda la voz, y vuelven con un golpe al terminar la frase. Una, como mucho dos,
    y nunca en los 3 primeros segundos. Si no hay una frase así, devuelve [].
+9. music: la música de fondo que pide el vídeo por su tema y su tono: "epica" (retos, logros, grandes viajes),
+   "emotiva" (historias personales, despedidas), "inspiracional" (superación, motivación, viajes), "tranquila"
+   (consejos relajados, rutinas), "alegre" (planes, productos, buen rollo), "tropical" (playa, verano, fiesta),
+   "phonk" (energía, deporte, coches, retos rápidos), "corporativa" (empresas, servicios, formación),
+   "cinematica" (paisajes, revelaciones), "suspense" (misterios, errores, "lo que nadie te cuenta"),
+   "acustica" (naturaleza, cercanía), "romantica" (parejas, bodas, escapadas). "" si mejor sin música.
 Respeta el idioma del vídeo. Sigue las instrucciones del creador si las hay."""
 
 REVISE_SYSTEM = EDIT_SYSTEM + """
@@ -361,6 +371,7 @@ def _plan_from(data: dict, n: int, source: str) -> EditPlan:
         zooms=zooms,
         pauses=pauses,
         silence=silence,
+        music=data.get("music", "") if data.get("music", "") in MUSIC_STYLES else "",
         source=source,
     )
 
@@ -396,6 +407,7 @@ def _plan_to_prompt(plan: EditPlan) -> dict:
         "zooms": [{"from": a, "to": b} for a, b in plan.zooms],
         "pauses": plan.pauses,
         "silence": plan.silence,
+        "music": plan.music,
     }
 
 

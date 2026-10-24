@@ -47,6 +47,8 @@ class EditPlan:
     restore: list[tuple[int, int]] = field(default_factory=list)
     # Silencio dramático: palabras (inicio de la frase clave) antes de las que se cortan música y efectos en seco.
     silence: list[int] = field(default_factory=list)
+    # Estilo de música que la IA recomienda para este vídeo (ver musica.STYLES).
+    music: str = ""
     source: str = "heuristica"
 
     @classmethod
@@ -63,6 +65,7 @@ class EditPlan:
             cut=[tuple(x) for x in d.get("cut", [])],
             restore=[tuple(x) for x in d.get("restore", [])],
             silence=[int(i) for i in d.get("silence", [])],
+            music=str(d.get("music", "")),
             source=d.get("source", "heuristica"),
         )
 

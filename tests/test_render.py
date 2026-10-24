@@ -435,3 +435,15 @@ def test_dramatic_silence_window():
     evs = pipeline._sfx_events([], clock, True, set(), [], hush)
     assert ("hit" in [n for t, n, g in evs if abs(t - hush[0][1]) < 1e-6])
     assert not any(hush[0][0] - 0.4 <= t < hush[0][1] for t, n, g in evs)
+
+
+@pytest.mark.parametrize("style", ["epica", "tranquila"])
+def test_iman_music_styles(sample, tmp_path, style):
+    from iman import musica
+
+    dst = musica.render(style, 7.3, tmp_path / "m.wav")
+    assert abs(media.probe_duration(dst) - 7.3) < 3.5 if hasattr(media, "probe_duration") else dst.stat().st_size > 1000
+    cfg = {"provider": "none", "anthropic_key": "", "openai_key": "", "claude_model": "", "openai_model": ""}
+    res = pipeline.run(sample, tmp_path / "w", pipeline.EditOptions(music=style), cfg, words=TAKE)
+    assert (tmp_path / "w" / "musica_iman.wav").exists()
+    assert abs(media.probe(res.video).duration - res.duration_out) < 0.3

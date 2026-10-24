@@ -362,3 +362,8 @@ label.color input { width: 44px; height: 34px; padding: 2px; margin: 0; border-r
 @keyframes sp-enfoque { 0% { transform: scale(1.1); filter: blur(10px); opacity: 0 } 16% { transform: none; filter: blur(0); opacity: 1 }
   85% { opacity: 1 } 100% { opacity: 0 } }
 @media (prefers-reduced-motion: reduce) { .sp-text { animation: none; } }
+.music-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin: 8px 0 4px; }
+.music-row label { display: flex; flex-direction: column; gap: 6px; color: var(--text); }
+.music-row select { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card, transparent); color: var(--text); min-width: 240px; }
+.quick-music { display: inline-flex; gap: 6px; align-items: center; color: var(--text); font-size: 14px; }
+.quick-music select { padding: 8px 10px; border-radius: 99px; border: 1px solid var(--line); background: transparent; color: var(--text); }

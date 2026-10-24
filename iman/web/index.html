@@ -168,8 +168,15 @@
           <label class="check"><input type="checkbox" id="voice" checked> Mejorar la voz (menos ruido, volumen estable)</label>
           <label class="check"><input type="checkbox" id="sfx" checked> Efectos de sonido (golpe al empezar, whoosh y pops en cada efecto)</label>
           <label class="check"><input type="checkbox" id="punch" checked> Zoom de entrada en el primer medio segundo</label>
-          <label class="ghost button" id="music-pick">🎵 Añadir mi música de fondo<input type="file" id="music-file" accept="audio/*,.mp3,.m4a,.wav,.ogg,.flac,.aac" hidden></label>
-          <p class="hint" id="music-name">Baja sola cuando hablas. Usa música que puedas usar (tuya, comprada o sin derechos).</p>
+          <div class="music-row">
+            <label>🎵 Música de fondo
+              <select id="music-style"><option value="auto" selected>Automática (Imán elige según tu vídeo)</option><option value="">Sin música</option><option value="mia">Mi música (subir archivo)</option></select>
+            </label>
+            <button type="button" class="ghost" id="music-play" hidden>▶ Escuchar</button>
+            <audio id="music-audio" hidden></audio>
+          </div>
+          <label class="ghost button" id="music-pick" hidden>Elegir mi canción<input type="file" id="music-file" accept="audio/*,.mp3,.m4a,.wav,.ogg,.flac,.aac" hidden></label>
+          <p class="hint" id="music-name">La música de Imán la creamos nosotros: es tuya y sin derechos. Baja sola cuando hablas.</p>
           <h3>Calidad</h3>
           <div class="choices inline">
             <label class="choice"><input type="radio" name="size" value="1080" checked><span>1080 × 1920</span></label>
@@ -250,6 +257,7 @@
             <button data-style="mezcla">Mezcla</button>
             <button data-style="elegante">Elegante</button>
             <button data-style="marcador">Marcador</button>
+            <label class="quick-music">🎵 Música <select id="re-music"><option value="">Sin música</option></select></label>
             <button data-background="desenfoque">Fondo desenfocado</button>
             <button data-background="color">Fondo de mi marca</button>
             <button data-background="">Fondo original</button>

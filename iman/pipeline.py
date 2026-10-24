@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import ai, brand, copystyle, effects, gestos, hands, jsonfile, media, segment, sfx
+from . import ai, brand, copystyle, effects, gestos, hands, jsonfile, media, musica, segment, sfx
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Word
@@ -41,7 +41,9 @@ class EditOptions:
     # Fondo de todo el reel, recortándote: "" (el tuyo), desenfoque, color (el de tu marca) o foto (fondo.jpg).
     background: str = ""
     sfx: bool = True  # golpe de sonido en el gancho y un sonido en cada efecto
-    music: bool = False  # tu música de fondo (musica.* en la carpeta del reel), que baja cuando hablas
+    # Música de fondo, que baja cuando hablas: "" sin música, "mia" la tuya (musica.* en la carpeta del reel)
+    # o un estilo de Imán ("epica", "tranquila"…). True es lo mismo que "mia" (reels de versiones anteriores).
+    music: bool | str = "auto"
     punch: bool = True  # zoom rápido de entrada en el primer medio segundo
 
 
@@ -186,6 +188,18 @@ def review(words: list[Word], plan: EditPlan, rhythm_key: str) -> list[dict]:
              "state": p.state, "reason": p.reason if p.dropped else ""}
             for p in phrases(words, drops, why)]
 
+
+
+AUTO_MUSIC = {"viajes": "inspiracional", "cursos": "corporativa", "productos": "alegre", "empresas": "corporativa"}
+
+
+def _music(choice, workdir: Path, total: float) -> Path | None:
+    """La música del reel: la tuya (subida como musica.*) o una de Imán generada a la medida del reel."""
+    if choice is True or choice == "mia":
+        return next((p for p in sorted(workdir.glob("musica.*")) if p.suffix != ".tmp"), None)
+    if choice in musica.STYLES:
+        return musica.render(choice, total, workdir / "musica_iman.wav", seed=len(choice))
+    return None
 
 
 def _hush_windows(silence: list[int], words: list[Word], clock: effects.WordClock) -> list[tuple[float, float]]:
@@ -366,7 +380,11 @@ def run(
                           hush)
         if evs:
             sound = sfx.bed(evs, total, workdir / "sfx.wav")
-    music = next((p for p in sorted(workdir.glob("musica.*")) if p.suffix != ".tmp"), None) if opts.music else None
+    choice = opts.music
+    if choice == "auto":  # la que recomienda la IA; sin IA, una según el sector
+        choice = plan.music if plan.music in musica.STYLES else AUTO_MUSIC.get(opts.pack, "inspiracional")
+        plan.music = choice  # para que la app muestre cuál ha elegido
+    music = _music(choice, workdir, total)
     punch = opts.punch and not voice_only
     av = dict(sfx_bed=sound, music=music, punch=punch, hush=hush)
     if segs and segment.available():

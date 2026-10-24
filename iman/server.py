@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ai, brand, config, copystyle, effects, jsonfile, license, media, packs, pipeline, portable, updates
+from . import ai, brand, config, copystyle, effects, jsonfile, license, media, musica, packs, pipeline, portable, updates
 from .captions import STYLES
 from .models import EditPlan, Word
 from .rhythm import RHYTHMS
@@ -455,6 +455,22 @@ def _save_music(workdir: Path, upload: UploadFile) -> bool:
     return True
 
 
+@app.get("/api/music")
+def music_styles():
+    return [{"key": k, "label": st.label} for k, st in musica.STYLES.items()]
+
+
+@app.get("/api/music/{key}.wav")
+def music_preview(key: str):
+    """20 segundos del estilo para escucharlo antes de elegir (se guarda en caché)."""
+    if key not in musica.STYLES:
+        raise HTTPException(404, "Ese estilo no existe")
+    dst = config.HOME / "cache" / "musica" / f"{key}.wav"
+    if not dst.exists():
+        musica.render(key, 20, dst, seed=len(key))
+    return FileResponse(dst, media_type="audio/wav")
+
+
 @app.post("/api/jobs")
 async def create_job(
     video: UploadFile = File(...),
@@ -475,6 +491,7 @@ async def create_job(
     background: str = Form(""),
     background_photo: UploadFile | None = File(None),
     music_file: UploadFile | None = File(None),
+    music_style: str = Form("auto"),
     sfx: bool = Form(True),
     punch: bool = Form(True),
 ):
@@ -504,7 +521,8 @@ async def create_job(
     if background == "foto":
         if not background_photo or not _save_background(workdir, await background_photo.read()):
             background = ""  # sin foto válida, se queda el fondo de verdad
-    music = bool(music_file and _save_music(workdir, music_file))
+    music = "mia" if music_file and _save_music(workdir, music_file) else \
+        (music_style if music_style in musica.STYLES or music_style == "auto" else "")
     if names and mode == "camara":  # en "solo voz" los vídeos ya son la imagen de todo el reel
         instructions = f"{instructions}\n\n{pipeline.broll_prompt(names)}".strip()
     opts = pipeline.EditOptions(rhythm, style, size, fit, hook, hook_title, hook_template, instructions,
