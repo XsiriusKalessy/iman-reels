@@ -314,7 +314,9 @@ def _refresh_license() -> dict:
 
 
 def _brand_out(b: brand.Brand) -> dict:
-    return {**asdict(b), "has_logo": b.logo_path is not None, "fonts": list(brand.FONTS)}
+    fonts = brand.fonts()
+    return {**asdict(b), "has_logo": b.logo_path is not None, "fonts": list(fonts),
+            "my_font": fonts.get(brand.MINE, "")}
 
 
 @app.get("/api/brand")
@@ -345,7 +347,7 @@ def set_brand(body: BrandIn):
             raise HTTPException(400, "El color tiene que ser tipo #FF5547")
         if k == "sector" and v and v not in packs.PACKS:
             raise HTTPException(400, "Sector no válido")
-        if k == "font" and v and v not in brand.FONTS:
+        if k == "font" and v and v not in brand.fonts():
             raise HTTPException(400, "Fuente no válida")
         setattr(b, k, v.strip() if isinstance(v, str) else v)
     return _brand_out(brand.save(b))
@@ -365,6 +367,39 @@ async def upload_logo(logo: UploadFile = File(...)):
 @app.delete("/api/brand/logo")
 def delete_logo():
     return _brand_out(brand.remove_logo())
+
+
+@app.post("/api/brand/font")
+async def upload_font(font: UploadFile = File(...)):
+    data = await font.read()
+    if len(data) > 15 * 1024 * 1024:
+        raise HTTPException(413, "La fuente pesa demasiado (máximo 15 MB)")
+    try:
+        brand.set_font(font.filename or "fuente.ttf", data)
+    except Exception:
+        raise HTTPException(400, "No he podido leer esa fuente. Sube un archivo .ttf u .otf.")
+    b = brand.load()
+    b.font = brand.MINE
+    return _brand_out(brand.save(b))
+
+
+@app.delete("/api/brand/font")
+def delete_font():
+    brand.remove_font()
+    b = brand.load()
+    if b.font == brand.MINE:
+        b.font = ""
+    return _brand_out(brand.save(b))
+
+
+@app.get("/api/brand/font")
+def get_font():
+    from . import textfit
+
+    mine = textfit.user_fonts()
+    if not mine:
+        raise HTTPException(404)
+    return FileResponse(next(iter(mine.values())))
 
 
 @app.get("/api/brand/logo.png")

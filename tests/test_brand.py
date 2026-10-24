@@ -146,3 +146,24 @@ def test_kit_copy_is_cleaned_and_revision_gets_current_kit(monkeypatch):
     k = ai.kit_copy(cfg, "texto", "Gancho", "", "", {"carousel": [{"title": "A", "body": ""}]}, "en la diapositiva 1 pon B")
     assert k["carousel"] == [{"title": "Portada", "body": ""}] and k["reply"] == "Hecho"
     assert "KIT ACTUAL" in seen["user"] and "diapositiva 1" in seen["user"]
+
+
+def test_own_font_upload_and_render(tmp_path, monkeypatch):
+    from iman import server, textfit
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    c = TestClient(server.app)
+    data = (textfit.FONTS_DIR / "Caveat-Bold.ttf").read_bytes()
+    assert c.post("/api/brand/font", files={"font": ("x.ttf", b"nada", "font/ttf")}).status_code == 400
+    r = c.post("/api/brand/font", files={"font": ("MiLetra.ttf", data, "font/ttf")}).json()
+    assert r["font"] == brand.MINE and r["my_font"] and brand.MINE in r["fonts"]
+    assert c.get("/api/brand/font").status_code == 200
+    c.post("/api/brand", json={"primary": "#D4A537"})
+    style = brand.styled(next(iter(STYLES)))
+    assert style.font == r["my_font"]
+    assert textfit.width("Hola", style.font, 80) > 0
+    d = textfit.fonts_dir()
+    assert d != textfit.FONTS_DIR and len(list(d.iterdir())) == len(textfit.FILES) + 1
+    assert (d / "Anton-Regular.ttf").exists()
+    r = c.delete("/api/brand/font").json()
+    assert r["font"] == "" and not r["my_font"] and textfit.fonts_dir() == textfit.FONTS_DIR

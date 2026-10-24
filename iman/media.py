@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .models import Span
+from .textfit import fonts_dir
 
 FONTS_DIR = Path(__file__).parent / "assets" / "fonts"
 HDR_TRANSFERS = {"smpte2084", "arib-std-b67"}
@@ -347,7 +348,7 @@ def build_filtergraph(
     cur = _video_overlays(parts, overlays or [], W, H, images=images)
     tail = f"{cur}null"
     if ass_path is not None:
-        tail += f",ass=filename='{_filter_path(ass_path)}':fontsdir='{_filter_path(FONTS_DIR)}'"
+        tail += f",ass=filename='{_filter_path(ass_path)}':fontsdir='{_filter_path(fonts_dir())}'"
     parts.append(tail + ",format=yuv420p[vout]")
     audio = "[ac]"
     if voice:
@@ -454,7 +455,7 @@ def composite(
             continue
         cur = f"[b{k}]"
     if behind_ass is not None:
-        parts.append(f"{cur}ass=filename='{_filter_path(behind_ass)}':fontsdir='{_filter_path(FONTS_DIR)}'[bt]")
+        parts.append(f"{cur}ass=filename='{_filter_path(behind_ass)}':fontsdir='{_filter_path(fonts_dir())}'[bt]")
         cur = "[bt]"
     parts.append(f"[1:v]scale={W}:{H}:flags=bicubic,format=gray,boxblur=2:1[mk]")
     parts.append("[fg][mk]alphamerge[person]")
@@ -462,7 +463,7 @@ def composite(
     cur = _video_overlays(parts, overlays or [], W, H, "[vx]", "[2:v]", images)
     tail = f"{cur}null"
     if ass_path is not None:
-        tail += f",ass=filename='{_filter_path(ass_path)}':fontsdir='{_filter_path(FONTS_DIR)}'"
+        tail += f",ass=filename='{_filter_path(ass_path)}':fontsdir='{_filter_path(fonts_dir())}'"
     parts.append(tail + ",format=yuv420p[vout]")
     script = dst.with_suffix(".composite.txt")
     script.write_text(";\n".join(parts), encoding="utf-8")

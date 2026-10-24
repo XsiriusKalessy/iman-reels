@@ -775,7 +775,16 @@ function ink(hex) {
   const n = parseInt((hex || "#141518").slice(1), 16), r = (n >> 16) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
   return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.6 ? "#141518" : "#FFFFFF";
 }
-const FONT_CSS = Object.fromEntries(["Moderna", "Impacto", "Condensada", "Elegante", "Manuscrita"].map(n => [n, `"Iman ${n}"`]));
+const FONT_CSS = { ...Object.fromEntries(["Moderna", "Impacto", "Condensada", "Elegante", "Manuscrita", "Bebas", "Hormozi", "Bloque"].map(n => [n, `"Iman ${n}"`])),
+  "Cómic": '"Iman Comic"', "Mía": '"Iman Mia"' };
+async function loadMyFont(name) {
+  if (!name) return;
+  try {
+    // La fuente subida se carga en el navegador para que la vista previa la enseñe tal cual.
+    const face = new FontFace("Iman Mia", `url(/api/brand/font?t=${Date.now()})`);
+    document.fonts.add(await face.load());
+  } catch { /* si no carga, la vista previa usa la de por defecto */ }
+}
 function renderBrand(b) {
   state.brand = b;
   renderToday();
@@ -787,7 +796,9 @@ function renderBrand(b) {
   f.sector.value = b.sector || "general";
   $("#brand-fonts").innerHTML = ["", ...b.fonts].map(n => `
     <label class="choice"><input type="radio" name="font" value="${n}" ${n === (b.font || "") ? "checked" : ""}>
-    <span style="font-family:${FONT_CSS[n] || "inherit"}">${n || "La del estilo"}</span></label>`).join("");
+    <span style="font-family:${FONT_CSS[n] || "inherit"}">${n === "Mía" ? `Mía: ${esc(b.my_font)}` : n || "La del estilo"}</span></label>`).join("");
+  $("#font-remove").hidden = !b.my_font;
+  loadMyFont(b.my_font);
   const logo = b.has_logo ? `/api/brand/logo.png?t=${Date.now()}` : "";
   $("#logo-img").src = logo; $("#logo-img").hidden = !logo; $("#logo-empty").hidden = !!logo; $("#logo-remove").hidden = !logo;
   $("#swatches").innerHTML = (b.palette || []).map(c => `<button type="button" style="background:${c}" data-color="${c}" title="Usar ${c}"></button>`).join("");
@@ -879,6 +890,15 @@ logoDrop.ondragover = e => { e.preventDefault(); logoDrop.classList.add("over");
 logoDrop.ondragleave = () => logoDrop.classList.remove("over");
 logoDrop.ondrop = e => { e.preventDefault(); logoDrop.classList.remove("over"); uploadLogo(e.dataTransfer.files[0]); };
 $("#logo-remove").onclick = async () => renderBrand(await api("/api/brand/logo", { method: "DELETE" }));
+$("#font-file").onchange = async e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  brandError("");
+  const fd = new FormData(); fd.append("font", file);
+  try { renderBrand(await api("/api/brand/font", { method: "POST", body: fd })); } catch (err) { brandError(err.message); }
+};
+$("#font-remove").onclick = async () => renderBrand(await api("/api/brand/font", { method: "DELETE" }));
 function brandBody() {
   const f = brandForm;
   return { name: f.name.value, cta: f.cta.value, contact: f.contact.value, handle: f.handle.value,

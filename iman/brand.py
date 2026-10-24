@@ -27,6 +27,56 @@ FONTS = {  # nombre visible -> fuente incluida
 }
 
 
+MINE = "Mía"  # la fuente que ha subido el creador
+
+
+def fonts() -> dict[str, str]:
+    """Las fuentes que se pueden elegir: las incluidas y, si la hay, la del creador."""
+    from . import textfit
+
+    mine = textfit.user_fonts()
+    return {**FONTS, **({MINE: next(iter(mine))} if mine else {})}
+
+
+def font_family(key: str) -> str:
+    return fonts().get(key or "", "")
+
+
+def set_font(name: str, data: bytes) -> str:
+    """Guarda la fuente del creador (sustituye a la anterior) y devuelve su nombre."""
+    import tempfile
+
+    from . import textfit
+
+    ext = Path(name).suffix.lower()
+    if ext not in textfit.FONT_EXT:
+        raise ValueError("La fuente tiene que ser .ttf u .otf")
+    with tempfile.TemporaryDirectory() as tmp:
+        probe = Path(tmp) / f"f{ext}"
+        probe.write_bytes(data)
+        family = textfit.family_name(probe)  # falla si no es una fuente de verdad
+        if "cmap" not in textfit.TTFont(probe, lazy=True):
+            raise ValueError("Esa fuente no tiene letras")
+    d = textfit.user_dir()
+    if d.exists():
+        for old in d.iterdir():
+            old.unlink(missing_ok=True)
+    d.mkdir(parents=True, exist_ok=True)
+    safe = "".join(c for c in family if c.isalnum() or c in " -_").strip() or "fuente"
+    (d / f"{safe}{ext}").write_bytes(data)
+    textfit._metrics.cache_clear()
+    return family
+
+
+def remove_font() -> None:
+    from . import textfit
+
+    d = textfit.user_dir()
+    if d.exists():
+        for old in d.iterdir():
+            old.unlink(missing_ok=True)
+
+
 @dataclass
 class Brand:
     name: str = ""
@@ -167,8 +217,9 @@ def apply(style: Style, b: Brand) -> Style:
         if style.box:
             changes.update(box=rgb(b.primary), outline=rgb(b.primary), text=rgb(ink_on(b.primary)),
                            accent=rgb(b.secondary or ink_on(b.primary)))
-    if b.font in FONTS:
-        changes.update(font=FONTS[b.font], title_font=FONTS[b.font])
+    fam = font_family(b.font)
+    if fam:
+        changes.update(font=fam, title_font=fam)
     return replace(style, **changes)
 
 

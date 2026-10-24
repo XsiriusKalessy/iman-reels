@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from . import brand as brand_mod
 from .models import Word
-from .textfit import FILES, FONTS_DIR
+from .textfit import font_path
 
 CAROUSEL = (1080, 1350)
 STORY = (1080, 1920)
@@ -26,7 +26,7 @@ MARGIN = 96
 
 
 def _font(family: str, size: int) -> ImageFont.FreeTypeFont:
-    return ImageFont.truetype(str(FONTS_DIR / FILES[family]), size)
+    return ImageFont.truetype(str(font_path(family)), size)
 
 
 def _wrap(draw: ImageDraw.ImageDraw, text: str, font, max_w: int) -> list[str]:
@@ -94,7 +94,7 @@ class Look:
     def __init__(self, b: brand_mod.Brand):
         self.accent = b.primary if brand_mod.is_hex(b.primary or "") else RED
         self.on_accent = brand_mod.ink_on(self.accent)
-        self.title = brand_mod.FONTS.get(b.font, "Playfair Display ExtraBold")
+        self.title = brand_mod.font_family(b.font) or "Playfair Display ExtraBold"
         self.handle = b.handle.strip()
         self.cta = b.cta.strip()
         self.logo = brand_mod.logo_card() if b.logo_path else None
