@@ -572,3 +572,18 @@ def test_whatsapp_zip_endpoint(tmp_path, monkeypatch):
     (tmp_path / "w.zip").write_bytes(r.content)
     names = zipfile.ZipFile(tmp_path / "w.zip").namelist()
     assert names == ["estado-1-de-2.mp4", "estado-2-de-2.mp4"]
+
+
+def test_bar_chart_effect():
+    from iman import packfx
+    from iman.captions import STYLES
+    from iman.effects import WordClock
+    from iman.models import Word
+
+    assert packfx._number("1.200 €") == 1200 and packfx._number("35 %") == 35 and packfx._number("2,5") == 2.5
+    words = [Word(f"w{i}", i * 0.4, i * 0.4 + 0.3) for i in range(20)]
+    clock = WordClock(words, list(range(20)))
+    fx = {"type": "grafico", "word": 2, "until_word": 12, "text": "Enero: 900 €|Junio: 450 €", "title": "Vuelo"}
+    lines, win = packfx.grafico_events(fx, clock, STYLES["impacto"], 10.0)
+    assert win and sum("\\fscy0" in ln for ln in lines) == 2 and any("450 €" in ln for ln in lines)
+    assert packfx.grafico_events({**fx, "text": "sin cifras"}, clock, STYLES["impacto"], 10.0) == ([], None)

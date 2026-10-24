@@ -540,6 +540,78 @@ def progress_bar_events(total: float, style: Style, start: float = 0.0) -> list[
     ]
 
 
+def _number(raw: str) -> float | None:
+    """'1.200 €' -> 1200, '35 %' -> 35, '2,5' -> 2.5."""
+    import re
+
+    m = re.search(r"-?\d[\d.,]*", raw or "")
+    if not m:
+        return None
+    t = m.group(0)
+    if "," in t and "." in t:
+        t = t.replace(".", "").replace(",", ".")
+    elif "," in t:
+        t = t.replace(",", ".") if len(t.split(",")[-1]) != 3 else t.replace(",", "")
+    elif t.count(".") == 1 and len(t.split(".")[-1]) == 3:
+        t = t.replace(".", "")
+    try:
+        return float(t)
+    except ValueError:
+        return None
+
+
+def grafico_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Gráfico de barras que crece: compara 2 a 4 cifras ("Enero: 900 € | Junio: 450 €"); la última destaca."""
+    rows = []
+    for part in effect["text"].split("|")[:4]:
+        label, _, value = part.partition(":")
+        num = _number(value or label)
+        if num is not None and num >= 0:
+            rows.append((label.strip()[:12] if value else "", (value or label).strip()[:10], num))
+    if len(rows) < 2:
+        return [], None
+    span = _span(effect, clock, duration, 3.6, 2.4)
+    if not span:
+        return [], None
+    start, end = span
+    acc = _accent(style)
+    title = effect.get("title", "").strip()[:34]
+    n, top_v = len(rows), max(r[2] for r in rows) or 1
+    cw, ch = 900, 820
+    cx0, cy0 = (W - cw) / 2, 470
+    base_y = cy0 + ch - 120  # línea de base de las barras
+    max_h = ch - (350 if title else 240)
+    slot = (cw - 120) / n
+    bw = min(170, slot * 0.62)
+    t = f"{_ts(start)},{_ts(end)}"
+    pop = "\\fscx92\\fscy92\\t(0,180,\\fscx100\\fscy100)\\fad(150,200)"
+    lines = [f"Dialogue: 4,{t},Sub,,0,0,0,,{{\\an7\\pos(0,0){pop}\\bord0\\shad0\\1c{CREAM}&\\p1}}"
+             f"{_rect(cx0, cy0, cw, ch, 34)}"]
+    if title:
+        size = textfit.fit(title, "Figtree ExtraBold", 58, cw - 120, 38)
+        lines.append(f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an8\\pos({W / 2:.0f},{cy0 + 50:.0f})\\fnFigtree ExtraBold"
+                     f"\\fs{size:.0f}\\bord0\\shad0\\c{INK}&\\fad(150,200)}}{_esc(title)}")
+    lines.append(f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an7\\pos(0,0)\\bord0\\shad0\\1c{rgb('#D9D1C3')}&\\fad(150,200)\\p1}}"
+                 f"{_rect(cx0 + 50, base_y, cw - 100, 5, 2)}")
+    for k, (label, shown, num) in enumerate(rows):
+        x = cx0 + 60 + slot * k + (slot - bw) / 2
+        h = max(14, max_h * num / top_v)
+        a = 250 + 170 * k
+        grow = 520
+        color = acc if k == n - 1 else rgb("#B9B1A3")
+        lines.append(f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an1\\pos({x:.0f},{base_y:.0f})\\bord0\\shad0\\1c{color}&"
+                     f"\\fscy0\\t({a},{a + grow},0.6,\\fscy100)\\fad(0,200)\\p1}}{_rect(0, 0, bw, h, 14)}")
+        vs = textfit.fit(shown, "Figtree ExtraBold", 54, slot - 10, 32)
+        lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an2\\pos({x + bw / 2:.0f},{base_y - h - 14:.0f})\\fnFigtree ExtraBold"
+                     f"\\fs{vs:.0f}\\bord0\\shad0\\c{INK}&\\alpha&HFF&\\t({a + grow - 120},{a + grow + 80},\\alpha&H00&)"
+                     f"\\fad(0,200)}}{_esc(shown)}")
+        if label:
+            ls = textfit.fit(label, "Figtree SemiBold", 40, slot - 10, 26)
+            lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an8\\pos({x + bw / 2:.0f},{base_y + 22:.0f})\\fnFigtree SemiBold"
+                         f"\\fs{ls:.0f}\\bord0\\shad0\\c{INK}&\\fad(150,200)}}{_esc(label)}")
+    return lines, Window(start, end)
+
+
 PACK_BUILDERS = {
     "ubicacion": ubicacion_events,
     "oferta": oferta_events,
@@ -553,4 +625,5 @@ PACK_BUILDERS = {
     "anillo": anillo_events,
     "buscador": buscador_events,
     "chat": chat_events,
+    "grafico": grafico_events,
 }

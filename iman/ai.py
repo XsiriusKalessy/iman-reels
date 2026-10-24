@@ -17,11 +17,11 @@ OPENAI_MODEL = "gpt-4o"
 EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "color", "comentario",
                 "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                 "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque", "aparece",
-                "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage"]
+                "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico"]
 FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
                    "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                    "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque",
-                   "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage")
+                   "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico")
 LISTA_LOOKS = ("checklist", "capitulos", "itinerario")
 TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
@@ -213,6 +213,10 @@ Tu trabajo:
      en pantalla solo salen los nombres; title: el viaje en
      2 a 4 palabras, p. ej. "Japón en grupo"; subtitle: las fechas, p. ej. "18–29 nov", o vacío). Cuando el
      creador cuenta el recorrido de un viaje. Mejor que "ruta" si hay más de dos sitios.
+   - "grafico": gráfico de barras que crece cuando compara cifras (precios, antes/después, meses, opciones):
+     text: de 2 a 4 pares "etiqueta: valor" separados por "|", en el orden en que los dice y con la cifra que
+     quiere destacar al final, p. ej. "Enero: 900 €|Marzo: 650 €|Junio: 450 €"; title: qué se compara en
+     pocas palabras ("Vuelo a Tokio"). Solo con cifras que dice el creador, nunca inventadas.
    - "objeto": pegatina con el dibujo de una cosa concreta que el creador nombra (text: UN emoji que la dibuje,
      p. ej. 🔌 adaptador, 🧦 calcetines, 💊 medicinas, 📱 móvil, 💶 dinero, ✈️ vuelo, 🍣 comida, 🏨 hotel;
      subtitle: el nombre en 1 a 3 palabras). Dura unos 2 segundos. Úsalo cada vez que nombre objetos, sobre todo
