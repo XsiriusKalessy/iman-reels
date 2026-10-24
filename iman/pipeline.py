@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import ai, brand, copystyle, effects, gestos, hands, media, segment
+from . import ai, brand, copystyle, effects, gestos, hands, jsonfile, media, segment
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Word
@@ -102,8 +102,9 @@ def visual_cuts(words: list[Word], every: float = 3.0) -> list[float]:
 
 def _transcribe(src: Path, workdir: Path, cfg: dict, progress: Progress) -> list[Word]:
     transcript_file = workdir / "transcript.json"
-    if transcript_file.exists():
-        return [Word(**w) for w in json.loads(transcript_file.read_text())]
+    cached = jsonfile.load(transcript_file)
+    if cached is not None:
+        return [Word(**w) for w in cached]
     progress("Escuchando lo que dices", 0.10)
     from .transcribe import transcribe
 
@@ -113,7 +114,7 @@ def _transcribe(src: Path, workdir: Path, cfg: dict, progress: Progress) -> list
         cfg.get("whisper_model", "small"), cfg.get("openai_key") or None,
         on_progress=lambda f: progress("Escuchando lo que dices", round(0.10 + 0.25 * f, 3)),
     )
-    transcript_file.write_text(json.dumps([w.__dict__ for w in words], ensure_ascii=False, indent=1))
+    jsonfile.save(transcript_file, [w.__dict__ for w in words], indent=1)
     return words
 
 
@@ -140,7 +141,7 @@ def clip_source(src: Path, words: list[Word], pick: dict, workdir: Path) -> tupl
     t0, t1 = max(0.0, words[a].start - 0.25), words[b].end + 0.4
     dst = media.cut(src, workdir / "original.mp4", t0, t1)
     sub = [Word(w.text, round(w.start - t0, 3), round(w.end - t0, 3)) for w in words[a:b + 1]]
-    (workdir / "transcript.json").write_text(json.dumps([w.__dict__ for w in sub], ensure_ascii=False, indent=1))
+    jsonfile.save(workdir / "transcript.json", [w.__dict__ for w in sub], indent=1)
     return dst, sub
 
 
@@ -198,8 +199,8 @@ def run(
     if words is None:
         words = _transcribe(src, workdir, cfg, progress)
     transcript_file = workdir / "transcript.json"
-    if not transcript_file.exists():
-        transcript_file.write_text(json.dumps([w.__dict__ for w in words], ensure_ascii=False, indent=1))
+    if jsonfile.load(transcript_file) is None:
+        jsonfile.save(transcript_file, [w.__dict__ for w in words], indent=1)
 
     progress("Buscando fallos y el mejor gancho", 0.40)
     aicfg = ai_config(cfg)
@@ -241,7 +242,7 @@ def run(
         plan.effects = [fx for fx in plan.effects if fx.get("type") not in effects.PERSON_TYPES]
     else:
         plan.effects = effects.auto_broll(plan.effects, kept_idx, len(clips))
-    (workdir / "plan.json").write_text(json.dumps(plan.to_dict(), ensure_ascii=False, indent=1))
+    jsonfile.save(workdir / "plan.json", plan.to_dict(), indent=1)
 
     active = [dict(fx) for fx in plan.effects if not fx.get("off")]  # los que el creador ha apagado no salen
     gestos.attach(active, found, hand_frames, effects.WordClock(kept, kept_idx))

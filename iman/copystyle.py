@@ -26,7 +26,7 @@ def store() -> Path:
 
 def custom() -> dict[str, dict]:
     f = store()
-    return json.loads(f.read_text()) if f.exists() else {}
+    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
 
 
 def register() -> None:
@@ -70,7 +70,7 @@ def cut_rate(src: Path) -> float:
     if src.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp"):
         return 0.0
     res = subprocess.run([media.FFMPEG, "-v", "info", "-i", str(src), "-vf", "select='gt(scene,0.3)',showinfo",
-                          "-an", "-f", "null", "-"], capture_output=True, text=True)
+                          "-an", "-f", "null", "-"], capture_output=True, text=True, encoding="utf-8", errors="replace")
     cuts = len(re.findall(r"pts_time:", res.stderr))
     dur = media.probe(src).duration or 1
     return cuts / dur
@@ -113,7 +113,7 @@ def save(name: str, analysis: dict, rhythm: str) -> dict:
     data[key] = {"style": asdict(style), "rhythm": rhythm, "notes": str(analysis.get("notes", ""))[:200],
                  "analysis": analysis}
     store().parent.mkdir(parents=True, exist_ok=True)
-    store().write_text(json.dumps(data, ensure_ascii=False, indent=1))
+    store().write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     register()
     return {"key": key, **data[key]}
 
@@ -121,5 +121,5 @@ def save(name: str, analysis: dict, rhythm: str) -> dict:
 def remove(key: str) -> None:
     data = custom()
     if data.pop(key, None) is not None:
-        store().write_text(json.dumps(data, ensure_ascii=False, indent=1))
+        store().write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     register()

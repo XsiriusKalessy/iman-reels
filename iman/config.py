@@ -53,7 +53,7 @@ def memory_prompt(cfg: dict) -> str:
 def load() -> dict:
     cfg = dict(DEFAULTS)
     if CONFIG_FILE.exists():
-        cfg.update(json.loads(CONFIG_FILE.read_text()))
+        cfg.update(json.loads(CONFIG_FILE.read_text(encoding="utf-8")))
     # Las variables de entorno mandan si existen.
     cfg["anthropic_key"] = os.environ.get("ANTHROPIC_API_KEY") or cfg["anthropic_key"]
     cfg["openai_key"] = os.environ.get("OPENAI_API_KEY") or cfg["openai_key"]
@@ -63,12 +63,12 @@ def load() -> dict:
 def save(updates: dict) -> dict:
     cfg = dict(DEFAULTS)
     if CONFIG_FILE.exists():
-        cfg.update(json.loads(CONFIG_FILE.read_text()))
+        cfg.update(json.loads(CONFIG_FILE.read_text(encoding="utf-8")))
     for k, v in updates.items():
         if k in DEFAULTS and v is not None:
             cfg[k] = v
     HOME.mkdir(parents=True, exist_ok=True)
-    CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
+    CONFIG_FILE.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     try:
         CONFIG_FILE.chmod(0o600)
     except OSError:

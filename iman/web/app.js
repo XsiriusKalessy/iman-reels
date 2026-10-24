@@ -317,6 +317,7 @@ function pick(file) {
     $("#audio-picked").hidden = true;
     v.src = URL.createObjectURL(file); v.hidden = false; v.play();
   }
+  $("#picked-name").textContent = file.name; $("#picked-row").hidden = false;
   canGo();
 }
 function renderBroll() {
@@ -339,6 +340,25 @@ drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); pick(e.dataTransfer.files[0]); };
 $("#to-edit").onclick = () => go("edit");
+// Empezar de cero: olvida el vídeo elegido y el reel abierto (el anterior sigue en «Mis reels»).
+function clearUpload() {
+  state.file = null; state.broll = []; renderBroll();
+  const v = $("#preview"); v.pause(); v.removeAttribute("src"); v.hidden = true;
+  $("#audio-picked").hidden = true; $(".drop-inner").hidden = false; $("#picked-row").hidden = true;
+  $("#file").value = "";
+  canGo();
+}
+function newReel() {
+  clearTimeout(state.poll);
+  clearUpload();
+  state.job = null;
+  for (const id of ["#hook-title", "#hook-template", "#instructions", "#chat-input"]) if ($(id)) $(id).value = "";
+  $("#out").pause?.(); $("#out").removeAttribute("src");
+  renderInstrIdeas();
+  go("upload");
+}
+$("#new-reel").onclick = newReel;
+$("#change-file").onclick = e => { e.preventDefault(); clearUpload(); $("#file").click(); };
 
 // ---------- 2. editar ----------
 $("#go").onclick = async () => {
@@ -447,6 +467,27 @@ function renderChatIdeas(j) {
   const picked = [...sector.slice(0, 2), ...out.filter(t => !sector.includes(t))].slice(0, 6);
   $("#chat-ideas").innerHTML = picked.map(t => `<button type="button" data-idea="${esc(t)}">${esc(t)}</button>`).join("");
 }
+// Las mismas ideas en el paso 2, antes de editar: aquí se suman en varias líneas.
+const FIRST_IDEAS = [
+  "Que tenga mucho movimiento: efectos variados, zooms y textos grandes",
+  "Cuando enumere cosas, ponlas en una lista que se vaya marcando",
+  "Pon en grande las palabras y cifras importantes",
+  "Empieza directamente en la frase más potente, sin saludar",
+  "Quita todas las muletillas y las veces que me equivoco",
+  "Termina con una llamada a la acción: que me escriban por privado",
+];
+function renderInstrIdeas() {
+  const list = [...(SECTOR_IDEAS[state.brand?.sector] || []).slice(0, 2), ...FIRST_IDEAS].slice(0, 7);
+  $("#instr-ideas").innerHTML = list.map(t => `<button type="button" data-idea="${esc(t)}">${esc(t)}</button>`).join("");
+}
+$("#instr-ideas").onclick = e => {
+  const b = e.target.closest("[data-idea]");
+  if (!b) return;
+  const t = $("#instructions"), line = b.dataset.idea;
+  if (!t.value.includes(line)) t.value = (t.value.trim() ? t.value.trim() + "\n" : "") + line;
+  b.classList.add("on");
+};
+renderInstrIdeas();
 $("#chat-ideas").onclick = e => {
   const b = e.target.closest("[data-idea]");
   if (!b) return;
@@ -663,6 +704,7 @@ const FONT_CSS = Object.fromEntries(["Moderna", "Impacto", "Condensada", "Elegan
 function renderBrand(b) {
   state.brand = b;
   renderToday();
+  renderInstrIdeas();
   const f = brandForm;
   for (const k of ["name", "cta", "contact", "handle"]) f[k].value = b[k] || "";
   f.primary.value = b.primary || "#FF5547"; f.secondary.value = b.secondary || "#141518";

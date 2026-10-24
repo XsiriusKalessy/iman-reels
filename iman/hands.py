@@ -34,7 +34,7 @@ def available() -> bool:
 def track(src: Path, cache: Path | None = None) -> list[dict]:
     """Por cada fotograma analizado: {"t": segundos, "hands": [[[x, y] × 21], …]} en coordenadas 0-1 de la toma."""
     if cache is not None and cache.exists():
-        return json.loads(cache.read_text())
+        return json.loads(cache.read_text(encoding="utf-8"))
     import mediapipe as mp
     import numpy as np
     from mediapipe.tasks.python import BaseOptions, vision
@@ -65,7 +65,7 @@ def track(src: Path, cache: Path | None = None) -> list[dict]:
         reader.wait()
         marker.close()
     if cache is not None:
-        cache.write_text(json.dumps(frames))
+        cache.write_text(json.dumps(frames), encoding="utf-8")
     return frames
 
 

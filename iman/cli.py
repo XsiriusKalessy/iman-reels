@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.transcripcion:
         from .models import Word
 
-        words = [Word(**w) for w in json.loads(args.transcripcion.read_text())]
+        words = [Word(**w) for w in json.loads(args.transcripcion.read_text(encoding="utf-8"))]
     out = args.salida or args.video.with_name(args.video.stem + "-reel.mp4")
     workdir = out.with_suffix("")
     workdir = workdir.parent / (workdir.name + "_trabajo")

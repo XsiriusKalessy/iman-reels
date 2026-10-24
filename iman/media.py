@@ -38,7 +38,7 @@ FFPROBE = _tool("ffprobe")
 @functools.cache
 def _ffmpeg_major() -> int:
     try:
-        out = subprocess.run([FFMPEG, "-hide_banner", "-version"], capture_output=True, text=True).stdout
+        out = subprocess.run([FFMPEG, "-hide_banner", "-version"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         m = re.search(r"version n?(\d+)\.", out)
         return int(m.group(1)) if m else 99  # las compilaciones "master" no llevan número: son las más nuevas
     except OSError:
@@ -65,7 +65,7 @@ class MediaInfo:
 def probe(path: Path) -> MediaInfo:
     out = subprocess.run(
         [FFPROBE, "-v", "error", "-print_format", "json", "-show_streams", "-show_format", str(path)],
-        capture_output=True, text=True, check=True,
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=True,
     ).stdout
     data = json.loads(out)
     v = next((s for s in data["streams"] if s["codec_type"] == "video"), None)
@@ -290,7 +290,7 @@ def render(
 ) -> Path:
     graph = build_filtergraph(spans, info, ass_path, size, fit, voice, zooms, overlays, tail)
     script = dst.with_suffix(".filters.txt")
-    script.write_text(graph)
+    script.write_text(graph, encoding="utf-8")
     extra, _ = _image_inputs(overlays, 1)
     cmd = [
         FFMPEG, "-y", "-v", "error", "-i", str(src), *extra,
@@ -300,7 +300,7 @@ def render(
         "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(dst),
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if res.returncode != 0:
         raise RuntimeError(f"ffmpeg falló:\n{res.stderr[-2000:]}")
     return dst
@@ -345,7 +345,7 @@ def composite(
         tail += f",ass=filename='{_filter_path(ass_path)}':fontsdir='{_filter_path(FONTS_DIR)}'"
     parts.append(tail + ",format=yuv420p[vout]")
     script = dst.with_suffix(".composite.txt")
-    script.write_text(";\n".join(parts))
+    script.write_text(";\n".join(parts), encoding="utf-8")
     cmd = [
         FFMPEG, "-y", "-v", "error", "-i", str(base), "-i", str(mask), "-i", str(raw), *extra,
         *filter_script_args(script), "-map", "[vout]", "-map", "0:a",
@@ -353,7 +353,7 @@ def composite(
         "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
         "-c:a", "copy", "-movflags", "+faststart", str(dst),
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if res.returncode != 0:
         raise RuntimeError(f"ffmpeg falló:\n{res.stderr[-2000:]}")
     return dst
@@ -373,7 +373,7 @@ STILL_EXT = (".jpg", ".jpeg", ".png", ".webp")
 def duration_of(path: Path) -> float:
     """Duración de cualquier archivo (también audio solo o una foto, que da 0)."""
     out = subprocess.run([FFPROBE, "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
-                         capture_output=True, text=True).stdout.strip()
+                         capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip()
     try:
         return float(out)
     except ValueError:
@@ -414,11 +414,11 @@ def voice_canvas(audio: Path, dst: Path, cuts: list[float], clips: list[Path], c
             labels.append(f"[c{i}]")
         parts.append(f"{''.join(labels)}concat=n={len(labels)}:v=1:a=0[vout]")
     script = dst.with_suffix(".canvas.txt")
-    script.write_text(";\n".join(parts))
+    script.write_text(";\n".join(parts), encoding="utf-8")
     cmd = [FFMPEG, "-y", "-v", "error", *inputs, *filter_script_args(script), "-map", "[vout]", "-map", "0:a",
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
            "-c:a", "aac", "-b:a", "192k", "-t", f"{total:.3f}", str(dst)]
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if res.returncode != 0:
         raise RuntimeError(f"ffmpeg falló:\n{res.stderr[-2000:]}")
     return dst
@@ -429,7 +429,7 @@ def cut(src: Path, dst: Path, start: float, end: float) -> Path:
     cmd = [FFMPEG, "-y", "-v", "error", "-ss", f"{max(0.0, start):.3f}", "-i", str(src), "-t", f"{end - start:.3f}",
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "17", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
            str(dst)]
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if res.returncode != 0:
         raise RuntimeError(f"ffmpeg falló:\n{res.stderr[-2000:]}")
     return dst

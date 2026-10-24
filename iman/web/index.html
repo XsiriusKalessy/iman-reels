@@ -19,6 +19,7 @@
       <button data-step="result"><b>3</b> Tu reel</button>
     </nav>
     <a href="#" class="pill" id="trial-pill" hidden></a>
+    <button class="primary small" id="new-reel" title="Empezar un reel desde cero">＋ Nuevo reel</button>
     <button class="ghost" id="open-brand"><i class="dot" id="brand-dot"></i> Mi marca</button>
     <button class="ghost" id="open-settings">Ajustes</button>
   </header>
@@ -110,6 +111,7 @@
         <video id="preview" muted playsinline hidden></video>
         <div id="audio-picked" class="audio-picked" hidden></div>
       </label>
+      <p class="hint picked-row" id="picked-row" hidden><span id="picked-name"></span> · <a href="#" id="change-file">Cambiar de vídeo</a></p>
       <div class="broll" id="broll-box">
         <label class="broll-pick">
           <input type="file" id="broll" accept="video/*,image/*" multiple hidden>
@@ -166,6 +168,8 @@
           <select id="hook-template"><option value="">Plantilla de gancho (opcional)</option></select>
           <h3>Dímelo como a tu editor</h3>
           <textarea id="instructions" rows="5" placeholder="Ej.: quita la parte en la que me equivoco con el precio y resalta «gratis»"></textarea>
+          <p class="hint ideas-label">Toca las que quieras y se añaden (puedes elegir varias y retocarlas):</p>
+          <div id="instr-ideas" class="quick ideas"></div>
           <label class="check small"><input type="checkbox" id="remember"> Recordarlo para mis próximos reels</label>
           <p class="hint" id="memory-hint" hidden></p>
           <p class="hint" id="ai-hint"></p>

@@ -210,7 +210,7 @@ def render(data: dict, outdir: Path, b: brand_mod.Brand, frames: list[Path]) -> 
         name = f"historia-{i + 1}.png"
         story(s, look, pick(i + 1)).save(outdir / name, optimize=True)
         names["stories"].append(name)
-    (outdir / "kit.json").write_text(json.dumps({**data, "files": names}, ensure_ascii=False, indent=1))
+    (outdir / "kit.json").write_text(json.dumps({**data, "files": names}, ensure_ascii=False, indent=1), encoding="utf-8")
     with zipfile.ZipFile(outdir / "kit.zip", "w") as z:
         for n in names["carousel"] + names["stories"]:
             z.write(outdir / n, n)

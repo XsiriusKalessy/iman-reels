@@ -333,3 +333,8 @@ label.color input { width: 44px; height: 34px; padding: 2px; margin: 0; border-r
 /* ideas para pedirle cambios al editor */
 .ideas-label { margin: 10px 0 6px; }
 .quick.ideas button { font-size: 13px; padding: 7px 12px; text-align: left; }
+
+#new-reel { padding: 8px 14px; }
+.picked-row { margin-top: 8px; text-align: center; }
+.picked-row a { text-decoration: underline; }
+.quick.ideas button.on { border-color: var(--accent); color: var(--accent); }

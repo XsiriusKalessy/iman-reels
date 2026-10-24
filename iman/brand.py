@@ -55,13 +55,13 @@ def load() -> Brand:
     f = brand_dir() / "brand.json"
     if not f.exists():
         return Brand()
-    data = json.loads(f.read_text())
+    data = json.loads(f.read_text(encoding="utf-8"))
     return Brand(**{k: v for k, v in data.items() if k in Brand.__dataclass_fields__})
 
 
 def save(b: Brand) -> Brand:
     brand_dir().mkdir(parents=True, exist_ok=True)
-    (brand_dir() / "brand.json").write_text(json.dumps(asdict(b), ensure_ascii=False, indent=2))
+    (brand_dir() / "brand.json").write_text(json.dumps(asdict(b), ensure_ascii=False, indent=2), encoding="utf-8")
     return b
 
 

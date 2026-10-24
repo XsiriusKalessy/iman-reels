@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ai, brand, config, copystyle, effects, license, packs, pipeline, portable, updates
+from . import ai, brand, config, copystyle, effects, jsonfile, license, packs, pipeline, portable, updates
 from .captions import STYLES
 from .models import EditPlan, Word
 from .rhythm import RHYTHMS
@@ -46,7 +46,7 @@ def _save_job(job: dict) -> None:
     """Guarda el estado del reel en disco para que siga en la biblioteca al reiniciar Imán."""
     d = JOBS_DIR / job["id"]
     if d.exists():
-        (d / "job.json").write_text(json.dumps({k: v for k, v in job.items() if k != "trial"}, ensure_ascii=False))
+        (d / "job.json").write_text(json.dumps({k: v for k, v in job.items() if k != "trial"}, ensure_ascii=False), encoding="utf-8")
 
 
 def _job(job_id: str) -> dict | None:
@@ -57,7 +57,7 @@ def _job(job_id: str) -> dict | None:
     f = JOBS_DIR / job_id / "job.json"
     if not f.exists():
         return None
-    job = json.loads(f.read_text())
+    job = json.loads(f.read_text(encoding="utf-8"))
     if job.get("status") == "working":  # Imán se cerró a mitad
         job.update(status="error", error="La edición se interrumpió. Vuelve a aplicar los cambios.")
     with _lock:
@@ -173,6 +173,24 @@ HOOK_TEMPLATES = [
     "3 cosas que ojalá hubiera sabido antes de…",
     "Si haces esto, estás perdiendo dinero",
 ]
+
+
+BROKEN_JOB = ("Este reel se guardó a medias por un fallo que ya está arreglado. Pulsa un cambio rápido "
+              "(por ejemplo «Más natural») para rehacerlo y vuelve a probar.")
+
+
+def _saved_words(workdir: Path) -> list[Word]:
+    data = jsonfile.load(workdir / "transcript.json")
+    if data is None:
+        raise HTTPException(409, BROKEN_JOB)
+    return [Word(**w) for w in data]
+
+
+def _saved_plan(workdir: Path) -> EditPlan:
+    data = jsonfile.load(workdir / "plan.json")
+    if data is None:
+        raise HTTPException(409, BROKEN_JOB)
+    return EditPlan.from_dict(data)
 
 
 @app.get("/api/settings")
@@ -386,7 +404,7 @@ def _voice_samples() -> str:
     """Transcripciones de reels anteriores, para que las ideas suenen a ti."""
     texts = []
     for t in sorted(JOBS_DIR.glob("*/transcript.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:5]:
-        texts.append(" ".join(w["text"] for w in json.loads(t.read_text())))
+        texts.append(" ".join(w["text"] for w in json.loads(t.read_text(encoding="utf-8"))))
     return "\n---\n".join(texts)
 
 
@@ -511,7 +529,8 @@ def reedit(job_id: str, body: dict):
     opts = pipeline.EditOptions(**merged)
     _set(job_id, status="working", step="Aplicando cambios", progress=0.0, options=asdict(opts), error=None)
     plan_file = workdir / "plan.json"
-    plan = EditPlan.from_dict(json.loads(plan_file.read_text())) if plan_file.exists() else None
+    saved = jsonfile.load(plan_file)  # si se guardó mal, se vuelve a planificar desde cero
+    plan = EditPlan.from_dict(saved) if saved is not None else None
     if plan is not None and "hook_title" in body:
         plan.hook_title = body["hook_title"]
     threading.Thread(target=_work, args=(job_id, src, workdir, opts, plan), daemon=True).start()
@@ -533,8 +552,8 @@ def chat(job_id: str, body: ChatIn):
     if not aicfg.enabled:
         raise HTTPException(400, "Conecta Claude o ChatGPT en Ajustes para pedir cambios por chat")
     workdir = JOBS_DIR / job_id
-    words = [Word(**w) for w in json.loads((workdir / "transcript.json").read_text())]
-    plan = EditPlan.from_dict(json.loads((workdir / "plan.json").read_text()))
+    words = _saved_words(workdir)
+    plan = _saved_plan(workdir)
     opts = pipeline.EditOptions(**job["options"])
     try:
         new_plan, settings, reply = ai.revise_plan(aicfg, words, plan, body.message, opts.rhythm, opts.style)
@@ -588,8 +607,8 @@ def review(job_id: str):
     workdir = JOBS_DIR / job_id
     if not job or not (workdir / "plan.json").exists():
         raise HTTPException(404, "No encuentro ese reel")
-    words = [Word(**w) for w in json.loads((workdir / "transcript.json").read_text())]
-    plan = EditPlan.from_dict(json.loads((workdir / "plan.json").read_text()))
+    words = _saved_words(workdir)
+    plan = _saved_plan(workdir)
     return {"phrases": pipeline.review(words, plan, job["options"]["rhythm"])}
 
 
@@ -600,7 +619,7 @@ def edit_plan(job_id: str, body: PlanEditIn):
     if not job or job["status"] == "working":
         raise HTTPException(404, "No encuentro ese reel o aún se está editando")
     workdir = JOBS_DIR / job_id
-    plan = EditPlan.from_dict(json.loads((workdir / "plan.json").read_text()))
+    plan = _saved_plan(workdir)
     if body.effects_off is not None:
         off = set(body.effects_off)
         plan.effects = [{**fx, "off": i in off} for i, fx in enumerate(plan.effects)]
@@ -630,18 +649,18 @@ def post_copy(job_id: str):
     workdir = JOBS_DIR / job_id
     cached = workdir / "post.json"
     if cached.exists():
-        return json.loads(cached.read_text())
+        return json.loads(cached.read_text(encoding="utf-8"))
     aicfg = config.ai_config(config.load())
     if not aicfg.enabled:
         raise HTTPException(400, "Activa la IA en Ajustes para que te escriba el texto de la publicación")
-    words = [Word(**w) for w in json.loads((workdir / "transcript.json").read_text())]
+    words = _saved_words(workdir)
     b = brand.load()
     try:
         data = ai.post_copy(aicfg, " ".join(w.text for w in words), job["result"]["plan"].get("hook_title", ""),
                             job["options"].get("pack", ""), b.cta, b.handle)
     except Exception as e:
         raise HTTPException(502, f"La IA no ha podido escribir el texto: {e}")
-    cached.write_text(json.dumps(data, ensure_ascii=False))
+    cached.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return data
 
 
@@ -660,10 +679,10 @@ def make_kit(job_id: str, body: KitIn):
         raise HTTPException(404, "No encuentro ese reel")
     workdir = JOBS_DIR / job_id
     outdir = workdir / "kit"
-    words = [Word(**w) for w in json.loads((workdir / "transcript.json").read_text())]
+    words = _saved_words(workdir)
     hook = job["result"]["plan"].get("hook_title", "")
     b = brand.load()
-    current = json.loads((outdir / "kit.json").read_text()) if (outdir / "kit.json").exists() else None
+    current = json.loads((outdir / "kit.json").read_text(encoding="utf-8")) if (outdir / "kit.json").exists() else None
     aicfg = config.ai_config(config.load())
     if body.message.strip() and not aicfg.enabled:
         raise HTTPException(400, "Activa la IA en Ajustes para cambiar el carrusel con una frase")
