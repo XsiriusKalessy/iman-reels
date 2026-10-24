@@ -45,6 +45,8 @@ class EditPlan:
     # Lo que decide el creador en "Revisa lo que dices": frases que quita (cut) o recupera (restore).
     cut: list[tuple[int, int]] = field(default_factory=list)
     restore: list[tuple[int, int]] = field(default_factory=list)
+    # Silencio dramático: palabras (inicio de la frase clave) antes de las que se cortan música y efectos en seco.
+    silence: list[int] = field(default_factory=list)
     source: str = "heuristica"
 
     @classmethod
@@ -60,6 +62,7 @@ class EditPlan:
             pauses=list(d.get("pauses", [])),
             cut=[tuple(x) for x in d.get("cut", [])],
             restore=[tuple(x) for x in d.get("restore", [])],
+            silence=[int(i) for i in d.get("silence", [])],
             source=d.get("source", "heuristica"),
         )
 

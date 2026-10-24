@@ -827,22 +827,33 @@ def build_effects(effects: list[dict], clock: WordClock, style: Style, duration:
     return lines, windows
 
 
-def beat_spans(spans: list[Span], words: list[Word], every: float = 2.6) -> tuple[list[Span], set[float]]:
+def beat_spans(spans: list[Span], words: list[Word], every: float = 2.6, run: int = 4,
+               rest: float = 5.0) -> tuple[list[Span], set[float]]:
     """Interrupción de patrón: si un tramo sigue más de `every` segundos sin corte, lo parte entre dos
-    palabras para que el plano cambie (zoom in/out) cada 2-3 s. Devuelve los tramos y los puntos de cambio."""
+    palabras para que el plano cambie (zoom in/out) cada 2-3 s. Devuelve los tramos y los puntos de cambio.
+
+    Con respiración: tras `run` cambios seguidos deja un respiro de unos `rest` segundos sin cambios,
+    para que no sea frenético todo el rato (eso cansa y hace que la gente se vaya)."""
     gaps = sorted(round((a.end + b.start) / 2, 3) for a, b in zip(words, words[1:]))
     out: list[Span] = []
     beats: set[float] = set()
+    streak = 0
     for sp in spans:
         start = sp.start
         while sp.end - start > every * 1.5:
-            target = start + every
-            near = [g for g in gaps if start + every * 0.6 < g < min(sp.end - 0.8, start + every * 1.4)]
+            target = start + (rest if streak >= run else every)
+            if streak >= run:
+                streak = 0
+                if sp.end - start < rest + every * 0.6:
+                    break
+            lo, hi = target - every * 0.4, min(sp.end - 0.8, target + every * 0.4)
+            near = [g for g in gaps if start + 0.8 < g and lo < g < hi]
             if not near:
                 break
             cut = min(near, key=lambda g: abs(g - target))
             out.append(Span(start, cut))
             beats.add(cut)
+            streak += 1
             start = cut
         out.append(Span(start, sp.end))
     return out, beats

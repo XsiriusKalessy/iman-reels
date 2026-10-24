@@ -188,12 +188,28 @@ def review(words: list[Word], plan: EditPlan, rhythm_key: str) -> list[dict]:
 
 
 
+def _hush_windows(silence: list[int], words: list[Word], clock: effects.WordClock) -> list[tuple[float, float]]:
+    """Tramos de silencio dramático en el reel: desde justo antes de la frase clave hasta que termina."""
+    out = []
+    for i in silence:
+        a = clock.at(i)
+        if a is None or a < 3.0:
+            continue
+        j = i
+        while j < min(len(words) - 1, i + 14) and not words[j].text.rstrip().endswith((".", "!", "?", "…")):
+            j += 1
+        b = clock.end_of(j)
+        if b is not None and b > a:
+            out.append((max(0.0, a - 0.15), min(b + 0.1, a + 6.0)))
+    return out
+
+
 def _sfx_events(active: list[dict], clock: effects.WordClock, hook: bool, beats: set[float],
-                spans) -> list[tuple[float, str, float]]:
+                spans, hush: list[tuple[float, float]] | None = None) -> list[tuple[float, str, float]]:
     """Dónde suena cada efecto: golpe al empezar, un sonido al entrar cada efecto y aire en los cambios."""
     events: list[tuple[float, str, float]] = []
     if hook:
-        events += [(0.0, "impact", 1.0), (0.0, "whoosh", 0.6)]  # el gancho se oye desde el milisegundo cero
+        events += [(0.0, "hit", 1.0), (0.0, "whoosh", 0.5)]  # el gancho se oye desde el milisegundo cero
     for fx in active:
         name = sfx.FOR_EFFECT.get(str(fx.get("type")))
         items = [it for it in fx.get("items") or [] if isinstance(it, dict)]
@@ -213,6 +229,10 @@ def _sfx_events(active: list[dict], clock: effects.WordClock, hook: bool, beats:
         out_t.append(acc)
     beat_out = [t for t, sp in zip(out_t, spans[1:]) if any(abs(sp.start - b) < 1e-3 for b in beats)]
     events += [(t, "air", 0.25) for t in beat_out]
+    hush = hush or []
+    # En el silencio dramático no suena nada más que la voz, y al acabar vuelve todo con un golpe.
+    events = [e for e in events if not any(a - 0.4 <= e[0] < b for a, b in hush)]
+    events += [(b, "hit", 0.9) for _, b in hush]
     return sorted(events)
 
 
@@ -335,14 +355,16 @@ def run(
     whole = _background_op(opts, workdir, kit, out_duration) if opts.mode == "camara" else None
     if whole:
         segs = [whole, *segs]  # va primero: los efectos de fondo del plan se pintan encima
+    hush = _hush_windows(plan.silence, words, clock) if (opts.sfx or opts.music) else []
     sound = None
     if opts.sfx:
-        evs = _sfx_events(active if opts.effects else [], clock, bool(opts.hook and plan.hook_title), beats, spans)
+        evs = _sfx_events(active if opts.effects else [], clock, bool(opts.hook and plan.hook_title), beats, spans,
+                          hush)
         if evs:
             sound = sfx.bed(evs, total, workdir / "sfx.wav")
     music = next((p for p in sorted(workdir.glob("musica.*")) if p.suffix != ".tmp"), None) if opts.music else None
     punch = opts.punch and not voice_only
-    av = dict(sfx_bed=sound, music=music, punch=punch)
+    av = dict(sfx_bed=sound, music=music, punch=punch, hush=hush)
     if segs and segment.available():
         # Dos pasadas: primero el reel limpio, luego la persona recortada encima de lo que va detrás.
         base = media.render(src, workdir / "base.mp4", spans, info, None, opts.size, opts.fit, opts.voice, zoom,

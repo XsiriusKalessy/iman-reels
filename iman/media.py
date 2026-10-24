@@ -106,7 +106,7 @@ def extract_audio(src: Path, dst: Path) -> Path:
 
 VOICE_CHAIN = (
     "highpass=f=80,lowpass=f=14000,afftdn=nr=12:nf=-40:tn=1,"
-    "equalizer=f=3000:t=q:w=1.2:g=2.5,"
+    "equalizer=f=250:t=q:w=1:g=-2,equalizer=f=3000:t=q:w=1.2:g=2.5,deesser=i=0.4,"
     "acompressor=threshold=-20dB:ratio=3:attack=8:release=120:makeup=2"
 )
 
@@ -222,6 +222,14 @@ def _image_inputs(ops: list, first_index: int) -> tuple[list[str], dict]:
     return args, labels
 
 
+def _hush(hush: list[tuple[float, float]] | None) -> str:
+    """Silencio dramático: la música se corta en seco en esos tramos (solo queda la voz)."""
+    if not hush:
+        return ""
+    cond = "+".join(f"between(t,{a:.3f},{b:.3f})" for a, b in hush)
+    return f",volume='if({cond},0,1)':eval=frame"
+
+
 def build_filtergraph(
     spans: list[Span], info: MediaInfo, ass_path: Path | None, size: str = "1080", fit: str = "recortar",
     voice: bool = True,
@@ -231,6 +239,7 @@ def build_filtergraph(
     sfx_bed: Path | None = None,
     music: Path | None = None,
     punch: bool = False,
+    hush: list[tuple[float, float]] | None = None,
 ) -> str:
     """`tail`: segundos extra al final (último fotograma congelado y silencio) para el cierre de marca.
     `sfx_bed`: pista con los efectos de sonido; `music`: tu música, que baja sola cuando hablas.
@@ -305,7 +314,7 @@ def build_filtergraph(
     if music is not None:
         # La música, en bucle y baja; se aparta sola cuando hablas (sidechain con la voz).
         parts.append(f"[{nxt}:a]aloop=loop=-1:size=2000000000,aresample=48000,aformat=channel_layouts=stereo,"
-                     f"volume=0.22,afade=t=in:d=0.6[mu]")
+                     f"volume=0.22,afade=t=in:d=0.6{_hush(hush)}[mu]")
         parts.append(f"{audio}asplit[vk][vs]")
         parts.append("[mu][vs]sidechaincompress=threshold=0.02:ratio=6:attack=30:release=500[md]")
         parts.append("[vk][md]amix=inputs=2:duration=first:normalize=0[vm]")
@@ -335,8 +344,10 @@ def render(
     sfx_bed: Path | None = None,
     music: Path | None = None,
     punch: bool = False,
+    hush: list[tuple[float, float]] | None = None,
 ) -> Path:
-    graph = build_filtergraph(spans, info, ass_path, size, fit, voice, zooms, overlays, tail, sfx_bed, music, punch)
+    graph = build_filtergraph(spans, info, ass_path, size, fit, voice, zooms, overlays, tail, sfx_bed, music, punch,
+                              hush)
     script = dst.with_suffix(".filters.txt")
     script.write_text(graph, encoding="utf-8")
     extra, _ = _image_inputs(overlays, 1)

@@ -63,6 +63,47 @@ def impact(sec: float = 0.9) -> np.ndarray:
     return (boom + hit) * 0.95
 
 
+def metal(sec: float = 0.5) -> np.ndarray:
+    """Textura metálica: parciales inarmónicos que se apagan rápido (como un golpe en una chapa)."""
+    n = int(sec * RATE)
+    t = np.arange(n) / RATE
+    base = _rng.uniform(380, 520)
+    out = sum(np.sin(2 * np.pi * base * r * t + _rng.uniform(0, 6)) * np.exp(-t * d)
+              for r, d in ((1.0, 9), (2.76, 12), (5.40, 16), (8.93, 22)))
+    return out * 0.18
+
+
+def _echo(x: np.ndarray, delay: float = 0.11, feedback: float = 0.42, taps: int = 4) -> np.ndarray:
+    d = int(delay * RATE)
+    out = np.concatenate([x, np.zeros(d * taps)])
+    for k in range(1, taps + 1):
+        out[d * k:d * k + len(x)] += _lowpass(x, 3500 / k) * feedback ** k
+    return out
+
+
+def hit(sec: float = 1.2) -> np.ndarray:
+    """Impacto por capas: sub-bass + whoosh que llega + chapa + cola de eco. Cada uno sale distinto."""
+    shift = _rng.uniform(0.85, 1.15)  # un poco de tono distinto en cada golpe
+    n = int(sec * RATE)
+    t = np.arange(n) / RATE
+    sub = np.sin(2 * np.pi * np.cumsum((32 + 50 * np.exp(-t * 14)) * shift) / RATE) * np.exp(-t * 3.2)
+    lead = whoosh(0.3)[::-1] * 0.5  # el aire llega justo antes del golpe y se corta en él
+    body = impact(0.5) * 0.7
+    out = np.zeros(n + len(lead))
+    i = len(lead)
+    out[:len(lead)] += lead
+    out[i:i + n] += sub
+    out[i:i + len(body)] += body
+    m = metal()
+    out[i:i + len(m)] += m
+    out = _echo(out)
+    return out / max(1.0, float(np.max(np.abs(out)))) * 0.95
+
+
+# El golpe por capas lleva el whoosh delante: suena antes, para que el golpe caiga en su instante.
+LEAD = {"hit": 0.3}
+
+
 def pop(sec: float = 0.09) -> np.ndarray:
     n = int(sec * RATE)
     t = np.arange(n) / RATE
@@ -94,11 +135,13 @@ def air(sec: float = 0.4) -> np.ndarray:
 
 
 SOUNDS = {"whoosh": whoosh, "riser": riser, "impact": impact, "pop": pop, "click": click, "keyboard": keyboard,
-          "air": air}
+          "air": air, "metal": metal, "hit": hit}
+# Cada vez que suenan, se generan de nuevo (con variación) en vez de repetir el mismo archivo.
+VARIED = {"hit", "whoosh", "air"}
 
 # Qué suena cuando aparece cada efecto.
 FOR_EFFECT = {
-    "palabra": "impact", "cifra": "impact", "color": "impact", "choque": "impact", "detras": "impact",
+    "palabra": "hit", "cifra": "hit", "color": "impact", "choque": "hit", "detras": "impact",
     "titular": "whoosh", "portada": "whoosh", "pagina": "whoosh", "fondo": "whoosh", "desenfoque": "air",
     "frase": "air", "fantasma": "air", "bruto": "whoosh", "contador": "riser",
     "ubicacion": "pop", "dato": "pop", "objeto": "pop", "plazas": "pop", "precio": "pop", "oferta": "pop",
@@ -114,8 +157,10 @@ def bed(events: list[tuple[float, str, float]], duration: float, dst: Path) -> P
     for at, name, gain in events:
         if name not in SOUNDS or at >= duration:
             continue
-        snd = cache.setdefault(name, SOUNDS[name]())
-        i = max(0, int(at * RATE))
+        snd = SOUNDS[name]() if name in VARIED else cache.setdefault(name, SOUNDS[name]())
+        i = int((at - LEAD.get(name, 0.0)) * RATE)
+        if i < 0:  # al principio del reel no hay sitio para la entrada: el golpe cae igual en su instante
+            snd, i = snd[-i:], 0
         piece = snd[: len(out) - i] * gain
         out[i:i + len(piece)] += piece
     peak = float(np.max(np.abs(out))) or 1.0

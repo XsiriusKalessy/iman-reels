@@ -91,8 +91,13 @@ EDIT_SCHEMA = {
             "description": "Índices de palabras tras las que la pausa da fuerza y NO se corta (0 a 4).",
             "items": {"type": "integer"},
         },
+        "silence": {
+            "type": "array",
+            "description": "Índice de la primera palabra de la frase más crítica (0 a 2): ahí se corta la música en seco.",
+            "items": {"type": "integer"},
+        },
     },
-    "required": ["hook_title", "hook_line", "drop", "emphasis", "effects", "zooms", "pauses"],
+    "required": ["hook_title", "hook_line", "drop", "emphasis", "effects", "zooms", "pauses", "silence"],
     "additionalProperties": False,
 }
 
@@ -189,6 +194,10 @@ Tu trabajo:
 7. pauses: los silencios se cortan, pero no por segundos: con sentido. Si el creador hace una pausa a propósito
    para dar fuerza (antes de revelar un dato, tras una pregunta, antes del remate), pon el índice de la palabra
    tras la que va esa pausa y se respetará. Solo las que de verdad suman.
+8. silence: el silencio repentino es un efecto brutal. Elige la frase más crítica del reel (la revelación, el
+   dato que cambia todo, el remate) y pon el índice de su primera palabra: justo antes se cortan en seco la
+   música y los efectos, solo queda la voz, y vuelven con un golpe al terminar la frase. Una, como mucho dos,
+   y nunca en los 3 primeros segundos. Si no hay una frase así, devuelve [].
 Respeta el idioma del vídeo. Sigue las instrucciones del creador si las hay."""
 
 REVISE_SYSTEM = EDIT_SYSTEM + """
@@ -334,6 +343,7 @@ def _plan_from(data: dict, n: int, source: str) -> EditPlan:
     zooms = [(int(z["from"]), int(z["to"])) for z in data.get("zooms", [])
              if 0 <= int(z["from"]) <= int(z["to"]) < n]
     pauses = sorted({int(i) for i in data.get("pauses", []) if 0 <= int(i) < n - 1})[:6]
+    silence = sorted({int(i) for i in data.get("silence", []) if 0 < int(i) < n - 1})[:2]
     return EditPlan(
         hook_title=data.get("hook_title", "").strip(),
         hook_line=data.get("hook_line", "").strip(),
@@ -343,6 +353,7 @@ def _plan_from(data: dict, n: int, source: str) -> EditPlan:
         effects=effects,
         zooms=zooms,
         pauses=pauses,
+        silence=silence,
         source=source,
     )
 
@@ -355,7 +366,8 @@ REVISE_SCHEMA = {
             "type": "object",
             "properties": {
                 "rhythm": {"type": "string", "enum": ["", "rapido", "dinamico", "natural", "sin_tocar"]},
-                "style": {"type": "string", "enum": ["", "impacto", "editorial", "palabra", "karaoke", "caja", "neon"]},
+                "style": {"type": "string", "enum": ["", "impacto", "editorial", "palabra", "karaoke", "caja", "neon", "gigante",
+                                                    "mezcla", "minimal", "elegante", "manuscrita", "marcador"]},
             },
             "required": ["rhythm", "style"],
             "additionalProperties": False,
@@ -376,6 +388,7 @@ def _plan_to_prompt(plan: EditPlan) -> dict:
         "effects": plan.effects,
         "zooms": [{"from": a, "to": b} for a, b in plan.zooms],
         "pauses": plan.pauses,
+        "silence": plan.silence,
     }
 
 

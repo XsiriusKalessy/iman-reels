@@ -410,3 +410,28 @@ def test_sfx_bed_places_sounds(tmp_path):
     dst = sfx.bed([(0.0, "impact", 1.0), (1.0, "pop", 0.5), (9.0, "whoosh", 1.0)], 2.0, tmp_path / "s.wav")
     with wave.open(str(dst)) as w:
         assert w.getframerate() == sfx.RATE and abs(w.getnframes() / sfx.RATE - 2.05) < 0.01
+
+
+def test_breathing_beats_leave_a_rest():
+    from iman.effects import beat_spans
+    from iman.models import Word
+    from iman.rhythm import Span
+
+    words = [Word(f"w{i}", i * 0.5, i * 0.5 + 0.4) for i in range(80)]  # 40 s hablando sin parar
+    _, beats = beat_spans([Span(0.0, 40.0)], words)
+    b = sorted(beats)
+    steps = [y - x for x, y in zip([0.0, *b], b)]
+    assert len(b) >= 8 and max(steps) > 4.0 and min(steps) > 1.5
+
+
+def test_dramatic_silence_window():
+    from iman import effects, pipeline
+    from iman.models import Word
+
+    words = [Word(t, i * 0.5, i * 0.5 + 0.4) for i, t in enumerate("a b c d e f g h i j Y esto lo cambia todo. k l".split())]
+    clock = effects.WordClock(words, list(range(len(words))))
+    hush = pipeline._hush_windows([10], words, clock)
+    assert hush and abs(hush[0][0] - 4.85) < 0.01 and abs(hush[0][1] - 7.5) < 0.01
+    evs = pipeline._sfx_events([], clock, True, set(), [], hush)
+    assert ("hit" in [n for t, n, g in evs if abs(t - hush[0][1]) < 1e-6])
+    assert not any(hush[0][0] - 0.4 <= t < hush[0][1] for t, n, g in evs)
