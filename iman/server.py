@@ -494,6 +494,8 @@ async def create_job(
     music_style: str = Form("auto"),
     sfx: bool = Form(True),
     punch: bool = Form(True),
+    barra: bool = Form(False),
+    look: str = Form("auto"),
 ):
     if (pack and pack not in packs.PACKS) or mode not in ("camara", "voz", "largo") \
             or background not in pipeline.BACKGROUNDS:
@@ -528,7 +530,8 @@ async def create_job(
     opts = pipeline.EditOptions(rhythm, style, size, fit, hook, hook_title, hook_template, instructions,
                                 voice=voice, watermark=watermark, brand=use_brand, pack=pack,
                                 mode="voz" if mode == "voz" else "camara", background=background,
-                                sfx=sfx, music=music, punch=punch)
+                                sfx=sfx, music=music, punch=punch, barra=barra,
+                                look=look if look in media.LOOKS or look == "auto" else "")
     JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0, "mode": mode,
                     "options": asdict(opts), "created": time.time(), "trial": watermark and mode != "largo"}
     target = _work_long if mode == "largo" else _work

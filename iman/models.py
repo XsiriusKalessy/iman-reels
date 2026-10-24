@@ -49,6 +49,8 @@ class EditPlan:
     silence: list[int] = field(default_factory=list)
     # Estilo de música que la IA recomienda para este vídeo (ver musica.STYLES).
     music: str = ""
+    # Look de color que la IA recomienda (ver media.LOOKS).
+    color: str = ""
     source: str = "heuristica"
 
     @classmethod
@@ -66,6 +68,7 @@ class EditPlan:
             restore=[tuple(x) for x in d.get("restore", [])],
             silence=[int(i) for i in d.get("silence", [])],
             music=str(d.get("music", "")),
+            color=str(d.get("color", "")),
             source=d.get("source", "heuristica"),
         )
 

@@ -400,6 +400,8 @@ $("#go").onclick = async () => {
   if (bg === "foto" && $("#bg-photo").files[0]) fd.append("background_photo", $("#bg-photo").files[0]);
   fd.append("sfx", $("#sfx").checked);
   fd.append("punch", $("#punch").checked);
+  fd.append("barra", $("#barra").checked);
+  fd.append("look", $("#look").value);
   const ms = $("#music-style").value;
   if (ms === "mia" && $("#music-file").files[0]) fd.append("music_file", $("#music-file").files[0]);
   else fd.append("music_style", ms === "mia" ? "" : ms);  // «Mi música» sin canción elegida: sin música
@@ -524,7 +526,7 @@ const FX_NAMES = { lista: "Lista", palabra: "Palabra gigante", titular: "Titular
   dato: "Dato", bruto: "Toma en bruto", fantasma: "Eco", pagina: "Página de revista", detras: "Texto detrás de ti",
   fondo: "Fondo de color", desenfoque: "Fondo desenfocado", ubicacion: "Ubicación", objeto: "Objeto", viaje: "Itinerario del viaje", oferta: "Oferta", ruta: "Ruta",
   testimonio: "Testimonio", plazas: "Plazas", precio: "Precio", apoyo: "Vídeo de apoyo",
-  notificaciones: "Notificaciones", foco: "Foco", anillo: "Anillo de texto",
+  notificaciones: "Notificaciones", buscador: "Buscador", chat: "Chat de mensajes", foco: "Foco", anillo: "Anillo de texto",
   sube: "Sube con tu dedo", choque: "El choque", aparece: "Aparece donde señalas" };
 function renderEffects(j) {
   const list = j.result.plan.effects || [];
@@ -686,6 +688,8 @@ function showResult(j) {
   const used = om === "auto" ? (j.result.plan.music || "") : om === true ? "mia" : (om || "");
   if (used === "mia" && !$("#re-music option[value=mia]")) $("#re-music").insertAdjacentHTML("beforeend", `<option value="mia">Mi música</option>`);
   $("#re-music").value = used;
+  const ol = j.options && j.options.look;
+  $("#re-look").value = (ol === "auto" || !ol ? j.result.plan.color : ol) || "natural";
   $("#clips").hidden = true; $("#result-tools").hidden = false; $("#download").hidden = false;
   renderChat(j);
   renderChatIdeas(j);
@@ -731,6 +735,7 @@ api("/api/music").then(list => {
   $("#re-music").insertAdjacentHTML("beforeend", opts);
 }).catch(() => {});
 $("#re-music").onchange = e => reedit({ music: e.target.value });
+$("#re-look").onchange = e => reedit({ look: e.target.value });
 $("#music-style").onchange = () => {
   const v = $("#music-style").value;
   $("#music-pick").hidden = v !== "mia";

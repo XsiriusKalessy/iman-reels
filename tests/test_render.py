@@ -464,3 +464,16 @@ def test_everything_sound_and_new_effects_together(sample, tmp_path):
     graph = (tmp_path / "w" / "reel.filters.txt").read_text(encoding="utf-8")
     assert "between(t," in graph and "sidechaincompress" in graph and "zoompan" in graph
     assert abs(media.probe(res.video).duration - res.duration_out) < 0.3
+
+
+@pytest.mark.parametrize("look", ["teal", "retro"])
+def test_looks_and_new_templates(sample, tmp_path, look):
+    from iman.models import EditPlan
+
+    fx = [{"type": "buscador", "word": 6, "until_word": 10, "text": "cómo ahorrar en vuelos"},
+          {"type": "chat", "word": 11, "until_word": 18, "text": "¿Cuánto cuesta?|Desde 2.900 €"}]
+    cfg = {"provider": "none", "anthropic_key": "", "openai_key": "", "claude_model": "", "openai_model": ""}
+    res = pipeline.run(sample, tmp_path / "w", pipeline.EditOptions(rhythm="sin_tocar", look=look, barra=True),
+                       cfg, words=TAKE, plan=EditPlan(effects=fx))
+    assert media.LOOKS[look].split("=")[0] in (tmp_path / "w" / "reel.filters.txt").read_text(encoding="utf-8")
+    assert abs(media.probe(res.video).duration - res.duration_out) < 0.3

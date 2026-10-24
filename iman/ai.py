@@ -17,11 +17,11 @@ OPENAI_MODEL = "gpt-4o"
 EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "color", "comentario",
                 "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                 "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque", "aparece",
-                "objeto", "viaje", "notificaciones", "foco", "anillo"]
+                "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat"]
 FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
                    "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                    "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque",
-                   "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo")
+                   "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat")
 LISTA_LOOKS = ("checklist", "capitulos", "itinerario")
 TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
@@ -93,6 +93,8 @@ EDIT_SCHEMA = {
             "description": "Índices de palabras tras las que la pausa da fuerza y NO se corta (0 a 4).",
             "items": {"type": "integer"},
         },
+        "color": {"type": "string", "enum": ["natural", "calido", "teal", "cine", "grano", "retro", "bn"],
+                  "description": "Look de color y textura para todo el reel."},
         "music": {"type": "string", "enum": MUSIC_STYLES,
                   "description": "Estilo de música de fondo que mejor encaja con el vídeo."},
         "silence": {
@@ -101,7 +103,7 @@ EDIT_SCHEMA = {
             "items": {"type": "integer"},
         },
     },
-    "required": ["hook_title", "hook_line", "drop", "emphasis", "effects", "zooms", "pauses", "silence", "music"],
+    "required": ["hook_title", "hook_line", "drop", "emphasis", "effects", "zooms", "pauses", "silence", "music", "color"],
     "additionalProperties": False,
 }
 
@@ -175,6 +177,10 @@ Tu trabajo:
      (text: 2 a 5 palabras que la resumen, o "-" para solo el foco).
    - "anillo": texto que gira alrededor de su cabeza (text: 1 a 3 palabras que se repiten, "PLAZAS LIMITADAS",
      "NUEVO", "SOLO HOY"). Una vez como mucho, en un momento de urgencia o novedad.
+   - "buscador": una barra de búsqueda en la que se escribe sola una frase, cuando el creador cuenta lo que la
+     gente busca o pregunta (text: la búsqueda, "cómo ahorrar en vuelos", máx. 40 letras).
+   - "chat": conversación de mensajes que van apareciendo, cuando cuenta lo que le escribe un cliente o amigo
+     (text: 2 a 4 mensajes cortos separados por "|", alternando: el primero es del otro y el segundo la respuesta).
    - "precio": etiqueta de precio (text: precio nuevo; subtitle: precio anterior tachado o vacío; title: "-30%" o vacío).
    - "apoyo": SOLO si te pasan VÍDEOS DE APOYO. Mientras el creador habla de lo que se ve en ese vídeo (el destino,
      el producto, el local), el vídeo de apoyo ocupa la pantalla y el creador queda en un círculo abajo
@@ -217,6 +223,9 @@ Tu trabajo:
    "acustica" (naturaleza, cercanía), "romantica" (parejas, bodas, escapadas), "piano" (reflexiones, emoción
    íntima), "piano_alegre" (consejos amables, hogar), "piano_cine" (momentos solemnes, recuerdos, homenajes).
    "synthwave" (autoridad, negocios agresivos, tecnología, noche, coches). "" si mejor sin música.
+10. color: el look de todo el reel. "natural" por defecto; "calido" (comida, hogar, atardeceres, cercanía);
+   "teal" (viajes, playa, ciudad: turquesas en agua y cielo, piel cálida); "cine" (historias, documental);
+   "grano" (nostalgia, recuerdos); "retro" (gaming, cripto, años 80-90); "bn" (reflexión seria, dramático).
 Respeta el idioma del vídeo. Sigue las instrucciones del creador si las hay."""
 
 REVISE_SYSTEM = EDIT_SYSTEM + """
@@ -374,6 +383,7 @@ def _plan_from(data: dict, n: int, source: str) -> EditPlan:
         pauses=pauses,
         silence=silence,
         music=data.get("music", "") if data.get("music", "") in MUSIC_STYLES else "",
+        color=str(data.get("color", "")),
         source=source,
     )
 
@@ -410,6 +420,7 @@ def _plan_to_prompt(plan: EditPlan) -> dict:
         "pauses": plan.pauses,
         "silence": plan.silence,
         "music": plan.music,
+        "color": plan.color,
     }
 
 

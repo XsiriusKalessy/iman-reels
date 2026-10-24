@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import ai, brand, copystyle, effects, gestos, hands, jsonfile, media, musica, segment, sfx
+from . import ai, brand, copystyle, effects, gestos, hands, jsonfile, media, musica, packfx, segment, sfx
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Word
@@ -45,6 +45,8 @@ class EditOptions:
     # o un estilo de Imán ("epica", "tranquila"…). True es lo mismo que "mia" (reels de versiones anteriores).
     music: bool | str = "auto"
     punch: bool = True  # zoom rápido de entrada en el primer medio segundo
+    barra: bool = False  # barra de progreso arriba que se llena hasta el final (retención)
+    look: str = "auto"  # "auto" = el que recomienda la IA; o color y textura de un clic (media.LOOKS): "calido", "teal", "cine", "grano", "retro", "bn"…
 
 
 @dataclass
@@ -190,6 +192,7 @@ def review(words: list[Word], plan: EditPlan, rhythm_key: str) -> list[dict]:
 
 
 
+AUTO_LOOK = {"viajes": "teal"}
 AUTO_MUSIC = {"viajes": "inspiracional", "cursos": "corporativa", "productos": "alegre", "empresas": "corporativa"}
 
 
@@ -234,7 +237,7 @@ def _sfx_events(active: list[dict], clock: effects.WordClock, hook: bool, beats:
                     events.append((t, "pop", 0.45))
             continue
         t = clock.at(int(fx.get("word", -1))) if fx.get("word") is not None else None
-        if fx.get("type") == "notificaciones" and t is not None:  # un "ding" por aviso que cae
+        if fx.get("type") in ("notificaciones", "chat") and t is not None:  # un "ding" por aviso o mensaje
             n = len([x for x in str(fx.get("text", "")).replace("›", "|").split("|") if x.strip()][:4])
             events += [(t + k * 0.45, "pop", 0.5) for k in range(n)]
             continue
@@ -344,7 +347,7 @@ def run(
     total = out_duration + tail
     end_lines, end_window = effects.end_card_events(kit, style, total)
     ass_path = None
-    if opts.captions or opts.hook or opts.watermark or end_lines:
+    if opts.captions or opts.hook or opts.watermark or end_lines or opts.barra:
         emphasis_out = {j for j, i in enumerate(kept_idx) if i in set(plan.emphasis)}
         fx_lines, fx_windows = ([], [])
         if opts.effects:
@@ -354,7 +357,8 @@ def run(
         ass = build_ass(
             kept if opts.captions else [], style, total,
             plan.hook_title if opts.hook else "", emphasis_out,
-            extra_events=fx_lines + end_lines + ([WATERMARK.format(end=_ts(total))] if opts.watermark else []),
+            extra_events=fx_lines + end_lines + ([WATERMARK.format(end=_ts(total))] if opts.watermark else [])
+            + (packfx.progress_bar_events(out_duration, style) if opts.barra else []),
             hide=fx_windows + ([end_window] if end_window else []),
         )
         ass_path = workdir / "subs.ass"
@@ -387,7 +391,11 @@ def run(
     # La música "explota" justo cuando se va el texto del gancho.
     music = _music(choice, workdir, total, min(2.8, out_duration) if opts.hook and plan.hook_title else None)
     punch = opts.punch and not voice_only
-    av = dict(sfx_bed=sound, music=music, punch=punch, hush=hush)
+    look = opts.look
+    if look == "auto":
+        look = plan.color if plan.color in media.LOOKS else AUTO_LOOK.get(opts.pack, "natural")
+        plan.color = look
+    av = dict(sfx_bed=sound, music=music, punch=punch, hush=hush, look=look)
     if segs and segment.available():
         # Dos pasadas: primero el reel limpio, luego la persona recortada encima de lo que va detrás.
         base = media.render(src, workdir / "base.mp4", spans, info, None, opts.size, opts.fit, opts.voice, zoom,

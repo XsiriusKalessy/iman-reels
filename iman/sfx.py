@@ -146,7 +146,7 @@ FOR_EFFECT = {
     "frase": "air", "fantasma": "air", "bruto": "whoosh", "contador": "riser",
     "ubicacion": "pop", "dato": "pop", "objeto": "pop", "plazas": "pop", "precio": "pop", "oferta": "pop",
     "testimonio": "pop", "comentario": "pop", "cta": "click", "aparece": "pop", "sube": "riser",
-    "ruta": "whoosh", "viaje": "whoosh", "notificaciones": "pop", "foco": "riser", "anillo": "whoosh", "apoyo": "whoosh", "tecleo": "keyboard",
+    "ruta": "whoosh", "viaje": "whoosh", "notificaciones": "pop", "foco": "riser", "anillo": "whoosh", "buscador": "keyboard", "chat": "pop", "apoyo": "whoosh", "tecleo": "keyboard",
 }
 
 

@@ -105,7 +105,8 @@ STYLES: dict[str, Style] = {
 
 # Animaciones de entrada (ASS): suaves, con un pequeño rebote o desenfoque, como el motion de las apps modernas.
 ENTRIES = {
-    "pop": r"\fscx82\fscy82\t(0,110,\fscx100\fscy100)",
+    # Rebote: crece al 120 % y vuelve al 100 % (overshoot), suave pero con impacto.
+    "pop": r"\fscx70\fscy70\t(0,90,\fscx120\fscy120)\t(90,190,\fscx100\fscy100)",
     "muelle": r"\fscx55\fscy55\t(0,120,\fscx116\fscy116)\t(120,200,\fscx95\fscy95)\t(200,260,\fscx100\fscy100)",
     "sube": r"\alpha&HFF&\blur6\t(0,180,\alpha&H00&\blur0)",
     "enfoque": r"\alpha&HFF&\blur16\fscx108\fscy108\t(0,240,\alpha&H00&\blur0\fscx100\fscy100)",

@@ -110,6 +110,19 @@ VOICE_CHAIN = (
     "acompressor=threshold=-20dB:ratio=3:attack=8:release=120:makeup=2"
 )
 
+# Looks de un clic (color y textura), todos con filtros de ffmpeg: nada de LUTs ni packs de terceros.
+LOOKS = {
+    "natural": "eq=contrast=1.04:saturation=1.06",
+    "calido": "colorbalance=rm=0.06:gm=0.01:bm=-0.07:rh=0.04:bh=-0.05,eq=saturation=1.1:contrast=1.04",
+    "teal": "colorbalance=rs=-0.08:gs=-0.02:bs=0.12:rh=0.10:gh=0.02:bh=-0.10,eq=contrast=1.08:saturation=1.12",
+    "cine": "colorbalance=rs=-0.05:bs=0.08:rh=0.06:bh=-0.05,eq=contrast=1.1:saturation=0.92,"
+            "noise=alls=8:allf=t,vignette=PI/5",
+    "grano": "eq=saturation=0.9:contrast=1.06,noise=alls=16:allf=t+u,vignette=PI/4.5",
+    "retro": "rgbashift=rh=-4:bh=4,eq=saturation=1.25:contrast=1.1,noise=alls=10:allf=t,"
+             "drawgrid=w=iw:h=4:t=1:c=black@0.22,vignette=PI/4",
+    "bn": "hue=s=0,eq=contrast=1.18,noise=alls=12:allf=t,vignette=PI/5",
+}
+
 ZOOM = 1.15  # plano cerrado: un 15 % más de cerca
 
 SIZES = {"1080": (1080, 1920), "4k": (2160, 3840)}
@@ -240,6 +253,7 @@ def build_filtergraph(
     music: Path | None = None,
     punch: bool = False,
     hush: list[tuple[float, float]] | None = None,
+    look: str = "",
 ) -> str:
     """`tail`: segundos extra al final (último fotograma congelado y silencio) para el cierre de marca.
     `sfx_bed`: pista con los efectos de sonido; `music`: tu música, que baja sola cuando hablas.
@@ -288,15 +302,20 @@ def build_filtergraph(
         parts.append("[bg][fg]overlay=(W-w)/2:(H-h)/2[vf]")
     else:
         parts.append(f"{chain}scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{H}[vf]")
+    if look in LOOKS:
+        parts.append(f"[vf]{LOOKS[look]}[vfl]")
+        vf = "[vfl]"
+    else:
+        vf = "[vf]"
     if punch:
         # Entra un 20 % más cerca y se abre en 0,45 s, con un frenazo suave al final.
-        parts.append("[vf]fps=30,setsar=1,split[pz0][pz1]")
+        parts.append(f"{vf}fps=30,setsar=1,split[pz0][pz1]")
         parts.append(f"[pz0]trim=duration=0.45,setpts=PTS-STARTPTS,"
                      f"zoompan=z='1+0.2*pow(1-on/13,3)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s={W}x{H}:fps=30[pz2]")
         parts.append("[pz1]trim=start=0.45,setpts=PTS-STARTPTS[pz3]")
         parts.append("[pz2][pz3]concat=n=2:v=1:a=0,setsar=1[vx]")
     else:
-        parts.append("[vf]fps=30,setsar=1[vx]")
+        parts.append(f"{vf}fps=30,setsar=1[vx]")
     _, images = _image_inputs(overlays, 1)
     cur = _video_overlays(parts, overlays or [], W, H, images=images)
     tail = f"{cur}null"
@@ -345,9 +364,10 @@ def render(
     music: Path | None = None,
     punch: bool = False,
     hush: list[tuple[float, float]] | None = None,
+    look: str = "",
 ) -> Path:
     graph = build_filtergraph(spans, info, ass_path, size, fit, voice, zooms, overlays, tail, sfx_bed, music, punch,
-                              hush)
+                              hush, look)
     script = dst.with_suffix(".filters.txt")
     script.write_text(graph, encoding="utf-8")
     extra, _ = _image_inputs(overlays, 1)

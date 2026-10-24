@@ -435,6 +435,105 @@ def anillo_events(effect: dict, clock: WordClock, style: Style, duration: float)
     return lines, None
 
 
+def _light(ass_color: str) -> bool:
+    """¿Es un color claro (amarillo, crema…)? Entonces el texto encima va oscuro."""
+    h = ass_color.replace("&H", "").replace("&", "")[-6:].rjust(6, "0")
+    b, g, r = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return 0.299 * r + 0.587 * g + 0.114 * b > 165
+
+
+def buscador_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Barra de búsqueda genérica (sin marcas) en la que la frase se escribe sola, letra a letra."""
+    span = _span(effect, clock, duration, 3.0, 1.8)
+    if not span:
+        return [], None
+    start, end = span
+    text = effect["text"].strip()[:40]
+    if not text:
+        return [], None
+    w, h = 900, 124
+    x, y = (W - w) / 2, 520
+    size = textfit.fit(text, "Figtree SemiBold", 50, w - 190, 30)
+    t = f"{_ts(start)},{_ts(end)}"
+    pop = "\\fscx80\\fscy80\\t(0,90,\\fscx105\\fscy105)\\t(90,170,\\fscx100\\fscy100)\\fad(80,200)\\bord0"
+    lines = [
+        f"Dialogue: 4,{t},Sub,,0,0,0,,{{\\an7\\pos({x:.0f},{y})\\shad8\\4c&H000000&\\4a&HA0&{pop}"
+        f"\\1c&HFFFFFF&\\p1}}{_rect(0, 0, w, h, h / 2)}",
+        f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an7\\pos({x + 46:.0f},{y + 38})\\shad0{pop}\\1a&HFF&\\3c&H707070&\\bord5"
+        f"\\p1}}{_circle(34)}",
+        f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an7\\pos({x + 46:.0f},{y + 38})\\shad0{pop}\\1c&H707070&\\p1}}"
+        f"m 30 28 l 46 44 l 41 49 l 25 33",
+    ]
+    typing = min(1.6, max(0.6, (end - start) * 0.5))
+    step = typing / len(text)
+    t0 = start + 0.25
+    for k in range(1, len(text) + 1):
+        a = t0 + (k - 1) * step
+        b = t0 + k * step if k < len(text) else end
+        cursor = "|" if k < len(text) else ""
+        lines.append(f"Dialogue: 6,{_ts(a)},{_ts(b)},Sub,,0,0,0,,{{\\an4\\pos({x + 120:.0f},{y + h / 2:.0f})"
+                     f"\\fnFigtree SemiBold\\fs{size:.0f}\\bord0\\shad0\\c{INK}&"
+                     f"{chr(92) + 'fad(0,200)' if k == len(text) else ''}}}{_esc(text[:k])}{cursor}")
+    # Al terminar de escribir, la barra "busca": un subrayado de color que la recorre.
+    acc = _accent(style)
+    ta = t0 + typing + 0.1
+    if ta < end - 0.2:
+        lines.append(f"Dialogue: 5,{_ts(ta)},{_ts(end)},Sub,,0,0,0,,{{\\an7\\pos({x + h / 2:.0f},{y + h - 10})"
+                     f"\\bord0\\shad0\\1c{acc}&\\fscx0\\t(0,500,\\fscx100)\\fad(0,200)\\p1}}"
+                     f"{_rect(0, 0, w - h, 8, 4)}")
+    return lines, None
+
+
+def chat_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Chat de mensajes genérico: burbujas que van apareciendo, alternando quien escribe."""
+    span = _span(effect, clock, duration, 3.6, 2.0)
+    if not span:
+        return [], None
+    start, end = span
+    msgs = [m.strip()[:60] for m in effect["text"].replace("›", "|").split("|") if m.strip()][:4]
+    if not msgs:
+        return [], None
+    acc = _accent(style)
+    gap = max(0.3, min(0.7, (end - start - 0.6) / len(msgs)))
+    lines = [_dim(start, end, "80")]
+    y = 380
+    for k, msg in enumerate(msgs):
+        mine = k % 2 == 1  # los pares son del otro; los impares, tuyos (a la derecha y en color)
+        size = 46
+        rows = _wrap(msg, "Figtree SemiBold", size, 600)
+        tw = max(textfit.width(r, "Figtree SemiBold", size) for r in rows)
+        bw, bh = tw + 64, len(rows) * size * 1.25 + 44
+        bx = 900 - bw if mine else 120
+        a = start + 0.15 + k * gap
+        t = f"{_ts(a)},{_ts(end)}"
+        anim = "\\fscx60\\fscy60\\t(0,100,\\fscx106\\fscy106)\\t(100,180,\\fscx100\\fscy100)\\fad(60,200)\\bord0\\shad0"
+        fill = acc if mine else "&HF2F2F2"
+        ink = (INK if _light(acc) else "&HFFFFFF") if mine else INK
+        org = f"\\org({bx + (bw if mine else 0):.0f},{y + bh:.0f})"
+        lines.append(f"Dialogue: 4,{t},Sub,,0,0,0,,{{\\an7\\pos({bx:.0f},{y:.0f}){org}{anim}\\1c{fill}&\\p1}}"
+                     f"{_rect(0, 0, bw, bh, 34)}")
+        lines.append(f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an7\\pos({bx + 32:.0f},{y + 22:.0f}){org}{anim}"
+                     f"\\fnFigtree SemiBold\\fs{size}\\c{ink}&}}{(chr(92) + 'N').join(_esc(r) for r in rows)}")
+        y += bh + 26
+    return lines, None
+
+
+def progress_bar_events(total: float, style: Style, start: float = 0.0) -> list[str]:
+    """Barra de progreso fina arriba del todo (debajo de la zona de la app), que se llena hasta el final:
+    el cerebro quiere ver cómo se completa y se queda."""
+    if total <= 1:
+        return []
+    acc = _accent(style)
+    ms = int((total - start) * 1000)
+    y, h = 236, 10
+    return [
+        f"Dialogue: 1,{_ts(start)},{_ts(total)},Sub,,0,0,0,,{{\\an7\\pos(60,{y})\\bord0\\shad0\\1c&HFFFFFF&"
+        f"\\1a&HB0&\\p1}}{_rect(0, 0, W - 120, h, h / 2)}",
+        f"Dialogue: 2,{_ts(start)},{_ts(total)},Sub,,0,0,0,,{{\\an7\\pos(60,{y})\\bord0\\shad0\\1c{acc}&"
+        f"\\fscx0\\t(0,{ms},\\fscx100)\\p1}}{_rect(0, 0, W - 120, h, h / 2)}",
+    ]
+
+
 PACK_BUILDERS = {
     "ubicacion": ubicacion_events,
     "oferta": oferta_events,
@@ -446,4 +545,6 @@ PACK_BUILDERS = {
     "notificaciones": notificaciones_events,
     "foco": foco_events,
     "anillo": anillo_events,
+    "buscador": buscador_events,
+    "chat": chat_events,
 }

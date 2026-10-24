@@ -160,6 +160,9 @@
             <label class="ghost button" id="bg-photo-pick" hidden>📷 Elegir la foto de fondo<input type="file" id="bg-photo" accept="image/*" hidden></label>
             <p class="hint" id="bg-photo-name" hidden></p>
           </div>
+          <h3>Color</h3>
+          <div class="music-row"><label>🎨 Look de color y textura
+            <select id="look"><option value="auto" selected>Automático (Imán elige según tu vídeo)</option><option value="natural">Natural</option><option value="calido">Cálido</option><option value="teal">Teal &amp; Orange (viajes)</option><option value="cine">Cine</option><option value="grano">Película con grano</option><option value="retro">Retro (CRT)</option><option value="bn">Blanco y negro</option></select></label></div>
           <div id="use-brand-row" hidden>
             <h3>Marca</h3>
             <label class="check"><input type="checkbox" id="use-brand" checked> Con mi marca (colores, logo y cierre) · <a href="#" id="brand-edit-link">cambiar</a></label>
@@ -168,6 +171,7 @@
           <label class="check"><input type="checkbox" id="voice" checked> Mejorar la voz (menos ruido, volumen estable)</label>
           <label class="check"><input type="checkbox" id="sfx" checked> Efectos de sonido (golpe al empezar, whoosh y pops en cada efecto)</label>
           <label class="check"><input type="checkbox" id="punch" checked> Zoom de entrada en el primer medio segundo</label>
+          <label class="check"><input type="checkbox" id="barra"> Barra de progreso arriba (se llena hasta el final y engancha)</label>
           <div class="music-row">
             <label>🎵 Música de fondo
               <select id="music-style"><option value="auto" selected>Automática (Imán elige según tu vídeo)</option><option value="">Sin música</option><option value="mia">Mi música (subir archivo)</option></select>
@@ -257,6 +261,7 @@
             <button data-style="mezcla">Mezcla</button>
             <button data-style="elegante">Elegante</button>
             <button data-style="marcador">Marcador</button>
+            <label class="quick-music">🎨 Color <select id="re-look"><option value="natural">Natural</option><option value="calido">Cálido</option><option value="teal">Teal &amp; Orange (viajes)</option><option value="cine">Cine</option><option value="grano">Película con grano</option><option value="retro">Retro (CRT)</option><option value="bn">Blanco y negro</option></select></label>
             <label class="quick-music">🎵 Música <select id="re-music"><option value="">Sin música</option></select></label>
             <button data-background="desenfoque">Fondo desenfocado</button>
             <button data-background="color">Fondo de mi marca</button>
