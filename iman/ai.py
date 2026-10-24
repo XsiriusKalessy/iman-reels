@@ -27,7 +27,7 @@ TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
 LOOK_ENUM = ["", *TITULAR_LOOKS, *LISTA_LOOKS, "enfoque", *COLORS]
 
-MUSIC_STYLES = ["", "tranquila", "alegre", "cinematica", "tropical", "phonk", "corporativa", "epica", "emotiva", "inspiracional", "suspense", "acustica", "romantica"]
+MUSIC_STYLES = ["", "tranquila", "alegre", "cinematica", "tropical", "phonk", "corporativa", "epica", "emotiva", "inspiracional", "suspense", "acustica", "romantica", "piano", "piano_alegre", "piano_cine"]
 
 EDIT_SCHEMA = {
     "type": "object",
@@ -214,7 +214,9 @@ Tu trabajo:
    (consejos relajados, rutinas), "alegre" (planes, productos, buen rollo), "tropical" (playa, verano, fiesta),
    "phonk" (energía, deporte, coches, retos rápidos), "corporativa" (empresas, servicios, formación),
    "cinematica" (paisajes, revelaciones), "suspense" (misterios, errores, "lo que nadie te cuenta"),
-   "acustica" (naturaleza, cercanía), "romantica" (parejas, bodas, escapadas). "" si mejor sin música.
+   "acustica" (naturaleza, cercanía), "romantica" (parejas, bodas, escapadas), "piano" (reflexiones, emoción
+   íntima), "piano_alegre" (consejos amables, hogar), "piano_cine" (momentos solemnes, recuerdos, homenajes).
+   "" si mejor sin música.
 Respeta el idioma del vídeo. Sigue las instrucciones del creador si las hay."""
 
 REVISE_SYSTEM = EDIT_SYSTEM + """

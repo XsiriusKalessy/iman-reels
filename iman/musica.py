@@ -104,12 +104,25 @@ def braam(hz: float, sec: float) -> np.ndarray:
     return np.tanh(x * 1.6) * swell * 0.16
 
 
-def piano(hz: float, sec: float) -> np.ndarray:
+def piano(hz: float, sec: float, vel: float = 0.8) -> np.ndarray:
+    """Piano: parciales algo desafinados hacia arriba (como una cuerda real), dos cuerdas que baten,
+    golpe del martillo y los agudos que se apagan antes que los graves."""
     n = int(sec * RATE)
     t = np.arange(n) / RATE
-    x = sum(a * np.exp(-t * (1.8 + 1.2 * k)) * np.sin(2 * np.pi * hz * k * 1.0005 ** k * t)
-            for k, a in enumerate([1.0, 0.45, 0.22, 0.1, 0.05], start=1))
-    return x * np.clip(t / 0.004, 0, 1) * np.clip((sec - t) / 0.08, 0, 1) * 0.2
+    inharm = 0.00012 * (hz / 261.6)
+    bright = 0.35 + 0.65 * vel
+    x = np.zeros(n)
+    for k in range(1, 11):
+        f = hz * k * math.sqrt(1 + inharm * k * k)
+        if f > 15000:
+            break
+        amp = (bright ** (k - 1)) / k ** 0.7
+        decay = 0.9 + 0.55 * k + hz / 400
+        x += amp * np.exp(-t * decay) * (np.sin(2 * np.pi * f * t) + 0.8 * np.sin(2 * np.pi * f * 1.0011 * t + 0.7))
+    thump = np.sin(2 * np.pi * min(hz, 200) * 0.5 * t) * np.exp(-t * 60) * 0.25
+    hammer = _rng.uniform(-1, 1, n) * np.exp(-t * 300) * 0.04 * vel
+    body = (x + thump + hammer) * np.clip(t / 0.002, 0, 1) * np.clip((sec - t) / 0.12, 0, 1)
+    return body * 0.11 * (0.4 + 0.6 * vel)
 
 
 def bass(hz: float, sec: float) -> np.ndarray:
@@ -187,6 +200,8 @@ class Style:
     ostinato: bool = False  # cuerdas en semicorcheas (épica)
     braam: bool = False  # metales graves cada dos compases
     drums_from: int = 1  # compás en el que entra la batería (para que la canción crezca)
+    piano_solo: bool = False  # mano izquierda en arpegio y melodía en la derecha
+    room: float = 0.25  # cuánta sala (reverb) lleva
 
 
 STYLES: dict[str, Style] = {
@@ -231,7 +246,55 @@ STYLES.update({
                        lead_steps="x..x..x.x..x..x.", chord_inst="keys", bass_steps="x.....x.", swing=0.12),
 })
 
+STYLES.update({
+    "piano": Style("piano", "Piano emotivo", 66, ("Am", "F", "C", "G"), "." * 16, "." * 16, "." * 16,
+                   chord_inst="", bass_steps="........", piano_solo=True, room=0.45),
+    "piano_alegre": Style("piano_alegre", "Piano alegre", 104, ("C", "Am", "F", "G"), "." * 16, "." * 16,
+                          "." * 16, chord_inst="", bass_steps="........", piano_solo=True, room=0.3),
+    "piano_cine": Style("piano_cine", "Piano de cine", 72, ("Dm", "Bb", "F", "C"), "x...............",
+                        "." * 16, "." * 16, chord_inst="pad", bass_steps="x.......", piano_solo=True, toms=True,
+                        drums_from=4, room=0.5),
+})
+
 LEADS = {"keys": keys, "pluck": pluck, "marimba": marimba, "cowbell": cowbell, "piano": piano}
+
+
+def _reverb(x: np.ndarray, amount: float, rng, seconds: float = 2.4) -> np.ndarray:
+    """Sala: ruido que se apaga poco a poco (y más rápido en los agudos), convolucionado con la señal."""
+    if amount <= 0:
+        return np.zeros_like(x)
+    n = int(seconds * RATE)
+    t = np.arange(n) / RATE
+    ir = rng.normal(0, 1, n) * np.exp(-t * 6.9 / seconds)
+    ir = np.convolve(ir, np.ones(6) / 6, mode="same")  # menos brillo en la cola
+    ir[: int(0.012 * RATE)] = 0  # primeras reflexiones a 12 ms
+    ir /= np.sqrt(np.sum(ir ** 2))
+    size = 1 << int(len(x) + n).bit_length()
+    wet = np.fft.irfft(np.fft.rfft(x, size) * np.fft.rfft(ir, size), size)[: len(x)]
+    return wet * amount
+
+
+def _piano_bar(buf: np.ndarray, notes: list[int], t0: float, beat: float, step: float, b: int, rng,
+               prev: int | None, lively: bool) -> int:
+    """Un compás de piano a dos manos: arpegio grave en la izquierda y una melodía sencilla en la derecha."""
+    root = notes[0]
+    left = [root - 12, root - 5, root, notes[1] + 12 if len(notes) > 1 else root + 4]
+    for k in range(8):
+        m = left[[0, 1, 2, 3, 2, 1, 2, 3][k]]
+        at = t0 + k * beat / 2 + rng.normal(0, 0.005)
+        _place(buf, piano(_hz(m), beat * 2.2, vel=0.5 if k else 0.7), max(0.0, at))
+    # Melodía: notas del acorde y de paso, cerca de la anterior (suena cantable, no a saltos).
+    scale = sorted({(n % 12) for n in notes} | {(root + 2) % 12, (root + 9) % 12})
+    cand = [m for m in range(_midi("C", 5), _midi("C", 6) + 1) if m % 12 in scale]
+    rhythm = [0, 3, 4, 6] if lively else [0, 2.5, 3]
+    note = prev if prev is not None else cand[len(cand) // 2]
+    for k, beat_pos in enumerate(rhythm):
+        on_chord = [m for m in cand if m % 12 in {n % 12 for n in notes}]
+        pool = on_chord if k == 0 else cand
+        note = min(pool, key=lambda m: abs(m - note) + rng.uniform(0, 4))
+        length = beat * (1.5 if lively else 2.2)
+        _place(buf, piano(_hz(note), length, vel=rng.uniform(0.7, 0.95)), t0 + beat_pos * beat / (2 if lively else 1))
+    return note
 
 
 def _place(buf: np.ndarray, snd: np.ndarray, at: float, gain: float = 1.0) -> None:
@@ -251,7 +314,9 @@ def render(style_key: str, duration: float, dst: Path, seed: int = 0) -> Path:
     bar = beat * 4
     bars = max(2, math.ceil((duration + 0.5) / bar))
     total = bars * bar + 2.0
-    buf = np.zeros(int(total * RATE))
+    buf = np.zeros(int(total * RATE))  # ritmo: batería y bajo, casi secos
+    mel = np.zeros_like(buf)  # acordes y melodías: van a la sala (reverb)
+    prev = None
     for b in range(bars):
         t0 = b * bar
         sym = st.chords[b % len(st.chords)]
@@ -260,20 +325,22 @@ def render(style_key: str, duration: float, dst: Path, seed: int = 0) -> Path:
         intro = b < st.drums_from and bars > st.drums_from + 2  # la batería entra más tarde: la canción crece
         if st.chord_inst == "pad":
             for m in notes:
-                _place(buf, pad(_hz(m + 12), bar + 0.4), t0)
+                _place(mel, pad(_hz(m + 12), bar + 0.4), t0)
         elif st.chord_inst == "keys":
             for k, m in enumerate(notes):
                 for hit in (0, 2.5 if st.swing else 2):
-                    _place(buf, keys(_hz(m + 12), beat * 1.4), t0 + hit * beat + k * 0.012)
+                    _place(mel, keys(_hz(m + 12), beat * 1.4), t0 + hit * beat + k * 0.012)
         if st.toms and b % 2 == 0:
             _place(buf, tom(70), t0, 0.9)
             _place(buf, tom(55), t0 + bar - beat, 0.6)
         if st.ostinato:
             pattern = [root, root, root + 7, root, root + 12, root, root + 7, root + 3] * 2
             for s16, m in enumerate(pattern):
-                _place(buf, strings(_hz(m), step * 0.9), t0 + s16 * step, 0.9 if s16 % 4 == 0 else 0.6)
+                _place(mel, strings(_hz(m), step * 0.9), t0 + s16 * step, 0.9 if s16 % 4 == 0 else 0.6)
         if st.braam and b % 2 == 0 and not intro:
-            _place(buf, braam(_hz(root - 12), bar * 1.6), t0)
+            _place(mel, braam(_hz(root - 12), bar * 1.6), t0)
+        if st.piano_solo:
+            prev = _piano_bar(mel, notes, t0, beat, step, b, rng, prev, lively=st.bpm > 90)
         lead = LEADS.get(st.lead)
         if lead and st.lead_steps and (not intro or st.lead == "piano"):
             arp = notes + [notes[0] + 12, notes[1] + 12]
@@ -281,7 +348,8 @@ def render(style_key: str, duration: float, dst: Path, seed: int = 0) -> Path:
                 if c == "x":
                     m = arp[(s + b) % len(arp)] + (24 if st.phonk else 12)
                     length = step * (6 if st.lead == "piano" else 3 if st.lead == "keys" else 2)
-                    _place(buf, lead(_hz(m), length), t0 + s * step, 0.8)
+                    jitter = rng.normal(0, 0.006)  # nadie toca a la milésima: suena más humano
+                    _place(mel, lead(_hz(m), length), max(0.0, t0 + s * step + jitter), rng.uniform(0.65, 0.9))
         for s in range(16):
             at = t0 + s * step + (step * st.swing if s % 2 == 1 else 0)
             if intro:
@@ -304,16 +372,19 @@ def render(style_key: str, duration: float, dst: Path, seed: int = 0) -> Path:
     if st.crackle:
         crackle = (rng.random(len(buf)) > 0.9994) * rng.uniform(-0.25, 0.25, len(buf))
         buf += crackle + rng.normal(0, 0.004, len(buf))
-    # Fundido final y normalizado.
+    # Estéreo: la melodía pasa por una sala distinta en cada oído; el ritmo queda en el centro.
+    left = buf + mel + _reverb(mel, st.room, rng) + _reverb(buf, 0.06, rng)
+    right = buf + mel + _reverb(mel, st.room, rng) + _reverb(buf, 0.06, rng)
+    out = np.stack([left, right], axis=1)
     n_end = int((bars * bar) * RATE)
     fade = int(1.5 * RATE)
-    buf[max(0, n_end - fade):n_end] *= np.linspace(1, 0, min(fade, n_end))
-    buf[n_end:] = 0
-    buf = np.tanh(buf / max(1e-6, float(np.max(np.abs(buf)))) * 1.3) * 0.8
+    out[max(0, n_end - fade):n_end] *= np.linspace(1, 0, min(fade, n_end))[:, None]
+    out = out[:n_end]
+    out = np.tanh(out / max(1e-6, float(np.max(np.abs(out)))) * 1.25) * 0.8
     dst.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(dst), "wb") as w:
-        w.setnchannels(1)
+        w.setnchannels(2)
         w.setsampwidth(2)
         w.setframerate(RATE)
-        w.writeframes((buf[:n_end] * 32767).astype("<i2").tobytes())
+        w.writeframes((out * 32767).astype("<i2").tobytes())
     return dst

@@ -437,7 +437,7 @@ def test_dramatic_silence_window():
     assert not any(hush[0][0] - 0.4 <= t < hush[0][1] for t, n, g in evs)
 
 
-@pytest.mark.parametrize("style", ["epica", "tranquila"])
+@pytest.mark.parametrize("style", ["epica", "piano"])
 def test_iman_music_styles(sample, tmp_path, style):
     from iman import musica
 
