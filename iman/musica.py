@@ -125,6 +125,15 @@ def piano(hz: float, sec: float, vel: float = 0.8) -> np.ndarray:
     return body * 0.11 * (0.4 + 0.6 * vel)
 
 
+def synth(hz: float, sec: float) -> np.ndarray:
+    """Sierra de sintetizador con el filtro algo cerrado (arpegios synthwave)."""
+    n = int(sec * RATE)
+    t = np.arange(n) / RATE
+    x = sum((1 / k) * np.exp(-t * (2 + 3 * k)) * np.sin(2 * np.pi * hz * k * t) for k in range(1, 9))
+    x += sum((1 / k) * np.exp(-t * (2 + 3 * k)) * np.sin(2 * np.pi * hz * 1.007 * k * t) for k in range(1, 6)) * 0.6
+    return x * np.clip(t / 0.003, 0, 1) * np.clip((sec - t) / 0.02, 0, 1) * 0.12
+
+
 def bass(hz: float, sec: float) -> np.ndarray:
     return _tone(hz, sec, [1.0, 0.45, 0.2, 0.08]) * _adsr(int(sec * RATE), 0.01, 0.4, 0.7, 0.06) * 0.35
 
@@ -202,6 +211,7 @@ class Style:
     drums_from: int = 1  # compás en el que entra la batería (para que la canción crezca)
     piano_solo: bool = False  # mano izquierda en arpegio y melodía en la derecha
     room: float = 0.25  # cuánta sala (reverb) lleva
+    pulse_bass: bool = False  # bajo en corcheas que no para (synthwave)
 
 
 STYLES: dict[str, Style] = {
@@ -256,7 +266,12 @@ STYLES.update({
                         drums_from=4, room=0.5),
 })
 
-LEADS = {"keys": keys, "pluck": pluck, "marimba": marimba, "cowbell": cowbell, "piano": piano}
+STYLES["synthwave"] = Style("synthwave", "Dark Synthwave", 150, ("Am", "F", "Dm", "E"),
+                            "x...x...x...x...", "....x.......x...", "xxxxxxxxxxxxxxxx", lead="synth",
+                            lead_steps="xxxxxxxxxxxxxxxx", chord_inst="pad", bass_steps="x" * 8, pulse_bass=True,
+                            room=0.35, drums_from=2)
+
+LEADS = {"synth": synth, "keys": keys, "pluck": pluck, "marimba": marimba, "cowbell": cowbell, "piano": piano}
 
 
 def _reverb(x: np.ndarray, amount: float, rng, seconds: float = 2.4) -> np.ndarray:
@@ -305,14 +320,22 @@ def _place(buf: np.ndarray, snd: np.ndarray, at: float, gain: float = 1.0) -> No
     buf[i:i + len(piece)] += piece
 
 
-def render(style_key: str, duration: float, dst: Path, seed: int = 0) -> Path:
-    """Escribe en `dst` (WAV) una pieza del estilo pedido que dura al menos `duration` segundos."""
+def render(style_key: str, duration: float, dst: Path, seed: int = 0, drop_at: float | None = None) -> Path:
+    """Escribe en `dst` (WAV) una pieza del estilo pedido que dura al menos `duration` segundos.
+
+    `drop_at`: segundo del reel en el que debe "explotar" la música (entra la batería), p. ej. al acabar
+    el gancho. Se calcula cuántos compases de entrada hacen falta y se recorta el principio para cuadrarlo."""
     st = STYLES[style_key]
     rng = np.random.default_rng(seed)
     beat = 60 / st.bpm
     step = beat / 4
     bar = beat * 4
-    bars = max(2, math.ceil((duration + 0.5) / bar))
+    offset = 0.0
+    drums_from = st.drums_from
+    if drop_at and drop_at > 0:
+        drums_from = max(1, math.ceil(drop_at / bar))
+        offset = drums_from * bar - drop_at
+    bars = max(2, math.ceil((duration + offset + 0.5) / bar))
     total = bars * bar + 2.0
     buf = np.zeros(int(total * RATE))  # ritmo: batería y bajo, casi secos
     mel = np.zeros_like(buf)  # acordes y melodías: van a la sala (reverb)
@@ -322,7 +345,7 @@ def render(style_key: str, duration: float, dst: Path, seed: int = 0) -> Path:
         sym = st.chords[b % len(st.chords)]
         notes = _chord(sym, 3)
         root = notes[0]
-        intro = b < st.drums_from and bars > st.drums_from + 2  # la batería entra más tarde: la canción crece
+        intro = b < drums_from and (drop_at or bars > drums_from + 2)  # la batería entra después: la canción crece
         if st.chord_inst == "pad":
             for m in notes:
                 _place(mel, pad(_hz(m + 12), bar + 0.4), t0)
@@ -358,6 +381,8 @@ def render(style_key: str, duration: float, dst: Path, seed: int = 0) -> Path:
                 _place(buf, kick(1.1 if st.phonk else 1.0), at)
             if st.snare[s] == "x":
                 _place(buf, clap() if st.name in ("alegre", "tropical", "phonk") else snare(), at, 0.8)
+                if st.name == "synthwave":  # caja grande de los 80: mucha sala
+                    _place(mel, snare(), at, 0.5)
             if st.hat[s] == "x":
                 _place(buf, hat(open_=st.name == "tropical" and s % 4 == 2), at, rng.uniform(0.5, 0.9))
         for s, c in enumerate(st.bass_steps):
@@ -365,7 +390,10 @@ def render(style_key: str, duration: float, dst: Path, seed: int = 0) -> Path:
                 continue
             at = t0 + s * (bar / len(st.bass_steps))
             length = bar / len(st.bass_steps) * (3 if st.phonk else 0.95)
-            if st.phonk:
+            if st.pulse_bass:
+                length = bar / len(st.bass_steps) * 0.8
+                _place(buf, bass(_hz(root - 12 + (12 if s % 2 else 0)), length), at, 0.9)
+            elif st.phonk:
                 _place(buf, sub808(_hz(root - 12), length, glide_from=_hz(root - 5) if s else None), at)
             else:
                 _place(buf, bass(_hz(root - 12), length), at)
@@ -379,7 +407,8 @@ def render(style_key: str, duration: float, dst: Path, seed: int = 0) -> Path:
     n_end = int((bars * bar) * RATE)
     fade = int(1.5 * RATE)
     out[max(0, n_end - fade):n_end] *= np.linspace(1, 0, min(fade, n_end))[:, None]
-    out = out[:n_end]
+    out = out[int(offset * RATE):n_end]
+    out[: int(0.25 * RATE)] *= np.linspace(0, 1, min(len(out), int(0.25 * RATE)))[:, None]
     out = np.tanh(out / max(1e-6, float(np.max(np.abs(out)))) * 1.25) * 0.8
     dst.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(dst), "wb") as w:

@@ -193,12 +193,12 @@ def review(words: list[Word], plan: EditPlan, rhythm_key: str) -> list[dict]:
 AUTO_MUSIC = {"viajes": "inspiracional", "cursos": "corporativa", "productos": "alegre", "empresas": "corporativa"}
 
 
-def _music(choice, workdir: Path, total: float) -> Path | None:
+def _music(choice, workdir: Path, total: float, drop_at: float | None = None) -> Path | None:
     """La música del reel: la tuya (subida como musica.*) o una de Imán generada a la medida del reel."""
     if choice is True or choice == "mia":
         return next((p for p in sorted(workdir.glob("musica.*")) if p.suffix != ".tmp"), None)
     if choice in musica.STYLES:
-        return musica.render(choice, total, workdir / "musica_iman.wav", seed=len(choice))
+        return musica.render(choice, total, workdir / "musica_iman.wav", seed=len(choice), drop_at=drop_at)
     return None
 
 
@@ -384,7 +384,8 @@ def run(
     if choice == "auto":  # la que recomienda la IA; sin IA, una según el sector
         choice = plan.music if plan.music in musica.STYLES else AUTO_MUSIC.get(opts.pack, "inspiracional")
         plan.music = choice  # para que la app muestre cuál ha elegido
-    music = _music(choice, workdir, total)
+    # La música "explota" justo cuando se va el texto del gancho.
+    music = _music(choice, workdir, total, min(2.8, out_duration) if opts.hook and plan.hook_title else None)
     punch = opts.punch and not voice_only
     av = dict(sfx_bed=sound, music=music, punch=punch, hush=hush)
     if segs and segment.available():

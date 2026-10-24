@@ -27,7 +27,7 @@ TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
 LOOK_ENUM = ["", *TITULAR_LOOKS, *LISTA_LOOKS, "enfoque", *COLORS]
 
-MUSIC_STYLES = ["", "tranquila", "alegre", "cinematica", "tropical", "phonk", "corporativa", "epica", "emotiva", "inspiracional", "suspense", "acustica", "romantica", "piano", "piano_alegre", "piano_cine"]
+MUSIC_STYLES = ["", "tranquila", "alegre", "cinematica", "tropical", "phonk", "corporativa", "epica", "emotiva", "inspiracional", "suspense", "acustica", "romantica", "piano", "piano_alegre", "piano_cine", "synthwave"]
 
 EDIT_SCHEMA = {
     "type": "object",
@@ -216,7 +216,7 @@ Tu trabajo:
    "cinematica" (paisajes, revelaciones), "suspense" (misterios, errores, "lo que nadie te cuenta"),
    "acustica" (naturaleza, cercanía), "romantica" (parejas, bodas, escapadas), "piano" (reflexiones, emoción
    íntima), "piano_alegre" (consejos amables, hogar), "piano_cine" (momentos solemnes, recuerdos, homenajes).
-   "" si mejor sin música.
+   "synthwave" (autoridad, negocios agresivos, tecnología, noche, coches). "" si mejor sin música.
 Respeta el idioma del vídeo. Sigue las instrucciones del creador si las hay."""
 
 REVISE_SYSTEM = EDIT_SYSTEM + """
