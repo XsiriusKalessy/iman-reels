@@ -317,6 +317,7 @@ function setMode() {
   $("#drop-title").textContent = m.title; $("#drop-hint").textContent = m.hint;
   $("#file").accept = m.accept;
   $("#broll-box").hidden = !m.broll;
+  $("#bg-box").hidden = mode() !== "camara";
   if (m.broll) { $("#broll-title").textContent = m.broll; $("#broll-hint").textContent = m.brollHint; }
   canGo();
 }
@@ -394,6 +395,9 @@ $("#go").onclick = async () => {
   fd.append("instructions", $("#instructions").value);
   fd.append("remember", $("#remember").checked);
   fd.append("mode", mode() === "vozclips" ? "voz" : mode());
+  const bg = mode() === "camara" ? $("input[name=background]:checked").value : "";
+  fd.append("background", bg === "foto" && !$("#bg-photo").files[0] ? "" : bg);
+  if (bg === "foto" && $("#bg-photo").files[0]) fd.append("background_photo", $("#bg-photo").files[0]);
   if (mode() !== "largo") state.broll.forEach(f => fd.append("broll", f));
   showWorking(mode() === "largo" ? "Subiendo tu vídeo largo" : "Subiendo tu vídeo", 0.01);
   go("result");
@@ -703,7 +707,18 @@ async function reedit(changes) {
     poll();
   } catch (err) { showError(err.message); }
 }
-$$(".quick button").forEach(b => b.onclick = () => reedit(b.dataset.rhythm ? { rhythm: b.dataset.rhythm } : { style: b.dataset.style }));
+$$(".quick:not(.ideas) button").forEach(b => b.onclick = () => reedit(
+  b.dataset.rhythm ? { rhythm: b.dataset.rhythm } : b.dataset.background !== undefined ? { background: b.dataset.background } : { style: b.dataset.style }));
+// Fondo: «Mi foto» pide elegir la imagen; solo tiene sentido cuando hablas a cámara.
+$("#bg-choices").onchange = () => {
+  const foto = $("input[name=background]:checked").value === "foto";
+  $("#bg-photo-pick").hidden = !foto;
+  if (foto && !$("#bg-photo").files[0]) $("#bg-photo").click();
+};
+$("#bg-photo").onchange = e => {
+  const f = e.target.files[0];
+  $("#bg-photo-name").hidden = !f; $("#bg-photo-name").textContent = f ? `✓ ${f.name}` : "";
+};
 $("#reedit-form").onsubmit = e => {
   e.preventDefault();
   const h = $("#new-hook").value.trim();

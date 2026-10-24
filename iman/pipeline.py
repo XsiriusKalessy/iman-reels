@@ -38,6 +38,8 @@ class EditOptions:
     pack: str = ""  # sector: viajes, cursos, productos, empresas (vacío = general)
     gestures: bool = True  # efectos que siguen tus manos (si se ven en el vídeo)
     mode: str = "camara"  # camara (hablas a cámara) | voz (solo tu voz, sobre tus vídeos o un fondo)
+    # Fondo de todo el reel, recortándote: "" (el tuyo), desenfoque, color (el de tu marca) o foto (fondo.jpg).
+    background: str = ""
 
 
 @dataclass
@@ -98,6 +100,22 @@ def visual_cuts(words: list[Word], every: float = 3.0) -> list[float]:
             last = max(prev.end, w.start - 0.08)
             cuts.append(round(last, 3))
     return cuts
+
+
+BACKGROUNDS = ("", "desenfoque", "color", "foto")
+
+
+def _background_op(opts: EditOptions, workdir: Path, kit, duration: float):
+    """El fondo elegido para todo el reel, como un efecto de recorte que dura de principio a fin."""
+    if opts.background == "desenfoque":
+        return effects.SegOp("desenfoque", 0.0, duration)
+    if opts.background == "color":
+        color = kit.primary if kit is not None and brand.is_hex(kit.primary or "") else "#141518"
+        return effects.SegOp("fondo", 0.0, duration, color)
+    photo = workdir / "fondo.jpg"
+    if opts.background == "foto" and photo.exists():
+        return effects.SegOp("foto", 0.0, duration, path=str(photo))
+    return None
 
 
 def _transcribe(src: Path, workdir: Path, cfg: dict, progress: Progress) -> list[Word]:
@@ -279,6 +297,9 @@ def run(
     overlays += effects.brand_ops(kit, total)
     clock = effects.WordClock(kept, kept_idx)
     segs = effects.seg_ops(active, clock, out_duration) if opts.effects else []
+    whole = _background_op(opts, workdir, kit, out_duration) if opts.mode == "camara" else None
+    if whole:
+        segs = [whole, *segs]  # va primero: los efectos de fondo del plan se pintan encima
     if segs and segment.available():
         # Dos pasadas: primero el reel limpio, luego la persona recortada encima de lo que va detrás.
         base = media.render(src, workdir / "base.mp4", spans, info, None, opts.size, opts.fit, opts.voice, zoom,

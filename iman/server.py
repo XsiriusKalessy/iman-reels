@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import shutil
 import threading
@@ -420,6 +421,19 @@ def _voice_samples() -> str:
     return "\n---\n".join(texts)
 
 
+def _save_background(workdir: Path, raw: bytes) -> bool:
+    """Guarda la foto de fondo como JPG vertical. Pasa por Pillow: solo entra una imagen de verdad."""
+    from PIL import Image, ImageOps
+
+    try:
+        im = ImageOps.exif_transpose(Image.open(io.BytesIO(raw))).convert("RGB")
+    except Exception:  # noqa: BLE001 - no es una imagen
+        return False
+    im.thumbnail((2160, 3840))
+    im.save(workdir / "fondo.jpg", quality=92)
+    return True
+
+
 @app.post("/api/jobs")
 async def create_job(
     video: UploadFile = File(...),
@@ -437,8 +451,11 @@ async def create_job(
     remember: bool = Form(False),
     broll: list[UploadFile] | None = File(None),
     mode: str = Form("camara"),
+    background: str = Form(""),
+    background_photo: UploadFile | None = File(None),
 ):
-    if (pack and pack not in packs.PACKS) or mode not in ("camara", "voz", "largo"):
+    if (pack and pack not in packs.PACKS) or mode not in ("camara", "voz", "largo") \
+            or background not in pipeline.BACKGROUNDS:
         raise HTTPException(400, "Opción no válida")
     copystyle.register()
     if rhythm not in RHYTHMS or style not in STYLES or size not in ("1080", "4k") or fit not in ("recortar", "fondo"):
@@ -460,11 +477,14 @@ async def create_job(
     with src.open("wb") as f:
         shutil.copyfileobj(video.file, f)
     names = _save_broll(workdir, broll or [])
+    if background == "foto":
+        if not background_photo or not _save_background(workdir, await background_photo.read()):
+            background = ""  # sin foto válida, se queda el fondo de verdad
     if names and mode == "camara":  # en "solo voz" los vídeos ya son la imagen de todo el reel
         instructions = f"{instructions}\n\n{pipeline.broll_prompt(names)}".strip()
     opts = pipeline.EditOptions(rhythm, style, size, fit, hook, hook_title, hook_template, instructions,
                                 voice=voice, watermark=watermark, brand=use_brand, pack=pack,
-                                mode="voz" if mode == "voz" else "camara")
+                                mode="voz" if mode == "voz" else "camara", background=background)
     JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0, "mode": mode,
                     "options": asdict(opts), "created": time.time(), "trial": watermark and mode != "largo"}
     target = _work_long if mode == "largo" else _work

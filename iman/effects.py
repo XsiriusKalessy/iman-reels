@@ -655,6 +655,7 @@ class SegOp:
     start: float
     end: float
     color: str = ""
+    path: str = ""  # foto de fondo (kind "foto")
 
 
 def _seg_spans(effects: list[dict], clock: WordClock, duration: float):

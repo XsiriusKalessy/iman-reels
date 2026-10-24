@@ -149,6 +149,17 @@
             <label class="choice"><input type="radio" name="fit" value="recortar" checked><span>Recortar a vertical</span></label>
             <label class="choice"><input type="radio" name="fit" value="fondo"><span>Fondo desenfocado</span></label>
           </div>
+          <div id="bg-box">
+            <h3>Tu fondo</h3>
+            <div class="choices inline" id="bg-choices">
+              <label class="choice"><input type="radio" name="background" value="" checked><span>El de verdad</span></label>
+              <label class="choice"><input type="radio" name="background" value="desenfoque"><span>Desenfocado<small>tú nítido delante</small></span></label>
+              <label class="choice"><input type="radio" name="background" value="color"><span>Color de mi marca</span></label>
+              <label class="choice"><input type="radio" name="background" value="foto"><span>Mi foto<small>p. ej. Tokio de fondo</small></span></label>
+            </div>
+            <label class="ghost button" id="bg-photo-pick" hidden>📷 Elegir la foto de fondo<input type="file" id="bg-photo" accept="image/*" hidden></label>
+            <p class="hint" id="bg-photo-name" hidden></p>
+          </div>
           <div id="use-brand-row" hidden>
             <h3>Marca</h3>
             <label class="check"><input type="checkbox" id="use-brand" checked> Con mi marca (colores, logo y cierre) · <a href="#" id="brand-edit-link">cambiar</a></label>
@@ -235,6 +246,9 @@
             <button data-style="mezcla">Mezcla</button>
             <button data-style="elegante">Elegante</button>
             <button data-style="marcador">Marcador</button>
+            <button data-background="desenfoque">Fondo desenfocado</button>
+            <button data-background="color">Fondo de mi marca</button>
+            <button data-background="">Fondo original</button>
           </div>
           <form id="reedit-form" class="chat-form">
             <input id="new-hook" placeholder="Cambiar el gancho por…">

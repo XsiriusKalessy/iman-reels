@@ -328,12 +328,22 @@ def composite(
     W, H = SIZES[size]
     parts = ["[0:v]split=2[bg0][fg]"]
     cur = "[bg0]"
+    extra, images = _image_inputs(overlays, 3)
+    photos = {}  # fotos de fondo: entradas después de las de los efectos
+    for op in seg_ops:
+        if op.kind == "foto" and op.path:
+            photos[id(op)] = f"[{3 + len(images) + len(photos)}:v]"
+            extra += ["-loop", "1", "-i", op.path]
     for k, op in enumerate(seg_ops):
         a, b = op.start, op.end
         on = f"enable='between(t,{a:.3f},{b:.3f})'"
         if op.kind == "fondo":
             parts.append(f"color=c=0x{op.color.lstrip('#')}:s={W}x{H}:r=30:d={b - a:.3f},setpts=PTS+{a:.3f}/TB[c{k}]")
             parts.append(f"{cur}[c{k}]overlay=0:0:{on}:eof_action=pass[b{k}]")
+        elif op.kind == "foto" and id(op) in photos:
+            parts.append(f"{photos[id(op)]}scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,"
+                         f"fps=30,trim=duration={b - a:.3f},setpts=PTS-STARTPTS+{a:.3f}/TB,format=yuv420p[ph{k}]")
+            parts.append(f"{cur}[ph{k}]overlay=0:0:{on}:eof_action=pass[b{k}]")
         elif op.kind == "desenfoque":
             parts.append(f"{cur}split[x{k}][y{k}]")
             parts.append(f"[y{k}]boxblur=22:2,eq=brightness=-0.04[yb{k}]")
@@ -347,7 +357,6 @@ def composite(
     parts.append(f"[1:v]scale={W}:{H}:flags=bicubic,format=gray,boxblur=2:1[mk]")
     parts.append("[fg][mk]alphamerge[person]")
     parts.append(f"{cur}[person]overlay=0:0[vx]")
-    extra, images = _image_inputs(overlays, 3)
     cur = _video_overlays(parts, overlays or [], W, H, "[vx]", "[2:v]", images)
     tail = f"{cur}null"
     if ass_path is not None:

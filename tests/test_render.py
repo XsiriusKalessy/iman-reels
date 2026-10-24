@@ -366,3 +366,20 @@ def test_object_stickers_over_a_list(sample, tmp_path, monkeypatch):
     assert len(list((tmp_path / "home" / "cache" / "stickers").glob("*.png"))) == 2
     info = media.probe(res.video)
     assert (info.width, info.height) == (1080, 1920) and abs(info.duration - res.duration_out) < 0.3
+
+
+@pytest.mark.parametrize("background", ["foto", "color"])
+def test_whole_reel_background(sample, tmp_path, background):
+    from iman import segment
+
+    if not segment.available():
+        pytest.skip("sin el modelo de recorte")
+    work = tmp_path / "w"
+    work.mkdir()
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=0xd43a2a:s=800x600", "-frames:v", "1",
+                    str(work / "fondo.jpg")], check=True)
+    cfg = {"provider": "none", "anthropic_key": "", "openai_key": "", "claude_model": "", "openai_model": ""}
+    res = pipeline.run(sample, work, pipeline.EditOptions(background=background), cfg, words=TAKE)
+    assert (work / "mask.mp4").exists()
+    info = media.probe(res.video)
+    assert (info.width, info.height) == (1080, 1920) and abs(info.duration - res.duration_out) < 0.3
