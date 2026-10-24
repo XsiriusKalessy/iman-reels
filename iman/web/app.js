@@ -528,7 +528,7 @@ const FX_NAMES = { lista: "Lista", palabra: "Palabra gigante", titular: "Titular
   dato: "Dato", bruto: "Toma en bruto", fantasma: "Eco", pagina: "Página de revista", detras: "Texto detrás de ti",
   fondo: "Fondo de color", desenfoque: "Fondo desenfocado", ubicacion: "Ubicación", objeto: "Objeto", viaje: "Itinerario del viaje", oferta: "Oferta", ruta: "Ruta",
   testimonio: "Testimonio", plazas: "Plazas", precio: "Precio", apoyo: "Vídeo de apoyo",
-  notificaciones: "Notificaciones", buscador: "Buscador", chat: "Chat de mensajes", foco: "Foco", anillo: "Anillo de texto",
+  notificaciones: "Notificaciones", buscador: "Buscador", chat: "Chat de mensajes", captura: "Captura", collage: "Collage", foco: "Foco", anillo: "Anillo de texto",
   sube: "Sube con tu dedo", choque: "El choque", aparece: "Aparece donde señalas" };
 function renderEffects(j) {
   const list = j.result.plan.effects || [];

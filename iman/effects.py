@@ -700,7 +700,7 @@ def behind_events(effects: list[dict], clock: WordClock, style: Style, duration:
 
 
 VIDEO_KINDS = {"bruto": (3.0, 2.0), "fantasma": (1.6, 0.8), "pagina": (2.6, 1.6), "apoyo": (3.0, 1.5),
-               "objeto": (2.2, 1.0)}
+               "objeto": (2.2, 1.0), "captura": (2.6, 1.4), "collage": (2.8, 1.6)}
 PERSON_TYPES = (*SEG_KINDS, "apoyo")  # necesitan a alguien delante de la cámara
 MEDIA_EXT = (".mp4", ".mov", ".m4v", ".webm", ".jpg", ".jpeg", ".png", ".webp")
 
@@ -789,6 +789,18 @@ def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=Non
 
             n_obj = sum(1 for o in ops if o.kind == "objeto")
             png = stickers.render(str(fx.get("text", "")), str(fx.get("subtitle", "")), -5.0 if n_obj % 2 else 5.0)
+            if not png:
+                continue
+            path = str(png)
+        if kind in ("captura", "collage"):
+            from . import stickers
+
+            nums = [n.strip() for n in str(fx.get("text", "")).replace("|", ",").split(",") if n.strip()]
+            files = [(assets or {}).get(n, "") for n in nums]
+            files = [f for f in files if f]
+            labels = [x.strip() for x in str(fx.get("subtitle", "")).split("|")]
+            png = stickers.captura(files[0], labels[0]) if kind == "captura" and files else \
+                stickers.collage(files, labels) if kind == "collage" else None
             if not png:
                 continue
             path = str(png)

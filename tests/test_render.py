@@ -488,3 +488,21 @@ def test_whip_and_glitch_transitions_render(sample, tmp_path):
     info = media.probe(sample)
     out = media.render(sample, tmp_path / "t.mp4", spans, info, None, preset="ultrafast", transitions=trans)
     assert abs(media.probe(out).duration - 7.5) < 0.3
+
+
+def test_captura_and_collage_from_support_photos(sample, tmp_path):
+    from PIL import Image
+    from iman.models import EditPlan
+
+    work = tmp_path / "w"
+    (work / "apoyo").mkdir(parents=True)
+    for i, c in enumerate([(200, 40, 40), (40, 160, 90), (40, 80, 200)]):
+        Image.new("RGB", (900, 1200), c).save(work / "apoyo" / f"0{i + 1}.jpg")
+    fx = [{"type": "captura", "word": 4, "text": "1", "subtitle": "Mi web"},
+          {"type": "collage", "word": 12, "text": "1,2,3", "subtitle": "Tokio|Kioto|Osaka"}]
+    cfg = {"provider": "none", "anthropic_key": "", "openai_key": "", "claude_model": "", "openai_model": ""}
+    res = pipeline.run(sample, work, pipeline.EditOptions(rhythm="sin_tocar"), cfg, words=TAKE,
+                       plan=EditPlan(effects=fx))
+    graph = (work / "reel.filters.txt").read_text(encoding="utf-8")
+    assert graph.count("overlay") >= 2
+    assert abs(media.probe(res.video).duration - res.duration_out) < 0.3

@@ -227,6 +227,13 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx
             x = f"W-w-{int(50 * k_scale)}" if n_obj % 2 == 0 else f"{int(50 * k_scale)}"
             y = f"{int(860 * k_scale)}+{int(90 * k_scale)}*max(0,1-(t-{a:.3f})/0.25)"
             parts.append(f"{cur}[ob{k}]overlay=x={x}:y='{y}':{on}:shortest=1[o{k}]")
+        elif op.kind in ("captura", "collage") and images and id(op) in images:
+            # Tarjeta con captura o collage de fotos de apoyo: sube desde abajo con un frenazo y se funde.
+            cw = int((760 if op.kind == "captura" else 1000) * k_scale)
+            parts.append(f"{images[id(op)]}scale={cw}:-1,format=rgba,loop=-1:1,fps=30,setpts=N/30/TB,"
+                         f"fade=t=in:st={a:.3f}:d=0.15:alpha=1,fade=t=out:st={b - 0.2:.3f}:d=0.2:alpha=1[cp{k}]")
+            y = f"{int(330 * k_scale)}+{int(160 * k_scale)}*pow(max(0,1-(t-{a:.3f})/0.3),3)"
+            parts.append(f"{cur}[cp{k}]overlay=x=(W-w)/2:y='{y}':{on}:shortest=1[o{k}]")
         elif op.kind in ("logo", "logo_end") and images and id(op) in images:
             # Logo de la marca: pequeño en la esquina (zona segura de Instagram) o grande en el cierre.
             lw = int((150 if op.kind == "logo" else 420) * k_scale)

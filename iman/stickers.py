@@ -60,3 +60,93 @@ def render(char: str, label: str = "", tilt: float = -5.0, scale: float = 1.0) -
     out.parent.mkdir(parents=True, exist_ok=True)
     card.save(out)
     return out
+
+
+def _frame(path: str) -> Image.Image | None:
+    """La imagen de un archivo de apoyo: la foto tal cual o un fotograma del vídeo (al 30 %)."""
+    p = Path(path)
+    if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp"):
+        try:
+            return Image.open(p).convert("RGB")
+        except OSError:
+            return None
+    import subprocess
+
+    from .media import FFMPEG, probe
+
+    out = HOME / "cache" / "stickers" / f"f-{hashlib.sha1(str(p).encode()).hexdigest()[:12]}.jpg"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        t = probe(p).duration * 0.3
+        subprocess.run([FFMPEG, "-v", "error", "-y", "-ss", f"{t:.2f}", "-i", str(p), "-frames:v", "1", str(out)],
+                       check=True, capture_output=True)
+        return Image.open(out).convert("RGB")
+    except Exception:  # noqa: BLE001 - si no se puede leer, no hay tarjeta
+        return None
+
+
+def _card(pic: Image.Image, width: int, label: str, tilt: float, top: bool = False) -> Image.Image:
+    """Foto con marco blanco redondeado, sombra y, si hay, una etiqueta en píldora debajo (o encima)."""
+    pic = pic.copy()
+    pic.thumbnail((width, int(width * 1.5)), Image.LANCZOS)
+    pad, frame = 30, 16
+    w, h = pic.width + 2 * frame, pic.height + 2 * frame
+    font = ImageFont.truetype(str(FONTS_DIR / FILES["Figtree ExtraBold"]), 38) if label else None
+    lab_h = 80 if label else 0
+    card = Image.new("RGBA", (w + 2 * pad, h + lab_h + 2 * pad), (0, 0, 0, 0))
+    if top and label:
+        pad_y = pad + lab_h
+    else:
+        pad_y = pad
+    shadow = Image.new("RGBA", card.size, (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).rounded_rectangle((pad, pad_y + 10, pad + w, pad_y + h + 10), 30, fill=(0, 0, 0, 120))
+    card = Image.alpha_composite(card, shadow.filter(ImageFilter.GaussianBlur(14)))
+    d = ImageDraw.Draw(card)
+    d.rounded_rectangle((pad, pad_y, pad + w, pad_y + h), 30, fill=(255, 255, 255, 255))
+    mask = Image.new("L", pic.size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, pic.width, pic.height), 20, fill=255)
+    card.paste(pic, (pad + frame, pad_y + frame), mask)
+    if label:
+        tw = font.getlength(label)
+        x0 = pad + (w - tw) / 2 - 28
+        y0 = pad_y - 36 if top else pad + h - 30
+        d.rounded_rectangle((x0, y0, x0 + tw + 56, y0 + 66), 33, fill=(255, 85, 71, 255))
+        d.text((x0 + 28 + tw / 2, y0 + 33), label, font=font, fill=(255, 255, 255, 255), anchor="mm")
+    return card.rotate(tilt, resample=Image.BICUBIC, expand=True)
+
+
+def captura(path: str, label: str = "", tilt: float = -3.0) -> Path | None:
+    """Tarjeta con una captura o foto de apoyo y su etiqueta ("Mi web", "El resultado")."""
+    label = label.strip()[:28]
+    key = hashlib.sha1(f"cap|{path}|{label}|{tilt}".encode()).hexdigest()[:16]
+    out = HOME / "cache" / "stickers" / f"{key}.png"
+    if out.exists():
+        return out
+    pic = _frame(path)
+    if pic is None:
+        return None
+    out.parent.mkdir(parents=True, exist_ok=True)
+    _card(pic, 720, label, tilt).save(out)
+    return out
+
+
+def collage(paths: list[str], labels: list[str]) -> Path | None:
+    """Collage de 2 o 3 fotos de apoyo flotando inclinadas, cada una con su etiqueta."""
+    pics = [(p, _frame(p)) for p in paths[:3]]
+    pics = [(p, im) for p, im in pics if im is not None]
+    if len(pics) < 2:
+        return None
+    key = hashlib.sha1(("col2|" + "|".join(paths) + "|".join(labels)).encode()).hexdigest()[:16]
+    out = HOME / "cache" / "stickers" / f"{key}.png"
+    if out.exists():
+        return out
+    canvas = Image.new("RGBA", (1040, 1000), (0, 0, 0, 0))
+    spots = [(-6, 0, 0), (5, 470, 120), (-3, 160, 470)]
+    for i, ((p, im), (tilt, x, y), lab) in enumerate(zip(pics, spots, labels + [""] * 3)):
+        # La primera queda tapada por abajo: su etiqueta va encima.
+        c = _card(im, 460, lab.strip()[:22], tilt, top=i == 0 and len(pics) == 3)
+        canvas.alpha_composite(c, (min(x, canvas.width - c.width), min(y, canvas.height - c.height)))
+    box = canvas.getbbox()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    (canvas.crop(box) if box else canvas).save(out)
+    return out

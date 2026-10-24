@@ -17,11 +17,11 @@ OPENAI_MODEL = "gpt-4o"
 EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "color", "comentario",
                 "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                 "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque", "aparece",
-                "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat"]
+                "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage"]
 FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
                    "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                    "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque",
-                   "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat")
+                   "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage")
 LISTA_LOOKS = ("checklist", "capitulos", "itinerario")
 TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
@@ -186,6 +186,11 @@ Tu trabajo:
      el producto, el local), el vídeo de apoyo ocupa la pantalla y el creador queda en un círculo abajo
      (text: el número del vídeo de apoyo, "1", "2"…; until_word: hasta dónde). De 2 a 5 segundos cada uno;
      usa cada vídeo una vez y aquí sí puede haber varios efectos del mismo tipo.
+   - "captura": SOLO con vídeos o fotos de apoyo. Una foto o captura de apoyo en una tarjeta con etiqueta, cuando
+     habla de algo que se puede enseñar (su web, un resultado, un mensaje) (text: número del archivo, "2";
+     subtitle: etiqueta corta, "Mi web").
+   - "collage": SOLO con 2 o más apoyos. Dos o tres fotos flotando con etiquetas, al enumerar sitios o productos
+     (text: números separados por comas, "1,2,3"; subtitle: etiquetas separadas por "|", "Tokio|Kioto|Osaka").
    Efectos con las manos (Imán ve dónde están las manos del creador y los ajusta solo; si no las ve, salen igual):
    - "sube": una palabra sale de su dedo y sube con él (text: 1 o 2 palabras de lo que crece: "+30 %", "VENTAS",
      "MÁS CLIENTES"). Cuando habla de subir, crecer, más.
