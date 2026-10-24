@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ai, brand, config, copystyle, effects, jsonfile, license, packs, pipeline, portable, updates
+from . import ai, brand, config, copystyle, effects, jsonfile, license, media, packs, pipeline, portable, updates
 from .captions import STYLES
 from .models import EditPlan, Word
 from .rhythm import RHYTHMS
@@ -434,6 +434,27 @@ def _save_background(workdir: Path, raw: bytes) -> bool:
     return True
 
 
+MUSIC_TYPES = (".mp3", ".m4a", ".aac", ".wav", ".ogg", ".flac", ".opus")
+
+
+def _save_music(workdir: Path, upload: UploadFile) -> bool:
+    """Tu música de fondo: se guarda como musica.* solo si ffprobe ve una pista de audio de verdad."""
+    suffix = Path(upload.filename or "").suffix.lower()
+    if suffix not in MUSIC_TYPES:
+        return False
+    dst = workdir / f"musica{suffix}"
+    with dst.open("wb") as f:
+        shutil.copyfileobj(upload.file, f)
+    try:
+        streams = media.probe_streams(dst)
+    except Exception:  # noqa: BLE001 - archivo roto
+        streams = []
+    if not any(st.get("codec_type") == "audio" for st in streams):
+        dst.unlink(missing_ok=True)
+        return False
+    return True
+
+
 @app.post("/api/jobs")
 async def create_job(
     video: UploadFile = File(...),
@@ -453,6 +474,9 @@ async def create_job(
     mode: str = Form("camara"),
     background: str = Form(""),
     background_photo: UploadFile | None = File(None),
+    music_file: UploadFile | None = File(None),
+    sfx: bool = Form(True),
+    punch: bool = Form(True),
 ):
     if (pack and pack not in packs.PACKS) or mode not in ("camara", "voz", "largo") \
             or background not in pipeline.BACKGROUNDS:
@@ -480,11 +504,13 @@ async def create_job(
     if background == "foto":
         if not background_photo or not _save_background(workdir, await background_photo.read()):
             background = ""  # sin foto válida, se queda el fondo de verdad
+    music = bool(music_file and _save_music(workdir, music_file))
     if names and mode == "camara":  # en "solo voz" los vídeos ya son la imagen de todo el reel
         instructions = f"{instructions}\n\n{pipeline.broll_prompt(names)}".strip()
     opts = pipeline.EditOptions(rhythm, style, size, fit, hook, hook_title, hook_template, instructions,
                                 voice=voice, watermark=watermark, brand=use_brand, pack=pack,
-                                mode="voz" if mode == "voz" else "camara", background=background)
+                                mode="voz" if mode == "voz" else "camara", background=background,
+                                sfx=sfx, music=music, punch=punch)
     JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0, "mode": mode,
                     "options": asdict(opts), "created": time.time(), "trial": watermark and mode != "largo"}
     target = _work_long if mode == "largo" else _work
@@ -506,6 +532,8 @@ def _work_long(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions
             cid = uuid.uuid4().hex[:10]
             cdir = JOBS_DIR / cid
             csrc, sub = pipeline.clip_source(src, words, pick, cdir)
+            for m in workdir.glob("musica.*"):  # cada reel del vídeo largo lleva tu música
+                shutil.copy(m, cdir / m.name)
             copts = replace(opts, hook_title=opts.hook_title or pick["title"])
             JOBS[cid] = {"id": cid, "status": "working", "step": "En cola", "progress": 0.0, "from_long": job_id,
                          "options": asdict(copts), "created": time.time(), "trial": opts.watermark}

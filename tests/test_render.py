@@ -383,3 +383,30 @@ def test_whole_reel_background(sample, tmp_path, background):
     assert (work / "mask.mp4").exists()
     info = media.probe(res.video)
     assert (info.width, info.height) == (1080, 1920) and abs(info.duration - res.duration_out) < 0.3
+
+
+def test_hook_sound_music_and_punch(sample, tmp_path):
+    work = tmp_path / "w"
+    work.mkdir()
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=330:duration=2",
+                    str(work / "musica.mp3")], check=True)
+    cfg = {"provider": "none", "anthropic_key": "", "openai_key": "", "claude_model": "", "openai_model": ""}
+    res = pipeline.run(sample, work, pipeline.EditOptions(music=True), cfg, words=TAKE)
+    assert (work / "sfx.wav").exists()
+    info = media.probe(res.video)
+    assert (info.width, info.height) == (1080, 1920) and abs(info.duration - res.duration_out) < 0.3
+    # El golpe del gancho: el primer cuarto de segundo ya suena fuerte.
+    vol = subprocess.run(["ffmpeg", "-v", "info", "-t", "0.25", "-i", str(res.video), "-af", "volumedetect",
+                          "-f", "null", "-"], capture_output=True, text=True).stderr
+    peak = float(vol.split("max_volume:")[1].split("dB")[0])
+    assert peak > -12
+
+
+def test_sfx_bed_places_sounds(tmp_path):
+    import wave
+
+    from iman import sfx
+
+    dst = sfx.bed([(0.0, "impact", 1.0), (1.0, "pop", 0.5), (9.0, "whoosh", 1.0)], 2.0, tmp_path / "s.wav")
+    with wave.open(str(dst)) as w:
+        assert w.getframerate() == sfx.RATE and abs(w.getnframes() / sfx.RATE - 2.05) < 0.01

@@ -62,6 +62,12 @@ class MediaInfo:
     hdr: bool
 
 
+def probe_streams(path: Path) -> list[dict]:
+    out = subprocess.run([FFPROBE, "-v", "error", "-print_format", "json", "-show_streams", str(path)],
+                         capture_output=True, text=True, encoding="utf-8", errors="replace", check=True).stdout
+    return json.loads(out).get("streams", [])
+
+
 def probe(path: Path) -> MediaInfo:
     out = subprocess.run(
         [FFPROBE, "-v", "error", "-print_format", "json", "-show_streams", "-show_format", str(path)],
@@ -222,8 +228,13 @@ def build_filtergraph(
     zooms: list[bool] | None = None,
     overlays: list | None = None,
     tail: float = 0.0,
+    sfx_bed: Path | None = None,
+    music: Path | None = None,
+    punch: bool = False,
 ) -> str:
-    """`tail`: segundos extra al final (último fotograma congelado y silencio) para el cierre de marca."""
+    """`tail`: segundos extra al final (último fotograma congelado y silencio) para el cierre de marca.
+    `sfx_bed`: pista con los efectos de sonido; `music`: tu música, que baja sola cuando hablas.
+    `punch`: zoom rápido de entrada en el primer medio segundo (que nada esté quieto al empezar)."""
     W, H = SIZES[size]
     zooms = zooms or [False] * len(spans)
     w0, h0 = info.width - info.width % 2, info.height - info.height % 2
@@ -268,7 +279,15 @@ def build_filtergraph(
         parts.append("[bg][fg]overlay=(W-w)/2:(H-h)/2[vf]")
     else:
         parts.append(f"{chain}scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{H}[vf]")
-    parts.append("[vf]fps=30,setsar=1[vx]")
+    if punch:
+        # Entra un 20 % más cerca y se abre en 0,45 s, con un frenazo suave al final.
+        parts.append("[vf]fps=30,setsar=1,split[pz0][pz1]")
+        parts.append(f"[pz0]trim=duration=0.45,setpts=PTS-STARTPTS,"
+                     f"zoompan=z='1+0.2*pow(1-on/13,3)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s={W}x{H}:fps=30[pz2]")
+        parts.append("[pz1]trim=start=0.45,setpts=PTS-STARTPTS[pz3]")
+        parts.append("[pz2][pz3]concat=n=2:v=1:a=0,setsar=1[vx]")
+    else:
+        parts.append("[vf]fps=30,setsar=1[vx]")
     _, images = _image_inputs(overlays, 1)
     cur = _video_overlays(parts, overlays or [], W, H, images=images)
     tail = f"{cur}null"
@@ -279,6 +298,23 @@ def build_filtergraph(
     if voice:
         # Voz más limpia: fuera graves y zumbidos, menos ruido de fondo, nivel más estable.
         audio += VOICE_CHAIN + ","
+    nxt = 1 + len(images)  # entradas de audio extra, después de las imágenes
+    if music is not None or sfx_bed is not None:
+        parts.append(f"{audio}aresample=48000,aformat=channel_layouts=stereo[vo]")
+        audio = "[vo]"
+    if music is not None:
+        # La música, en bucle y baja; se aparta sola cuando hablas (sidechain con la voz).
+        parts.append(f"[{nxt}:a]aloop=loop=-1:size=2000000000,aresample=48000,aformat=channel_layouts=stereo,"
+                     f"volume=0.22,afade=t=in:d=0.6[mu]")
+        parts.append(f"{audio}asplit[vk][vs]")
+        parts.append("[mu][vs]sidechaincompress=threshold=0.02:ratio=6:attack=30:release=500[md]")
+        parts.append("[vk][md]amix=inputs=2:duration=first:normalize=0[vm]")
+        audio = "[vm]"
+        nxt += 1
+    if sfx_bed is not None:
+        parts.append(f"[{nxt}:a]aresample=48000,aformat=channel_layouts=stereo,volume=0.55[sx]")
+        parts.append(f"{audio}[sx]amix=inputs=2:duration=first:normalize=0[vsx]")
+        audio = "[vsx]"
     parts.append(f"{audio}loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[aout]")
     return ";\n".join(parts)
 
@@ -296,11 +332,18 @@ def render(
     preset: str = "medium",
     overlays: list | None = None,
     tail: float = 0.0,
+    sfx_bed: Path | None = None,
+    music: Path | None = None,
+    punch: bool = False,
 ) -> Path:
-    graph = build_filtergraph(spans, info, ass_path, size, fit, voice, zooms, overlays, tail)
+    graph = build_filtergraph(spans, info, ass_path, size, fit, voice, zooms, overlays, tail, sfx_bed, music, punch)
     script = dst.with_suffix(".filters.txt")
     script.write_text(graph, encoding="utf-8")
     extra, _ = _image_inputs(overlays, 1)
+    if music is not None:
+        extra += ["-i", str(music)]
+    if sfx_bed is not None:
+        extra += ["-i", str(sfx_bed)]
     cmd = [
         FFMPEG, "-y", "-v", "error", "-i", str(src), *extra,
         *filter_script_args(script),

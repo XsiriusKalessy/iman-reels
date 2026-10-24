@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import ai, brand, copystyle, effects, gestos, hands, jsonfile, media, segment
+from . import ai, brand, copystyle, effects, gestos, hands, jsonfile, media, segment, sfx
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Word
@@ -40,6 +40,9 @@ class EditOptions:
     mode: str = "camara"  # camara (hablas a cámara) | voz (solo tu voz, sobre tus vídeos o un fondo)
     # Fondo de todo el reel, recortándote: "" (el tuyo), desenfoque, color (el de tu marca) o foto (fondo.jpg).
     background: str = ""
+    sfx: bool = True  # golpe de sonido en el gancho y un sonido en cada efecto
+    music: bool = False  # tu música de fondo (musica.* en la carpeta del reel), que baja cuando hablas
+    punch: bool = True  # zoom rápido de entrada en el primer medio segundo
 
 
 @dataclass
@@ -184,6 +187,35 @@ def review(words: list[Word], plan: EditPlan, rhythm_key: str) -> list[dict]:
             for p in phrases(words, drops, why)]
 
 
+
+def _sfx_events(active: list[dict], clock: effects.WordClock, hook: bool, beats: set[float],
+                spans) -> list[tuple[float, str, float]]:
+    """Dónde suena cada efecto: golpe al empezar, un sonido al entrar cada efecto y aire en los cambios."""
+    events: list[tuple[float, str, float]] = []
+    if hook:
+        events += [(0.0, "impact", 1.0), (0.0, "whoosh", 0.6)]  # el gancho se oye desde el milisegundo cero
+    for fx in active:
+        name = sfx.FOR_EFFECT.get(str(fx.get("type")))
+        items = [it for it in fx.get("items") or [] if isinstance(it, dict)]
+        if items:  # listas: un pop por cada punto que aparece
+            for it in items:
+                t = clock.at(int(it.get("at_word", -1)))
+                if t is not None:
+                    events.append((t, "pop", 0.45))
+            continue
+        t = clock.at(int(fx.get("word", -1))) if fx.get("word") is not None else None
+        if name and t is not None:
+            events.append((max(0.0, t - (0.25 if name in ("whoosh", "riser") else 0.0)), name, 0.5))
+    # Un roce suave en cada cambio de plano, para que el corte se sienta.
+    out_t, acc = [], 0.0
+    for sp in spans[:-1]:
+        acc += sp.duration
+        out_t.append(acc)
+    beat_out = [t for t, sp in zip(out_t, spans[1:]) if any(abs(sp.start - b) < 1e-3 for b in beats)]
+    events += [(t, "air", 0.25) for t in beat_out]
+    return sorted(events)
+
+
 def run(
     src: Path,
     workdir: Path,
@@ -241,7 +273,10 @@ def run(
     spans, drops = keep_spans(words, info.duration, rhythm, plan.drop + plan.cut, plan.restore, plan.pauses)
     zooms_wanted = plan.zooms if opts.effects else []
     spans = effects.split_spans(spans, words, zooms_wanted)
-    zoom = effects.zoom_flags(spans, words, zooms_wanted, opts.auto_zoom and rhythm.cut)
+    beats: set[float] = set()
+    if opts.auto_zoom and rhythm.cut and not voice_only:
+        spans, beats = effects.beat_spans(spans, words)  # un cambio de plano cada 2-3 s
+    zoom = effects.zoom_flags(spans, words, zooms_wanted, opts.auto_zoom and rhythm.cut, beats)
     kept, kept_idx = remap_words(words, spans, drops)
     out_duration = sum(s.duration for s in spans)
     if not plan.hook_title and kept:
@@ -300,10 +335,18 @@ def run(
     whole = _background_op(opts, workdir, kit, out_duration) if opts.mode == "camara" else None
     if whole:
         segs = [whole, *segs]  # va primero: los efectos de fondo del plan se pintan encima
+    sound = None
+    if opts.sfx:
+        evs = _sfx_events(active if opts.effects else [], clock, bool(opts.hook and plan.hook_title), beats, spans)
+        if evs:
+            sound = sfx.bed(evs, total, workdir / "sfx.wav")
+    music = next((p for p in sorted(workdir.glob("musica.*")) if p.suffix != ".tmp"), None) if opts.music else None
+    punch = opts.punch and not voice_only
+    av = dict(sfx_bed=sound, music=music, punch=punch)
     if segs and segment.available():
         # Dos pasadas: primero el reel limpio, luego la persona recortada encima de lo que va detrás.
         base = media.render(src, workdir / "base.mp4", spans, info, None, opts.size, opts.fit, opts.voice, zoom,
-                            preset="veryfast", tail=tail)
+                            preset="veryfast", tail=tail, **av)
         progress("Recortándote del fondo", 0.80)
         mask = segment.person_masks(base, workdir / "mask.mp4", [(o.start, o.end) for o in segs])
         behind = workdir / "behind.ass"
@@ -313,7 +356,8 @@ def run(
         progress("Montando tu reel", 0.90)
         media.composite(base, mask, src, out, behind, ass_path, segs, overlays, opts.size)
     else:
-        media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice, zoom, overlays=overlays, tail=tail)
+        media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice, zoom, overlays=overlays, tail=tail,
+                     **av)
     media.thumbnail(out, workdir / "reel.jpg", min(0.6, out_duration / 2))
     progress("Listo", 1.0)
     return EditResult(

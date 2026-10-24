@@ -105,7 +105,9 @@ Tu trabajo:
    (quita SIEMPRE la versión fallida y deja la buena, normalmente la última), muletillas, "espera, lo repito",
    comentarios al equipo, ruido. Nunca quites contenido bueno. Si no hay nada que quitar, devuelve [].
 2. hook_title: el texto que aparece grande en pantalla al principio. Corto, concreto, que genere curiosidad,
-   con las palabras del propio creador cuando sea posible. Sin emojis ni comillas.
+   con las palabras del propio creador cuando sea posible. Sin emojis ni comillas. Usa una de estas fórmulas,
+   la que mejor encaje con lo que dice: una cifra concreta ("3 errores que…"), un problema que duele ("Si te pasa
+   esto…"), romper una creencia ("Nadie te dice que…") o una promesa clara ("Así ahorras…"). Nada genérico.
 3. hook_line: una frase de gancho alternativa por si el creador quiere regrabar el arranque.
 4. emphasis: índices de 3 a 8 palabras clave que conviene resaltar en los subtítulos (cifras, conceptos clave).
 5. effects: el reel tiene que entrar por los ojos, como los de los creadores que más enganchan. Pon un efecto

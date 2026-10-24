@@ -362,7 +362,8 @@ function clearUpload() {
   state.file = null; state.broll = []; renderBroll();
   const v = $("#preview"); v.pause(); v.removeAttribute("src"); v.hidden = true;
   $("#audio-picked").hidden = true; $(".drop-inner").hidden = false; $("#picked-row").hidden = true;
-  $("#file").value = "";
+  $("#file").value = ""; $("#music-file").value = "";
+  $("#music-name").textContent = "Baja sola cuando hablas. Usa música que puedas usar (tuya, comprada o sin derechos).";
   canGo();
 }
 function newReel() {
@@ -398,6 +399,9 @@ $("#go").onclick = async () => {
   const bg = mode() === "camara" ? $("input[name=background]:checked").value : "";
   fd.append("background", bg === "foto" && !$("#bg-photo").files[0] ? "" : bg);
   if (bg === "foto" && $("#bg-photo").files[0]) fd.append("background_photo", $("#bg-photo").files[0]);
+  fd.append("sfx", $("#sfx").checked);
+  fd.append("punch", $("#punch").checked);
+  if ($("#music-file").files[0]) fd.append("music_file", $("#music-file").files[0]);
   if (mode() !== "largo") state.broll.forEach(f => fd.append("broll", f));
   showWorking(mode() === "largo" ? "Subiendo tu vídeo largo" : "Subiendo tu vídeo", 0.01);
   go("result");
@@ -714,6 +718,10 @@ $("#bg-choices").onchange = () => {
   const foto = $("input[name=background]:checked").value === "foto";
   $("#bg-photo-pick").hidden = !foto;
   if (foto && !$("#bg-photo").files[0]) $("#bg-photo").click();
+};
+$("#music-file").onchange = e => {
+  const f = e.target.files[0];
+  $("#music-name").textContent = f ? `✓ ${f.name} · baja sola cuando hablas` : "Baja sola cuando hablas.";
 };
 $("#bg-photo").onchange = e => {
   const f = e.target.files[0];

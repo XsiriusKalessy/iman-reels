@@ -827,7 +827,29 @@ def build_effects(effects: list[dict], clock: WordClock, style: Style, duration:
     return lines, windows
 
 
-def zoom_flags(spans: list[Span], words: list[Word], zooms: list[tuple[int, int]], auto: bool) -> list[bool]:
+def beat_spans(spans: list[Span], words: list[Word], every: float = 2.6) -> tuple[list[Span], set[float]]:
+    """Interrupción de patrón: si un tramo sigue más de `every` segundos sin corte, lo parte entre dos
+    palabras para que el plano cambie (zoom in/out) cada 2-3 s. Devuelve los tramos y los puntos de cambio."""
+    gaps = sorted(round((a.end + b.start) / 2, 3) for a, b in zip(words, words[1:]))
+    out: list[Span] = []
+    beats: set[float] = set()
+    for sp in spans:
+        start = sp.start
+        while sp.end - start > every * 1.5:
+            target = start + every
+            near = [g for g in gaps if start + every * 0.6 < g < min(sp.end - 0.8, start + every * 1.4)]
+            if not near:
+                break
+            cut = min(near, key=lambda g: abs(g - target))
+            out.append(Span(start, cut))
+            beats.add(cut)
+            start = cut
+        out.append(Span(start, sp.end))
+    return out, beats
+
+
+def zoom_flags(spans: list[Span], words: list[Word], zooms: list[tuple[int, int]], auto: bool,
+               beats: set[float] | None = None) -> list[bool]:
     """Qué tramos van con zoom.
 
     - `auto`: alterna plano normal y plano cerrado en cada corte, el truco
@@ -837,7 +859,7 @@ def zoom_flags(spans: list[Span], words: list[Word], zooms: list[tuple[int, int]
     flags = []
     cut = 0
     for i, sp in enumerate(spans):
-        if i and abs(spans[i - 1].end - sp.start) > 1e-3:
+        if i and (abs(spans[i - 1].end - sp.start) > 1e-3 or round(sp.start, 3) in (beats or ())):
             cut += 1
         flags.append(auto and cut % 2 == 1)
     for a, b in zooms or []:
