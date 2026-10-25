@@ -1766,7 +1766,7 @@ def test_inspiration_live_energy_and_clients(tmp_path, monkeypatch):
     r = c.post("/api/clientes", json={"name": "Hotel Mar Azul"}).json()
     cid = r["cliente"]["id"]
     assert r["activo"] == cid and clientes.activo() == cid and (clientes.dir_for(cid) / "marca").is_dir()
-    assert str(clientes.dir_for(cid) / "marca").endswith(f"clientes/{cid}/marca")  # brand.brand_dir() lo usa con cliente activo
+    assert (clientes.dir_for(cid) / "marca").parts[-3:] == ("clientes", cid, "marca")  # brand.brand_dir() lo usa con cliente activo
     assert c.post("/api/clientes", json={"name": "hotel mar azul"}).status_code == 400
     assert c.post("/api/clientes/activo", json={"id": ""}).json()["activo"] == "" and clientes.activo() == ""
     assert c.post("/api/clientes/activo", json={"id": "nope"}).status_code == 404
