@@ -739,3 +739,32 @@ def test_ring_back_half_goes_behind_the_person():
     assert effects.behind_events([fx], clock, STYLES["impacto"], 10.0) == []  # sin recorte: todo delante
     moved, _ = packfx.anillo_events({**fx, "_track": [(0.8, 300, 400), (4.8, 300, 400)]}, clock, STYLES["impacto"], 10.0)
     assert moved != whole
+
+
+def test_compare_tabs_endpoints(sample, tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from iman import config, server
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    real_run = pipeline.run
+    monkeypatch.setattr(pipeline, "run", lambda *a, **k: real_run(*a, **{**k, "words": TAKE}))
+    c = TestClient(server.app)
+    c.post("/api/settings", json={"provider": "none"})
+    with sample.open("rb") as v:
+        job = c.post("/api/jobs", data={"rhythm": "rapido"}, files=[("video", ("toma.mp4", v, "video/mp4"))]).json()
+    for _ in range(240):
+        job = c.get(f"/api/jobs/{job['id']}").json()
+        if job["status"] != "working":
+            break
+        time.sleep(0.25)
+    assert job["status"] == "done", job.get("error")
+    rough = c.get(f"/api/jobs/{job['id']}/sin-silencios.mp4")
+    assert rough.status_code == 200
+    p = tmp_path / "rough.mp4"
+    p.write_bytes(rough.content)
+    info = media.probe(p)
+    assert abs(info.duration - job["result"]["duration_out"]) < 0.4 and info.width == 720
+    assert c.get(f"/api/jobs/{job['id']}/original").status_code == 200
+    assert c.get("/api/jobs/nada/sin-silencios.mp4").status_code == 404

@@ -935,6 +935,34 @@ def get_video(job_id: str):
     return FileResponse(p, media_type="video/mp4", filename=f"reel-{job_id}.mp4")
 
 
+@app.get("/api/jobs/{job_id}/sin-silencios.mp4")
+def get_rough(job_id: str):
+    """Pestaña «Sin silencios»: tu vídeo solo con los cortes, para revisar lo que se queda."""
+    workdir = JOBS_DIR / job_id
+    dst = workdir / "sin-silencios.mp4"
+    if not dst.exists():
+        spans = jsonfile.load(workdir / "tramos.json")
+        src = next(workdir.glob("original.*"), None)
+        if not spans or src is None:
+            raise HTTPException(404)
+        with _rough_lock:
+            if not dst.exists():
+                media.rough_cut(src, [tuple(s) for s in spans], dst)
+    return FileResponse(dst, media_type="video/mp4")
+
+
+_rough_lock = threading.Lock()
+
+
+@app.get("/api/jobs/{job_id}/original")
+def get_original(job_id: str):
+    """Pestaña «Vídeo original»: lo que subiste, tal cual."""
+    src = next((JOBS_DIR / job_id).glob("original.*"), None)
+    if src is None:
+        raise HTTPException(404)
+    return FileResponse(src, media_type="video/quicktime" if src.suffix.lower() == ".mov" else "video/mp4")
+
+
 @app.get("/api/jobs/{job_id}/whatsapp.zip")
 def get_whatsapp(job_id: str):
     """El reel en trozos de menos de 60 s (los estados de WhatsApp cortan ahí), partido entre frases."""

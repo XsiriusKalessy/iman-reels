@@ -427,6 +427,9 @@ def run(
         spans, beats = effects.beat_spans(spans, words, grid=_music_grid(choice, workdir, info.duration, drop_at))
     zoom = effects.zoom_flags(spans, words, zooms_wanted, opts.auto_zoom and rhythm.cut, beats)
     kept, kept_idx = remap_words(words, spans, drops)
+    # Los tramos que se quedan, para la pestaña «Sin silencios» (tu vídeo tal cual, solo con los cortes).
+    jsonfile.save(workdir / "tramos.json", [[round(s.start, 3), round(s.end, 3)] for s in spans])
+    (workdir / "sin-silencios.mp4").unlink(missing_ok=True)
     out_duration = sum(s.duration for s in spans)
     if not plan.hook_title and kept:
         plan.hook_title = ai.fallback_hook(kept)

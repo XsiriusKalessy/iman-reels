@@ -725,6 +725,24 @@ function markRecommended(j) {
     });
   }
 }
+// Pestañas para comparar: tu vídeo solo con los cortes, el reel terminado y lo que subiste.
+const VIEWS = {
+  cut: ["sin-silencios.mp4", "Tu vídeo sin silencios ni frases quitadas, sin efectos: para revisar lo que se queda."],
+  reel: ["reel.mp4", ""],
+  orig: ["original", "Lo que subiste, tal cual."],
+};
+function setView(view) {
+  if (!state.job) return;
+  const [file, hint] = VIEWS[view];
+  $$("#view-tabs button").forEach(b => b.classList.toggle("on", b.dataset.view === view));
+  $("#view-hint").textContent = hint; $("#view-hint").hidden = !hint;
+  const v = $("#out");
+  const t = view === "reel" ? v.currentTime : 0;
+  v.src = `/api/jobs/${state.job.id}/${file}${state.bust || ""}`;
+  if (t) v.currentTime = t;
+  $("#phone").classList.toggle("raw", view !== "reel");
+}
+$("#view-tabs").onclick = e => { const b = e.target.closest("[data-view]"); if (b) setView(b.dataset.view); };
 function showResult(j) {
   const om = j.options && j.options.music;
   const used = om === "auto" ? (j.result.plan.music || "") : om === true ? "mia" : (om || "");
@@ -745,7 +763,10 @@ function showResult(j) {
   setCover($("#cover-t").value);
   const r = j.result, bust = `?t=${Date.now()}`;
   const v = $("#out");
-  v.src = `/api/jobs/${j.id}/reel.mp4${bust}`; v.hidden = false; $("#working").hidden = true;
+  v.hidden = false; $("#working").hidden = true;
+  state.bust = bust;
+  $("#view-tabs").hidden = j.mode === "voz" || j.mode === "largo";
+  setView("reel");
   $("#download").href = `/api/jobs/${j.id}/reel.mp4`;
   $("#download-wa").href = `/api/jobs/${j.id}/whatsapp.zip`;
   $("#download-wa").hidden = !(j.result && j.result.duration_out > 60);

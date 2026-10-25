@@ -611,6 +611,28 @@ def split_points(duration: float, quiet: list[tuple[float, float]], limit: float
     return cuts
 
 
+def rough_cut(src: Path, spans: list[tuple[float, float]], dst: Path) -> Path:
+    """Tu vídeo con los cortes y nada más (sin encuadre, subtítulos ni efectos), pequeño y rápido: para revisar."""
+    parts, labels = [], []
+    for i, (a, b) in enumerate(spans):
+        parts.append(f"[0:v]trim=start={a:.3f}:end={b:.3f},setpts=PTS-STARTPTS,scale=720:-2,fps=30,setsar=1[v{i}]")
+        parts.append(f"[0:a]atrim=start={a:.3f}:end={b:.3f},asetpts=PTS-STARTPTS[a{i}]")
+        labels.append(f"[v{i}][a{i}]")
+    parts.append(f"{''.join(labels)}concat=n={len(spans)}:v=1:a=1[v][a]")
+    script = dst.parent / "sin-silencios.filters.txt"
+    script.write_text(";\n".join(parts), encoding="utf-8")
+    tmp = dst.with_suffix(".tmp.mp4")
+    cmd = [FFMPEG, "-y", "-v", "error", "-i", str(src), *filter_script_args(script), "-map", "[v]", "-map", "[a]",
+           "-c:v", "libx264", "-preset", "ultrafast", "-crf", "26", "-pix_fmt", "yuv420p", "-c:a", "aac",
+           "-b:a", "128k", "-movflags", "+faststart", str(tmp)]
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    script.unlink(missing_ok=True)
+    if res.returncode != 0:
+        raise RuntimeError(f"ffmpeg falló:\n{res.stderr[-2000:]}")
+    tmp.replace(dst)
+    return dst
+
+
 def cut(src: Path, dst: Path, start: float, end: float) -> Path:
     """Un trozo de un vídeo largo, recodificado para que el corte sea exacto."""
     cmd = [FFMPEG, "-y", "-v", "error", "-ss", f"{max(0.0, start):.3f}", "-i", str(src), "-t", f"{end - start:.3f}",
