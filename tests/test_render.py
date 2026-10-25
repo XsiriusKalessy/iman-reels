@@ -768,3 +768,39 @@ def test_compare_tabs_endpoints(sample, tmp_path, monkeypatch):
     assert abs(info.duration - job["result"]["duration_out"]) < 0.4 and info.width == 720
     assert c.get(f"/api/jobs/{job['id']}/original").status_code == 200
     assert c.get("/api/jobs/nada/sin-silencios.mp4").status_code == 404
+
+
+def test_review_phrases_while_the_director_works(sample, tmp_path, monkeypatch):
+    import threading
+
+    from fastapi.testclient import TestClient
+
+    from iman import config, jsonfile, server
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    heard, go_on = threading.Event(), threading.Event()
+    real_run = pipeline.run
+
+    def slow_run(src, workdir, opts, cfg, **k):
+        jsonfile.save(workdir / "transcript.json", [w.__dict__ for w in TAKE])
+        heard.set()
+        go_on.wait(30)
+        return real_run(src, workdir, opts, cfg, **{**k, "words": TAKE})
+
+    monkeypatch.setattr(pipeline, "run", slow_run)
+    c = TestClient(server.app)
+    c.post("/api/settings", json={"provider": "none"})
+    with sample.open("rb") as v:
+        job = c.post("/api/jobs", data={"rhythm": "rapido"}, files=[("video", ("toma.mp4", v, "video/mp4"))]).json()
+    assert heard.wait(30)
+    early = c.get(f"/api/jobs/{job['id']}/review").json()
+    assert early["draft"] and len(early["phrases"]) >= 2
+    go_on.set()
+    for _ in range(240):
+        job = c.get(f"/api/jobs/{job['id']}").json()
+        if job["status"] != "working":
+            break
+        time.sleep(0.25)
+    assert job["status"] == "done"
+    assert c.get(f"/api/jobs/{job['id']}/review").json()["draft"] is False

@@ -784,14 +784,22 @@ def _without(ranges, a: int, b: int) -> list[tuple[int, int]]:
 
 @app.get("/api/jobs/{job_id}/review")
 def review(job_id: str):
-    """"Revisa lo que dices": cada frase, si se queda o se va, y por qué."""
+    """"Revisa lo que dices": cada frase, si se queda o se va, y por qué.
+
+    Mientras se edita por primera vez ya responde en cuanto Imán te ha escuchado (`draft`: aún sin las
+    decisiones del director, solo silencios, repeticiones y muletillas); antes, una lista vacía."""
     job = _job(job_id)
     workdir = JOBS_DIR / job_id
-    if not job or not (workdir / "plan.json").exists():
+    if not job:
         raise HTTPException(404, "No encuentro ese reel")
+    draft = not (workdir / "plan.json").exists()
+    if draft and (job["status"] != "working" or jsonfile.load(workdir / "transcript.json") is None):
+        if job["status"] != "working":
+            raise HTTPException(404, "No encuentro ese reel")
+        return {"phrases": [], "draft": True}
     words = _saved_words(workdir)
-    plan = _saved_plan(workdir)
-    return {"phrases": pipeline.review(words, plan, job["options"]["rhythm"])}
+    plan = EditPlan() if draft else _saved_plan(workdir)
+    return {"phrases": pipeline.review(words, plan, job["options"]["rhythm"]), "draft": draft}
 
 
 @app.post("/api/jobs/{job_id}/plan")

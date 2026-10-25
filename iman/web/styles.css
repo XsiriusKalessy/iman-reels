@@ -400,3 +400,11 @@ select option:checked { background-color: var(--accent); color: var(--accent-ink
 .sp.has-frame .sp-text { z-index: 1; }
 .choice .sp-dots { position: absolute; right: 6px; top: 6px; z-index: 1; display: flex; gap: 3px; padding: 0; border: 0; border-radius: 0; background: none; }
 .sp-dots i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(255,255,255,.6); }
+
+/* Revisar las frases mientras el director prepara el reel */
+.early .director { display: flex; gap: 10px; align-items: center; }
+.early .director p { margin: 0; }
+.spin-sm { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
+.early-stats { margin: 12px 0 8px; color: var(--muted); }
+.early-stats b { color: var(--text); }
+.phrase .play { flex: none; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--text); cursor: pointer; }

@@ -488,11 +488,70 @@ function poll() {
   state.poll = setTimeout(async () => {
     const j = await api(`/api/jobs/${state.job.id}`);
     state.job = j;
-    if (j.status === "working") { showWorking(j.step, j.progress); return poll(); }
+    if (j.status === "working") { showWorking(j.step, j.progress); earlyReview(j); return poll(); }
+    $("#early").hidden = true;
+    if (j.status === "done" && await applyEarly(j)) return;
     if (j.status === "error") return showError(j.error);
     if (j.result?.clips) return showClips(j);
     showResult(j); if (j.options?.watermark) loadSettings();
   }, 900);
+}
+// Revisar las frases mientras el director trabaja: en cuanto Imán te ha escuchado salen tus frases;
+// lo que quites o recuperes se guarda y se aplica solo al terminar la primera edición.
+async function earlyReview(j) {
+  if (j.result || j.mode !== "camara") return;
+  const e = state.early;
+  if (e && e.job === j.id && (e.list.length || e.busy)) return;
+  if (!e || e.job !== j.id) state.early = { job: j.id, list: [], changes: {}, busy: false };
+  state.early.busy = true;
+  try {
+    const r = await api(`/api/jobs/${j.id}/review`);
+    if (state.early.job !== j.id || !r.phrases.length) return;
+    state.early.list = r.phrases;
+    $("#result-tools").hidden = true;
+    $("#early").hidden = false;
+    $("#early-audio").src = `/api/jobs/${j.id}/original`;
+    renderEarly();
+  } catch { /* aún no */ } finally { state.early.busy = false; }
+}
+function renderEarly() {
+  const { list, changes } = state.early;
+  const keep = p => (p.from + "-" + p.to) in changes ? changes[p.from + "-" + p.to] : p.state !== "fuera";
+  const kept = list.filter(keep);
+  const secs = kept.reduce((a, p) => a + (p.end - p.start), 0);
+  const rhythm = $("input[name=rhythm]:checked")?.closest("label")?.querySelector("span")?.firstChild?.textContent?.trim() || "";
+  $("#early-stats").innerHTML = `<b>${kept.length}</b> de ${list.length} frases · <b>${secs.toFixed(1).replace(".", ",")} s</b>${rhythm ? ` · ritmo ${esc(rhythm.toLowerCase())}` : ""}`;
+  $("#early-phrases").innerHTML = list.map(p => {
+    const k = keep(p);
+    return `<div class="phrase ${k ? "dentro" : "fuera"}" data-key="${p.from}-${p.to}">
+      <button type="button" class="play" data-play="${p.start}-${p.end}" title="Escuchar">▶</button>
+      <span class="grow"><span class="txt">${esc(p.text)}</span><small>${(p.end - p.start).toFixed(1).replace(".", ",")} s${p.reason ? ` · ${esc(p.reason)}` : ""}</small></span>
+      <button type="button" class="link" data-toggle="1">${k ? "Quitar" : "Recuperar"}</button></div>`;
+  }).join("");
+}
+$("#early-phrases").onclick = e => {
+  const play = e.target.closest("[data-play]"), tog = e.target.closest("[data-toggle]");
+  if (play) {
+    const [a, b] = play.dataset.play.split("-").map(Number), au = $("#early-audio");
+    au.currentTime = a; au.play().catch(() => {});
+    clearTimeout(state.earlyStop); state.earlyStop = setTimeout(() => au.pause(), (b - a) * 1000 + 150);
+  } else if (tog) {
+    const key = tog.closest(".phrase").dataset.key, p = state.early.list.find(x => `${x.from}-${x.to}` === key);
+    const now = key in state.early.changes ? state.early.changes[key] : p.state !== "fuera";
+    state.early.changes[key] = !now;
+    renderEarly();
+  }
+};
+async function applyEarly(j) {
+  const e = state.early;
+  if (!e || e.job !== j.id || e.applied) return false;
+  const phrases = Object.entries(e.changes).map(([k, keep]) => { const [from, to] = k.split("-").map(Number); return { from, to, keep }; });
+  e.applied = true;
+  $("#early-audio").pause();
+  if (!phrases.length) return false;
+  showWorking("Aplicando lo que has revisado", 0.02);
+  try { state.job = await postJSON(`/api/jobs/${j.id}/plan`, { phrases }); poll(); return true; }
+  catch { return false; }
 }
 function fmt(s) { return `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`; }
 function renderChat(j) {
