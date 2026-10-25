@@ -39,6 +39,7 @@
         <div><h1>Mis reels</h1><p class="lead">Todo lo que has editado con Imán, listo para volver a tocar o publicar.</p></div>
         <button class="primary" data-goto="upload">+ Nuevo reel</button>
       </div>
+      <div id="streak" class="card streak" hidden></div>
       <div id="learned" class="card learned" hidden></div>
       <div id="library" class="library"></div>
     </section>
@@ -65,6 +66,16 @@
         </div>
       </div>
       <div id="ideas" class="cards"></div>
+
+      <details class="from-comment" id="trends-box">
+        <summary>🔥 Ideas en tendencia hoy</summary>
+        <p class="hint">Lo que hoy se busca en tu país (Google Trends, gratis y sin clave), convertido en ideas para tu sector. Imán solo propone lo que encaja de verdad con lo tuyo.</p>
+        <div class="row tight">
+          <label>País <select id="trends-geo"><option value="ES">España</option><option value="MX">México</option><option value="AR">Argentina</option><option value="CO">Colombia</option><option value="CL">Chile</option><option value="US">Estados Unidos</option></select></label>
+          <button class="primary" type="button" id="trends-btn">Ver qué se mueve hoy</button>
+        </div>
+        <div id="trends-out" class="cards" hidden></div>
+      </details>
 
       <details class="from-comment" id="agency-box">
         <summary>✈️ Modo agencia de viajes</summary>
@@ -344,7 +355,25 @@
           <div class="row tight" id="template-row">
             <button class="ghost" type="button" id="template-save" title="Guarda el ritmo, el estilo, el gancho, la música y el look de este reel para repetirlos en los siguientes">💾 Guardar como plantilla</button>
             <button class="ghost" type="button" id="results-open" title="Apunta cómo le fue en tu red: con 3 o más reels anotados, Imán aprende qué te funciona">📈 Anotar resultados</button>
+            <button class="ghost" type="button" id="promo-btn" title="4 s de tu toma tal cual y, de un latigazo, el reel montado: para enseñar tu proceso">🎬 Reel antes/después</button>
+            <button class="ghost" type="button" id="review-open" title="Modo equipo: márcalo pendiente de aprobación, apruébalo o pide cambios">👥 Equipo</button>
             <span class="hint" id="template-msg"></span>
+          </div>
+          <div id="review-box" class="card review" hidden>
+            <h4>Modo equipo</h4>
+            <p class="hint" id="review-state"></p>
+            <div class="row tight wrap">
+              <label>Quién <input id="review-who" list="review-names" maxlength="40" placeholder="Tu nombre"><datalist id="review-names"></datalist></label>
+              <label class="grow">Nota <input id="review-note" maxlength="300" placeholder="Ej.: cambia el gancho por el de la cifra"></label>
+            </div>
+            <div class="row tight wrap">
+              <button class="ghost" type="button" data-review="pendiente">⏳ Pedir aprobación</button>
+              <button class="ghost" type="button" data-review="aprobado">✅ Aprobar</button>
+              <button class="ghost" type="button" data-review="cambios">✏️ Pedir cambios</button>
+              <button class="ghost" type="button" data-review="borrador">Quitar de revisión</button>
+            </div>
+            <p class="hint">Para que lo vea la otra persona, mándale el reel con «Para WhatsApp» y que apunte aquí su decisión en su Imán (o en este).</p>
+            <ul id="review-hist" class="review-hist"></ul>
           </div>
           <div id="check-box" class="card" hidden><h4>Revisión antes de publicar</h4><ul id="check-list" class="checks"></ul></div>
           <h3>Publicar y vender</h3>

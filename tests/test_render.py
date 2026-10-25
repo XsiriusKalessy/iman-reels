@@ -1634,3 +1634,79 @@ def test_templates_results_and_instant_preview(tmp_path, monkeypatch):
     assert c.get("/api/jobs/w1").json()["preview"] is True and c.get("/api/jobs/w1/previa.mp4").status_code == 200
     assert c.delete(f"/api/plantillas/{c.get('/api/plantillas').json()['plantillas'][0]['id']}").json()["plantillas"] == []
     server.JOBS.clear()
+
+
+def test_trends_promo_team_and_achievements(tmp_path, monkeypatch):
+    """Tanda 7: ideas en tendencia, reel antes/después, modo equipo y logros."""
+    import datetime as dt
+    import subprocess
+    import time
+    from fastapi.testclient import TestClient
+    from iman import ai, aprobacion, config, jsonfile, logros, media, promo, server, tendencias
+    from iman.ai import AIConfig
+    monkeypatch.setattr(config, "HOME", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    monkeypatch.setattr(config, "ai_config", lambda cfg: AIConfig(provider="none"))
+    server.JOBS.clear()
+    rss = ('<rss xmlns:ht="https://trends.google.com/trending/rss"><channel><item><title>Vuelos Japón</title>'
+           '<ht:approx_traffic>20.000+</ht:approx_traffic><ht:news_item><ht:news_item_title>Caen los vuelos</ht:news_item_title>'
+           '</ht:news_item></item><item><title>Clásico</title></item><item><title></title></item></channel></rss>').encode()
+    assert tendencias.parse_google(rss) == [{"topic": "Vuelos Japón", "traffic": "20.000+", "news": ["Caen los vuelos"]},
+                                           {"topic": "Clásico", "traffic": "", "news": []}]
+    wiki = {"items": [{"articles": [{"article": "Página_principal", "views": 9}, {"article": "Especial:Buscar", "views": 5},
+                                    {"article": "Japón", "views": 1234}]}]}
+    assert tendencias.parse_wikipedia(wiki) == [{"topic": "Japón", "traffic": "1.234", "news": []}]
+    calls = []
+    monkeypatch.setattr(tendencias, "fetch_google", lambda geo="ES", timeout=8.0: calls.append(geo) or tendencias.parse_google(rss))
+    t1 = tendencias.topics("ES")
+    assert t1["source"] == "google" and len(t1["topics"]) == 2 and tendencias.topics("ES")["fetched"] == t1["fetched"]
+    assert calls == ["ES"]  # la segunda vez, de la caché
+    monkeypatch.setattr(tendencias, "fetch_google", lambda *a, **k: (_ for _ in ()).throw(OSError("sin red")))
+    monkeypatch.setattr(tendencias, "fetch_wikipedia", lambda timeout=8.0: tendencias.parse_wikipedia(wiki))
+    assert tendencias.topics("MX")["source"] == "wikipedia"
+    monkeypatch.setattr(ai, "_ask_json", lambda cfg, system, user, schema, images=None: {"ideas": [
+        {"topic": "Vuelos Japón", "hook": "Japón más barato que nunca", "script": "x " * 40, "why": "Hoy se busca."}]})
+    cfg = AIConfig(provider="claude", anthropic_key="k")
+    assert tendencias.ideas(cfg, t1["topics"], "viajes")[0]["hook"] == "Japón más barato que nunca"
+    assert tendencias.ideas(AIConfig(provider="none"), t1["topics"], "viajes") == []
+    c = TestClient(server.app)
+    r = c.get("/api/tendencias?pack=viajes&geo=ES").json()
+    assert r["ideas"] == [] and r["ai"] is False and r["topics"][0]["topic"] == "Japón"  # la caché era de MX: se vuelve a leer
+    # Reel antes/después con dos vídeos de prueba.
+    d = tmp_path / "jobs" / "p1"
+    d.mkdir(parents=True)
+    for name, size, secs in (("original.mp4", "360x640", 5), ("reel.mp4", "540x960", 8)):
+        subprocess.run([media.FFMPEG, "-y", "-v", "error", "-f", "lavfi", "-i", f"testsrc=size={size}:rate=30", "-f", "lavfi",
+                        "-i", "sine=frequency=440", "-t", str(secs), "-pix_fmt", "yuv420p", str(d / name)], check=True)
+    out = promo.before_after(d / "original.mp4", d / "reel.mp4", d / "ad.mp4")
+    assert 10.5 <= media.duration_of(out) <= 11.2 and media.probe(out).width == 1080
+    jsonfile.save(d / "job.json", {"id": "p1", "status": "done", "created": time.time(), "options": {},
+                                   "result": {"video": "reel.mp4", "duration_in": 60, "duration_out": 30, "viral": {"score": 88}}})
+    assert c.post("/api/jobs/p1/antes-despues").json()["file"] == "antes-despues.mp4"
+    assert c.get("/api/jobs/p1/antes-despues.mp4").status_code == 200
+    assert c.post("/api/jobs/nope/antes-despues").status_code == 404
+    # Modo equipo.
+    job = {"id": "x"}
+    rev = aprobacion.set_state(job, "pendiente", "  nelson ", "revisa el gancho")
+    assert rev["estado"] == "pendiente" and rev["por"] == "nelson" and aprobacion.badge(job) == "⏳ Pendiente"
+    aprobacion.set_state(job, "aprobado", "Elena")
+    assert len(job["revision"]["historial"]) == 2 and aprobacion.badge(job) == "✅ Aprobado"
+    r = c.post("/api/jobs/p1/revision", json={"estado": "pendiente", "por": "nelson", "nota": "mira el final"}).json()
+    assert r["revision"]["estado"] == "pendiente" and r["equipo"] == ["nelson"]
+    assert c.post("/api/jobs/p1/revision", json={"estado": "lo que sea"}).status_code == 400
+    assert c.get("/api/reels").json()["reels"][0]["revision"] == "⏳ Pendiente"
+    assert jsonfile.load(d / "job.json")["revision"]["por"] == "nelson"
+    # Logros y racha.
+    today = dt.date(2026, 10, 25)
+    mk = lambda day, score=0: {"created": time.mktime(dt.datetime.combine(day, dt.time(12)).timetuple()),
+                               "result": {"duration_in": 50, "duration_out": 20, "viral": {"score": score}}}
+    s = logros.compute([mk(today), mk(today - dt.timedelta(days=1)), mk(today - dt.timedelta(days=8)),
+                        mk(today - dt.timedelta(days=15), 90)], today)
+    assert s["total"] == 4 and s["racha_semanas"] == 3 and s["semana"] == 2 and s["segundos_ahorrados"] == 120  # el 25-10-2026 es domingo: el sábado cuenta
+    assert {l["key"] for l in s["logros"] if l["done"]} == {"primero", "racha3", "viral"} and s["siguiente"].startswith("Siguiente: 5 reels")
+    s2 = logros.compute([mk(today - dt.timedelta(days=16))], today)  # hace dos semanas: la racha se rompió
+    assert s2["racha_semanas"] == 0 and s2["semana_actual"] is False
+    assert logros.compute([], today)["total"] == 0
+    assert c.get("/api/logros").json()["total"] == 1
+    server.JOBS.clear()

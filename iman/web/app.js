@@ -974,10 +974,25 @@ async function loadLibrary() {
     <div class="reel-card" data-open="${r.id}" role="button" tabindex="0">
       <img src="/api/jobs/${r.id}/reel.jpg" alt="" loading="lazy">
       ${r.resultados?.views ? `<span class="res" title="Resultados anotados">👁 ${Number(r.resultados.views).toLocaleString("es-ES")}</span>` : ""}
+      ${r.revision ? `<span class="rev">${esc(r.revision)}</span>` : ""}
       <button class="del" data-del="${r.id}" title="Borrar">✕</button>
       <div><strong>${esc(r.title || "Sin título")}</strong><span>${fmt(r.duration)} · ${new Date(r.created * 1000).toLocaleDateString("es-ES")}</span></div>
     </div>`).join("");
   api("/api/resultados").then(renderLearned).catch(() => {});
+  api("/api/logros").then(renderStreak).catch(() => {});
+}
+// Logros y racha: todo sale de tu biblioteca.
+function renderStreak(s) {
+  const box = $("#streak");
+  if (!s || !s.total) { box.hidden = true; return; }
+  box.hidden = false;
+  const mins = Math.round(s.segundos_ahorrados / 60);
+  box.innerHTML = `
+    <div class="big">${s.racha_semanas} ${s.racha_semanas === 1 ? "semana seguida" : "semanas seguidas"}<small>${s.semana_actual ? "Esta semana ya has publicado 🔥" : "Haz un reel esta semana para no romper la racha"}</small></div>
+    <div class="big">${s.total} ${s.total === 1 ? "reel" : "reels"}<small>${s.semana} esta semana</small></div>
+    <div class="big">${mins >= 60 ? `${Math.floor(mins / 60)} h ${mins % 60} min` : `${mins} min`}<small>de silencios y tomas falsas que no has cortado tú</small></div>
+    <div class="badges">${s.logros.map(l => `<span class="badge ${l.done ? "on" : ""}" title="${esc(l.hint)}">${l.done ? "🏅 " : ""}${esc(l.label)}</span>`).join("")}</div>
+    <p class="hint">${esc(s.siguiente)}</p>`;
 }
 // Aprende de tus resultados: con 3 o más reels anotados, lo que mejor te funciona.
 function renderLearned(ins) {
@@ -1051,6 +1066,70 @@ $("#results-form").onsubmit = async e => {
     $("#template-msg").textContent = ins.lessons?.length ? `Anotado. ${ins.lessons[0]}` :
       `Anotado. ${ins.n < ins.needed ? `Con ${ins.needed - ins.n} reel${ins.needed - ins.n > 1 ? "s" : ""} más te diré qué te funciona mejor.` : "Sigo comparando tus reels."}`;
   } catch (err) { $("#results-msg").textContent = err.message; }
+};
+// Reel antes/después: 4 s de tu toma y, de un latigazo, el reel montado.
+$("#promo-btn").onclick = async () => {
+  if (!state.job?.id) return;
+  const btn = $("#promo-btn"), msg = $("#template-msg");
+  btn.disabled = true; btn.textContent = "Montando el antes/después…";
+  try {
+    const r = await postJSON(`/api/jobs/${state.job.id}/antes-despues`, {});
+    const a = document.createElement("a");
+    a.href = `/api/jobs/${state.job.id}/antes-despues.mp4?v=${r.version}`; a.download = `antes-despues-${state.job.id}.mp4`;
+    document.body.appendChild(a); a.click(); a.remove();
+    msg.textContent = "Reel antes/después descargado: tu toma tal cual y, de un latigazo, el reel montado.";
+  } catch (err) { msg.textContent = err.message; }
+  finally { btn.disabled = false; btn.textContent = "🎬 Reel antes/después"; }
+};
+// Modo equipo: pendiente de aprobación, aprobado o cambios.
+function renderReview(rev, team) {
+  const box = $("#review-box");
+  const st = $("#review-state");
+  const names = { borrador: "Sin revisión", pendiente: "⏳ Pendiente de aprobación", aprobado: "✅ Aprobado", cambios: "✏️ Pide cambios" };
+  if (rev?.estado && rev.estado !== "borrador") {
+    st.textContent = `${names[rev.estado]}${rev.por ? ` · ${rev.por}` : ""}${rev.nota ? ` · «${rev.nota}»` : ""} · ${new Date(rev.fecha * 1000).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}`;
+  } else st.textContent = "Este reel no está en revisión. Si lo tiene que aprobar alguien, pide la aprobación aquí.";
+  $("#review-hist").innerHTML = (rev?.historial || []).slice().reverse().slice(0, 6).map(h =>
+    `<li>${esc(names[h.estado] || h.estado)}${h.por ? ` · ${esc(h.por)}` : ""}${h.nota ? ` · «${esc(h.nota)}»` : ""} · ${new Date(h.fecha * 1000).toLocaleDateString("es-ES")}</li>`).join("");
+  if (team) $("#review-names").innerHTML = team.map(n => `<option value="${esc(n)}">`).join("");
+  try { if (!$("#review-who").value) $("#review-who").value = localStorage.getItem("iman-who") || ""; } catch { /* sin almacenamiento */ }
+  box.hidden = false;
+}
+$("#review-open").onclick = async () => {
+  if (!state.job?.id) return;
+  let team = [];
+  try { team = (await api("/api/equipo")).equipo; } catch { /* sin equipo aún */ }
+  renderReview(state.job.revision, team);
+  $("#review-box").scrollIntoView({ behavior: "smooth", block: "nearest" });
+};
+document.querySelectorAll("[data-review]").forEach(b => b.onclick = async () => {
+  if (!state.job?.id) return;
+  const who = $("#review-who").value.trim();
+  try { localStorage.setItem("iman-who", who); } catch { /* nada */ }
+  try {
+    const r = await postJSON(`/api/jobs/${state.job.id}/revision`, { estado: b.dataset.review, por: who, nota: $("#review-note").value });
+    state.job.revision = r.revision;
+    $("#review-note").value = "";
+    renderReview(r.revision, r.equipo);
+  } catch (err) { $("#review-state").textContent = err.message; }
+});
+// Ideas en tendencia hoy, para tu sector.
+$("#trends-btn").onclick = async () => {
+  const btn = $("#trends-btn"), out = $("#trends-out");
+  btn.disabled = true; btn.textContent = "Leyendo lo que se mueve hoy…";
+  out.hidden = false; out.innerHTML = "";
+  try {
+    const pack = $("input[name=pack]:checked")?.value || "";
+    const r = await api(`/api/tendencias?pack=${encodeURIComponent(pack === "general" ? "" : pack)}&geo=${encodeURIComponent($("#trends-geo").value)}`);
+    const when = r.fetched ? new Date(r.fetched * 1000).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : "";
+    const src = r.source === "wikipedia" ? "lo más visto ayer en la Wikipedia" : "Google Trends";
+    out.innerHTML = (r.ideas || []).map(i => `
+      <div class="card"><span class="trend-topic">🔥 ${esc(i.topic)}</span><h4>${esc(i.hook)}</h4><p>${esc(i.script)}</p><p class="hint">${esc(i.why)}</p>
+      <button class="ghost use-idea" data-hook="${esc(i.hook)}">Grabar esta →</button></div>`).join("") +
+      `<div class="card"><h4>Temas de hoy (${esc(src)}${when ? `, a las ${when}` : ""})</h4><p>${r.topics.slice(0, 15).map(t => `<b>${esc(t.topic)}</b>${t.traffic ? ` <span class="trend-topic">${esc(t.traffic)}</span>` : ""}`).join(" · ")}</p>
+      ${!r.ai ? `<p class="hint">Con Claude o ChatGPT configurados en Ajustes, Imán convierte estos temas en ideas para tu sector.</p>` : !(r.ideas || []).length ? `<p class="hint">Hoy no hay ningún tema que encaje de forma natural con tu sector: mejor no forzarlo.</p>` : ""}</div>`;
+  } catch (err) { out.innerHTML = `<p class="error">${esc(err.message)}</p>`; }
+  finally { btn.disabled = false; btn.textContent = "Ver qué se mueve hoy"; }
 };
 // Vista previa al instante: tu vídeo ya cortado, en pequeño, mientras se monta el reel entero.
 function earlyPreview(j) {
@@ -1212,6 +1291,8 @@ $("#view-tabs").onclick = e => { const b = e.target.closest("[data-view]"); if (
 function showResult(j) {
   $("#template-msg").textContent = "";
   $("#early-preview").hidden = true;
+  $("#review-box").hidden = true;
+  if (j.revision?.estado && j.revision.estado !== "borrador") renderReview(j.revision, null);
   const om = j.options && j.options.music;
   const used = om === "auto" ? ((j.result.plan || {}).music || "") : om === true ? "mia" : (om || "");
   if (used === "mia" && !$("#re-music option[value=mia]")) $("#re-music").insertAdjacentHTML("beforeend", `<option value="mia">Mi música</option>`);

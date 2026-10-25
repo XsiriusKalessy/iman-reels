@@ -35,6 +35,8 @@ DEFAULTS = {
     "feedback_url": os.environ.get("IMAN_FEEDBACK_URL", ""),
     # "Recuérdalo para mis próximos reels": preferencias que se aplican a todos los reels nuevos.
     "memory": [],
+    # Modo equipo: nombres de quienes revisan y aprueban reels (iman/aprobacion.py).
+    "equipo": [],
 }
 
 MEMORY_MAX = 20

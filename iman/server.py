@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ai, brand, config, copystyle, effects, equipo, ganchos, jsonfile, license, media, musica, packs, pipeline, plantillas, portable, redes, resultados, updates
+from . import ai, aprobacion, brand, config, copystyle, effects, equipo, ganchos, jsonfile, license, logros, media, musica, packs, pipeline, plantillas, portable, promo, redes, resultados, tendencias, updates
 from . import captions as captions_mod
 from .captions import STYLES
 from .models import EditPlan, Word
@@ -203,7 +203,8 @@ def reels():
         r = job.get("result") or {}
         out.append({"id": job["id"], "created": job.get("created", 0), "title": (r.get("plan") or {}).get("hook_title", ""),
                     "duration": r.get("duration_out", 0), "pack": (job.get("options") or {}).get("pack", ""),
-                    "resultados": job.get("resultados") or {}})
+                    "resultados": job.get("resultados") or {}, "revision": aprobacion.badge(job),
+                    "revision_estado": (job.get("revision") or {}).get("estado", "")})
     return {"reels": sorted(out, key=lambda r: -r["created"])}
 
 
@@ -492,6 +493,93 @@ def set_results(job_id: str, body: dict):
             JOBS[job_id].pop("resultados", None)
         _save_job(JOBS[job_id])
     return {"resultados": JOBS[job_id].get("resultados"), "insights": resultados.insights(_reels_with_results())}
+
+
+# --- Tanda 7: ideas en tendencia, reel antes/después, modo equipo y logros ---
+@app.get("/api/tendencias")
+def get_trends(pack: str = "", geo: str = "ES", force: bool = False):
+    """Lo que se mueve hoy (Google Trends o Wikipedia, sin clave) convertido en ideas para tu sector."""
+    data = tendencias.topics(geo, force=force)
+    if not data.get("topics"):
+        raise HTTPException(503, "No he podido leer las tendencias de hoy. Comprueba la conexión y vuelve a probar.")
+    key = pack if pack in packs.PACKS else "general"
+    cached = (data.get("ideas") or {}).get(key)
+    if cached is None or force:
+        cfg = config.ai_config(config.load())
+        try:
+            cached = tendencias.ideas(cfg, data["topics"], pack, _voice_samples()) if cfg.enabled else []
+        except Exception as e:  # noqa: BLE001 - sin IA se enseñan los temas tal cual
+            log.warning("Tendencias sin ideas de la IA: %s", e)
+            cached = []
+        if cached:
+            tendencias.remember_ideas(key, cached)
+    return {"topics": data["topics"], "source": data.get("source", ""), "fetched": data.get("fetched", 0),
+            "geo": data.get("geo", geo), "ideas": cached, "ai": config.ai_config(config.load()).enabled}
+
+
+@app.post("/api/jobs/{job_id}/antes-despues")
+def make_before_after(job_id: str):
+    """Reel «antes y después»: 4 s de tu toma y, de un latigazo, el reel montado. Para enseñar tu proceso."""
+    job = _job(job_id)
+    if not job or job.get("status") != "done" or not (job.get("result") or {}).get("video"):
+        raise HTTPException(404, "Primero termina el reel")
+    workdir = _dir(job_id)
+    src = next(workdir.glob("original.*"), None)
+    reel = workdir / job["result"]["video"]
+    if src is None or not reel.exists():
+        raise HTTPException(404, "No encuentro el vídeo original o el reel")
+    dst = workdir / "antes-despues.mp4"
+    with _lock_for(dst):
+        if not dst.exists() or dst.stat().st_mtime < reel.stat().st_mtime:
+            promo.before_after(src, reel, dst, accent=brand.load().primary or "#FFD60A")
+    return {"file": dst.name, "version": int(dst.stat().st_mtime)}
+
+
+@app.get("/api/jobs/{job_id}/antes-despues.mp4")
+def get_before_after(job_id: str):
+    p = _dir(job_id) / "antes-despues.mp4"
+    if not p.exists():
+        raise HTTPException(404)
+    return FileResponse(p, media_type="video/mp4", filename=f"antes-despues-{job_id}.mp4")
+
+
+class ReviewIn(BaseModel):
+    estado: str = Field(..., max_length=20)
+    por: str = Field("", max_length=40)
+    nota: str = Field("", max_length=300)
+
+
+@app.post("/api/jobs/{job_id}/revision")
+def set_review(job_id: str, body: ReviewIn):
+    """Modo equipo: pendiente de aprobación, aprobado o pide cambios, con quién y una nota."""
+    job = _job(job_id)
+    if not job or job.get("status") != "done":
+        raise HTTPException(404, "No encuentro ese reel")
+    if body.estado not in aprobacion.ESTADOS:
+        raise HTTPException(400, "Estado no válido")
+    with _lock:
+        rev = aprobacion.set_state(JOBS[job_id], body.estado, body.por, body.nota)
+        _save_job(JOBS[job_id])
+    if body.por.strip():  # el nombre se guarda para el equipo
+        names = aprobacion.team(config.load())
+        if body.por.strip()[:40] not in names:
+            config.save({"equipo": (names + [body.por.strip()[:40]])[-10:]})
+    return {"revision": rev, "equipo": aprobacion.team(config.load())}
+
+
+@app.get("/api/equipo")
+def get_team():
+    return {"equipo": aprobacion.team(config.load()), "estados": aprobacion.ESTADOS}
+
+
+@app.get("/api/logros")
+def get_achievements():
+    jobs = []
+    for f in JOBS_DIR.glob("*/job.json") if JOBS_DIR.exists() else []:
+        job = _job(f.parent.name)
+        if job and job.get("status") == "done" and "clips" not in (job.get("result") or {}):
+            jobs.append(job)
+    return logros.compute(jobs)
 
 
 def _learned_prompt() -> str:

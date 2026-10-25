@@ -294,3 +294,19 @@ class ClipsIn(BaseModel):
 def clips(request: Request, body: ClipsIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
     _check(x_iman_license, x_iman_instance, request)
     return ai.pick_clips_raw(_cfg(), body.transcript, body.n)
+
+
+class TrendsIn(BaseModel):
+    topics: list[dict] = Field(default_factory=list, max_length=20)
+    sector: str = Field("", max_length=80)
+    voice_samples: str = Field("", max_length=4000)
+
+
+@app.post("/v1/tendencias")
+def tendencias_ideas(request: Request, body: TrendsIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
+    _check(x_iman_license, x_iman_instance, request)
+    from iman import tendencias
+
+    found = [{"topic": str(t.get("topic", ""))[:80], "traffic": str(t.get("traffic", ""))[:20],
+              "news": [str(n)[:120] for n in (t.get("news") or [])][:2]} for t in body.topics if isinstance(t, dict)]
+    return {"ideas": tendencias.ideas_raw(_cfg(), found, body.sector or "creador de contenido")}
