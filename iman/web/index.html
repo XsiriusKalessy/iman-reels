@@ -69,7 +69,7 @@
         <summary>💬 Reel desde un comentario</summary>
         <p class="hint">Pega lo que te ha escrito un seguidor (o sube la captura). Te doy la respuesta para el comentario y el guion de un reel nuevo que le responde, con su comentario en pantalla al principio.</p>
         <form id="comment-form" class="stack">
-          <label>Comentario<textarea name="texto" rows="4" placeholder="Consejo: tirad la basura en los 7-Eleven…"></textarea></label>
+          <label>Comentario<textarea name="texto" rows="4" title="Cópialo tal cual, con sus faltas: la IA lo ordena" placeholder="Consejo: tirad la basura en los 7-Eleven…"></textarea></label>
           <div class="row tight">
             <label>Usuario<input name="autor" placeholder="@sheila" maxlength="40"></label>
             <label class="ghost small file-pick">📷 Subir captura<input type="file" name="captura" accept="image/*" hidden></label>
@@ -164,18 +164,18 @@
           </div>
           <h3>Encuadre</h3>
           <div class="choices inline">
-            <label class="choice"><input type="radio" name="fit" value="recortar" checked><span>Recortar a vertical</span></label>
-            <label class="choice"><input type="radio" name="fit" value="fondo"><span>Fondo desenfocado</span></label>
+            <label class="choice"><input type="radio" name="fit" value="recortar" checked><span>Recortar a vertical<small>llena la pantalla; si grabaste en horizontal, te sigue para que no te salgas</small></span></label>
+            <label class="choice"><input type="radio" name="fit" value="fondo"><span>Fondo desenfocado<small>se ve el vídeo entero, con el mismo vídeo borroso arriba y abajo</small></span></label>
           </div>
           <div id="bg-box">
             <h3>Tu fondo</h3>
             <div class="choices inline" id="bg-choices">
-              <label class="choice"><input type="radio" name="background" value="" checked><span>El de verdad</span></label>
+              <label class="choice"><input type="radio" name="background" value="" checked><span>El de verdad<small>tu fondo tal cual se grabó</small></span></label>
               <label class="choice"><input type="radio" name="background" value="desenfoque"><span>Desenfocado<small>tú nítido delante</small></span></label>
               <label class="choice"><input type="radio" name="background" value="color"><span>Brillo de mi marca<small>oscuro con la luz de tu color</small></span></label>
-              <label class="choice"><input type="radio" name="background" value="marca_degradado"><span>Degradado de mi marca</span></label>
+              <label class="choice"><input type="radio" name="background" value="marca_degradado"><span>Degradado de mi marca<small>te recorta y pone detrás tus colores</small></span></label>
               <label class="choice"><input type="radio" name="background" value="marca_bokeh"><span>Luces de mi marca<small>bokeh desenfocado</small></span></label>
-              <label class="choice"><input type="radio" name="background" value="marca_logo"><span>Trama con mi logo</span></label>
+              <label class="choice"><input type="radio" name="background" value="marca_logo"><span>Trama con mi logo<small>tu logo repetido y suave detrás de ti</small></span></label>
               <label class="choice"><input type="radio" name="background" value="foto"><span>Mi foto<small>p. ej. Tokio de fondo</small></span></label>
             </div>
             <label class="ghost button" id="bg-photo-pick" hidden>📷 Elegir la foto de fondo<input type="file" id="bg-photo" accept="image/*" hidden></label>
@@ -184,6 +184,7 @@
           <h3>Color</h3>
           <div class="music-row"><label>🎨 Look de color y textura
             <select id="look"><option value="auto" selected>Automático (Imán elige según tu vídeo)</option><option value="natural">Natural</option><option value="calido">Cálido</option><option value="teal">Teal &amp; Orange (viajes)</option><option value="cine">Cine</option><option value="grano">Película con grano</option><option value="retro">Retro (CRT)</option><option value="bn">Blanco y negro</option></select></label></div>
+          <p class="hint" id="look-help"></p>
           <div id="use-brand-row" hidden>
             <h3>Marca</h3>
             <label class="check"><input type="checkbox" id="use-brand" checked> Con mi marca (colores, logo y cierre) · <a href="#" id="brand-edit-link">cambiar</a></label>
@@ -206,17 +207,19 @@
           <p class="hint" id="music-name">La música de Imán la creamos nosotros: es tuya y sin derechos. Baja sola cuando hablas.</p>
           <h3>Calidad</h3>
           <div class="choices inline">
-            <label class="choice"><input type="radio" name="size" value="1080" checked><span>1080 × 1920</span></label>
-            <label class="choice"><input type="radio" name="size" value="4k"><span>4K</span></label>
+            <label class="choice"><input type="radio" name="size" value="1080" checked><span>1080 × 1920<small>lo normal para redes; tarda menos</small></span></label>
+            <label class="choice"><input type="radio" name="size" value="4k"><span>4K<small>más nitidez si tu móvil grabó en 4K; tarda más y pesa más</small></span></label>
           </div>
         </div>
         <div>
           <h3>Gancho</h3>
           <label class="check"><input type="checkbox" id="hook" checked> Poner título de gancho al principio</label>
           <input id="hook-title" placeholder="Escríbelo tú, o deja que lo proponga la IA">
+          <p class="hint tip">💡 Máx. 7 palabras y algo concreto: una cifra («3 errores al ir a Japón»), un problema («Si te mareas en el avión…») o una promesa («Japón por menos de 2.000 €»). Evita «Hola» o «Hoy os cuento».</p>
           <select id="hook-template"><option value="">Plantilla de gancho (opcional)</option></select>
           <h3>Dímelo como a tu editor</h3>
           <textarea id="instructions" rows="5" placeholder="Ej.: quita la parte en la que me equivoco con el precio y resalta «gratis»"></textarea>
+          <p class="hint tip">💡 Pide cosas concretas, una por frase: qué quitar («la parte del precio»), qué resaltar («la palabra gratis») y qué efecto quieres y dónde («una lista cuando digo los 3 pasos»).</p>
           <p class="hint ideas-label">Toca las que quieras y se añaden (puedes elegir varias y retocarlas):</p>
           <div id="instr-ideas" class="quick ideas"></div>
           <label class="check small"><input type="checkbox" id="remember"> Recordarlo para mis próximos reels</label>
@@ -281,11 +284,13 @@
             <input id="chat-input" placeholder="Ej.: pon una lista con los 3 pasos y quita la parte del precio" autocomplete="off">
             <button class="primary" type="submit">Enviar</button>
           </form>
+          <p class="hint tip">💡 Di qué cambiar y dónde: «el titular del principio más corto», «quita los efectos del final», «música más tranquila».</p>
           <p class="hint ideas-label">¿No sabes qué pedirle? Toca una idea, cámbiala si quieres y pulsa Enviar:</p>
           <div id="chat-ideas" class="quick ideas"></div>
           <label class="check small"><input type="checkbox" id="chat-remember"> Recordarlo para mis próximos reels</label>
           <h3>Cambios rápidos</h3>
-          <div class="quick">
+          <p class="hint" id="quick-help">Pasa el ratón por un botón para ver qué hace. Al pulsarlo, el reel se vuelve a montar con ese cambio (no se pierde nada).</p>
+          <div class="quick" id="quick-box">
             <button data-rhythm="rapido">Más rápido</button>
             <button data-rhythm="natural">Más natural</button>
             <button data-style="impacto">Estilo Impacto</button>
@@ -461,7 +466,7 @@
       <p class="hint">Se configura una vez y se aplica sola en todos tus reels.</p>
       <div class="brand-grid">
         <div class="stack">
-          <label>Cuéntame tu negocio en una frase
+          <label title="Qué vendes, a quién y qué te hace distinto. La IA lo usa en los textos de cada red.">Cuéntame tu negocio en una frase
             <div class="row tight"><input name="description" placeholder="Ej.: agencia de viajes a medida en Valencia"><button class="ghost" id="brand-auto" type="button">✦ Rellénalo tú</button></div>
           </label>
           <label class="logo-drop" id="logo-drop">
@@ -495,6 +500,7 @@
           <div>
             <h3>Cierre del reel</h3>
             <label>Llamada a la acción<input name="cta" maxlength="40" placeholder="Reserva por WhatsApp"></label>
+            <p class="hint tip">💡 Un verbo y el canal: «Reserva por WhatsApp», «Escríbeme VIAJE por privado». Sale al final de cada reel.</p>
             <label>Web o teléfono<input name="contact" maxlength="40" placeholder="tuweb.com"></label>
             <label>Usuario<input name="handle" maxlength="40" placeholder="@tumarca"></label>
             <label>Nombre (si no tienes logo)<input name="name" maxlength="40"></label>

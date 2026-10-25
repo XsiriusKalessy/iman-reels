@@ -4,10 +4,32 @@ const state = { file: null, takes: [], job: null, settings: null, poll: null };
 
 function go(step) {
   if (step === "home") loadLibrary();
-  $$(".panel").forEach(p => p.classList.toggle("show", p.dataset.panel === step));
-  $$("#steps button").forEach(b => b.classList.toggle("active", b.dataset.step === step));
-  window.scrollTo({ top: 0 });
+  const swap = () => {
+    $$(".panel").forEach(p => p.classList.toggle("show", p.dataset.panel === step));
+    $$("#steps button").forEach(b => b.classList.toggle("active", b.dataset.step === step));
+    movePill();
+    window.scrollTo({ top: 0 });
+  };
+  const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (document.startViewTransition && !calm) document.startViewTransition(swap); else swap();
 }
+// La píldora del paso activo se desliza de un paso a otro.
+function movePill() {
+  const nav = document.getElementById("steps");
+  if (!nav) return;
+  let pill = nav.querySelector(".pill-bg");
+  if (!pill) { pill = document.createElement("span"); pill.className = "pill-bg"; nav.prepend(pill); }
+  const b = nav.querySelector("button.active");
+  if (!b) { pill.style.opacity = 0; return; }
+  pill.style.opacity = 1;
+  pill.style.width = `${b.offsetWidth}px`;
+  pill.style.transform = `translateX(${b.offsetLeft}px)`;
+}
+addEventListener("resize", () => movePill());
+// Las listas entran escalonadas: cada hijo sabe su número.
+new MutationObserver(muts => {
+  for (const m of muts) [...m.target.children].forEach((c, i) => c.style.setProperty("--i", Math.min(i, 12)));
+}).observe(document.body, { childList: true, subtree: true });
 document.addEventListener("click", e => {
   const t = e.target.closest("[data-goto],[data-step]");
   if (!t) return;
@@ -1319,3 +1341,59 @@ function readPhrases() {
 }
 $("#phrase-add").onclick = () => $("#phrases").insertAdjacentHTML("beforeend", phraseRow({ kind: readPhrases().length ? "otra" : "eslogan" }));
 $("#phrases").onclick = e => { if (e.target.closest(".ph-del")) e.target.closest(".phrase-row").remove(); };
+
+// Qué hace cada opción: se ve al pasar el ratón (o con el teclado) y en el desplegable de color.
+const LOOK_HELP = {
+  auto: "Imán mira tu vídeo y elige el color que mejor le va.",
+  natural: "Corrige la luz y el blanco sin cambiar el estilo: como lo viste, pero mejor.",
+  calido: "Tonos dorados y piel bonita: atardeceres, playas, comida.",
+  teal: "Cielos y mar azules con la piel cálida: el look de los vídeos de viajes.",
+  cine: "Contraste suave y sombras profundas, como una película.",
+  grano: "Grano de película de 35 mm con polvo: nostálgico y artesanal.",
+  retro: "Televisor antiguo con los colores separados: divertido y llamativo.",
+  bn: "Blanco y negro con contraste: serio, elegante o emotivo.",
+};
+const QUICK_HELP = {
+  "rhythm:rapido": "Quita más pausas y repeticiones: el reel dura menos y engancha más.",
+  "rhythm:natural": "Deja respirar tus pausas: suena más tranquilo y cercano.",
+  "style:impacto": "Subtítulos grandes con la palabra que dices resaltada.",
+  "style:editorial": "Letra fina de revista: elegante, para marcas premium.",
+  "style:palabra": "Una palabra cada vez, en el centro: máxima atención.",
+  "style:neon": "Letras que brillan como un letrero de neón.",
+  "style:karaoke": "La frase entera y se va coloreando lo que dices.",
+  "style:caja": "Texto sobre una caja de color: se lee en cualquier fondo.",
+  "style:gigante": "Palabras enormes que ocupan la pantalla.",
+  "style:mezcla": "Mezcla letra normal y manuscrita en las palabras clave.",
+  "style:elegante": "Serif fina y discreta: lujo y viajes premium.",
+  "style:marcador": "Como si subrayaras con rotulador las palabras clave.",
+  "style:hormozi": "Mayúsculas gordas con palabras clave de color: el estilo que más retiene.",
+  "style:bebas": "Letra alta y estrecha, muy de YouTube.",
+  "style:comic": "Letra de cómic con borde: divertido y desenfadado.",
+  "style:bloque": "Bloques de color detrás de cada línea.",
+  "background:desenfoque": "Te recorta y desenfoca lo de detrás: tú nítido delante.",
+  "background:color": "Fondo oscuro con una luz de tu color de marca.",
+  "background:marca_degradado": "Fondo con un degradado de tus colores.",
+  "background:marca_bokeh": "Luces desenfocadas de tus colores detrás de ti.",
+  "background:marca_logo": "Tu logo repetido y suave detrás de ti.",
+  "background:": "Vuelve a tu fondo tal cual se grabó.",
+  "voice:false": "Tu voz sin tocar (si la limpieza la deja rara).",
+  "voice:true": "Menos ruido y volumen estable en toda la toma.",
+  "ruido:true": "Quita tráfico, viento o gente de fondo. Úsalo solo si se oye mucho.",
+  "ruido:false": "Deja el ambiente como estaba.",
+};
+function quickKey(b) {
+  for (const k of ["rhythm", "style", "background", "voice", "ruido"]) if (k in b.dataset) return `${k}:${b.dataset[k]}`;
+  return "";
+}
+(function wireHelp() {
+  const box = $("#quick-box"), help = $("#quick-help"), base = help.textContent;
+  box.querySelectorAll("button").forEach(b => { const t = QUICK_HELP[quickKey(b)]; if (t) b.title = t; });
+  const show = e => { const b = e.target.closest("button"); help.textContent = (b && QUICK_HELP[quickKey(b)]) || base; };
+  box.addEventListener("mouseover", show); box.addEventListener("focusin", show);
+  box.addEventListener("mouseleave", () => help.textContent = base);
+  const look = $("#look"), lookHelp = $("#look-help");
+  const setLook = () => lookHelp.textContent = LOOK_HELP[look.value] || "";
+  look.addEventListener("change", setLook); setLook();
+  const reLook = $("#re-look");
+  if (reLook) reLook.title = "Cambia el color de todo el reel. " + (LOOK_HELP[reLook.value] || "");
+})();
