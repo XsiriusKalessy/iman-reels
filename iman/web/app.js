@@ -894,6 +894,9 @@ function showResult(j) {
     + (p.hook_title ? `<div class="card"><h4>${esc(p.hook_title)}</h4><p class="hint">Gancho en pantalla</p></div>` : "")
     + ((p.hook_options || []).length ? `<div class="card"><p class="hint">Otros ganchos para probar (se cambia en segundos):</p><div class="hook-try">${p.hook_options.map(h => `<button type="button" class="ghost small" data-hook-try="${esc(h)}">${esc(h)}</button>`).join("")}</div></div>` : "")
     + (p.hook_line ? `<div class="card"><p>«${esc(p.hook_line)}»</p><p class="hint">Si quieres regrabar el arranque, prueba con esta frase.</p></div>` : "");
+  $("#versions-hooks").value = [p.hook_title, ...(p.hook_options || [])].filter(Boolean).join("\n");
+  $("#versions-box").open = j.options?.red === "anuncio";
+  pollVersions();
   const checks = r.checks || [];
   $("#check-box").hidden = !checks.length;
   $("#check-list").innerHTML = checks.map(c => `<li class="${c.ok ? "ok" : "warn"}">${c.ok ? "✓" : "!"} ${esc(c.text)}${c.ok || !c.tip ? "" : `<small>${esc(c.tip)}</small>`}</li>`).join("");
@@ -1187,3 +1190,26 @@ document.addEventListener("click", e => {
   const b = e.target.closest("[data-hook-try]");
   if (b) reedit({ hook_title: b.dataset.hookTry });
 });
+
+// Versiones para anuncios: el mismo reel con otros ganchos y llamadas a la acción.
+const linesOf = id => $(id).value.split("\n").map(s => s.trim()).filter(Boolean);
+$("#versions-btn").onclick = async () => {
+  const status = $("#versions-status");
+  try {
+    await postJSON(`/api/jobs/${state.job.id}/versiones`, { hooks: linesOf("#versions-hooks"), ctas: linesOf("#versions-ctas") });
+    pollVersions();
+  } catch (err) { status.textContent = err.message; }
+};
+async function pollVersions() {
+  if (!state.job) return;
+  const id = state.job.id;
+  const v = await api(`/api/jobs/${id}/versiones`).catch(() => null);
+  if (!v || state.job.id !== id) return;
+  const status = $("#versions-status");
+  $("#versions-btn").disabled = v.status === "working";
+  status.textContent = v.status === "working" ? `Montando la versión ${v.done + 1} de ${v.total}…`
+    : v.status === "error" ? v.error : v.status === "done" ? `Listas las ${v.total} versiones.` : "";
+  $("#versions-list").innerHTML = v.files.map(f => `<a class="ghost small" href="/api/jobs/${id}/versiones/${f.name}" download>${esc(f.name)} · ${esc(f.hook)}${f.cta ? " · " + esc(f.cta) : ""}</a>`).join("")
+    + (v.status === "done" ? `<a class="primary small" href="/api/jobs/${id}/versiones/versiones.zip" download>Descargar todas (.zip)</a>` : "");
+  if (v.status === "working") setTimeout(() => pollVersions(), 2000);
+}

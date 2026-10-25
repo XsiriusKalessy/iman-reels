@@ -1035,3 +1035,44 @@ def test_hook_options_come_from_the_ai_plan():
     from iman.models import EditPlan
 
     assert EditPlan.from_dict(plan.to_dict()).hook_options == ["B", "C", "D"]
+
+
+def test_ad_versions_with_other_hooks_and_ctas(sample, tmp_path, monkeypatch):
+    import zipfile
+
+    from fastapi.testclient import TestClient
+
+    from iman import config, server
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    real_run = pipeline.run
+    monkeypatch.setattr(pipeline, "run", lambda *a, **k: real_run(*a, **{**k, "words": TAKE}))
+    c = TestClient(server.app)
+    c.post("/api/settings", json={"provider": "none"})
+    with sample.open("rb") as v:
+        job = c.post("/api/jobs", data={"rhythm": "sin_tocar", "red": "anuncio"},
+                     files=[("video", ("toma.mp4", v, "video/mp4"))]).json()
+    for _ in range(240):
+        job = c.get(f"/api/jobs/{job['id']}").json()
+        if job["status"] != "working":
+            break
+        time.sleep(0.25)
+    assert job["status"] == "done" and job["options"]["red"] == "anuncio"
+    assert c.post(f"/api/jobs/{job['id']}/versiones", json={"hooks": ["Solo uno"]}).status_code == 400
+    r = c.post(f"/api/jobs/{job['id']}/versiones", json={"hooks": ["Gancho A", "Gancho B"], "ctas": ["Reserva ya"]})
+    assert r.status_code == 200 and r.json()["total"] == 2
+    for _ in range(480):
+        st = c.get(f"/api/jobs/{job['id']}/versiones").json()
+        if st["status"] != "working":
+            break
+        time.sleep(0.25)
+    assert st["status"] == "done", st
+    z = c.get(f"/api/jobs/{job['id']}/versiones/versiones.zip")
+    p = tmp_path / "v.zip"
+    p.write_bytes(z.content)
+    names = zipfile.ZipFile(p).namelist()
+    assert {"version-1.mp4", "version-2.mp4", "versiones.txt"} <= set(names)
+    assert "Gancho B" in zipfile.ZipFile(p).read("versiones.txt").decode()
+    # El reel original sigue ahí.
+    assert c.get(f"/api/jobs/{job['id']}/reel.mp4").status_code == 200

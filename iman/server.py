@@ -1057,6 +1057,116 @@ def get_original(job_id: str):
     return FileResponse(src, media_type="video/quicktime" if src.suffix.lower() == ".mov" else "video/mp4")
 
 
+VERSIONS: dict[str, dict] = {}
+MAX_VERSIONS = 6
+
+
+class VersionsIn(BaseModel):
+    hooks: list[str] = Field(default_factory=list)
+    ctas: list[str] = Field(default_factory=list)
+
+
+def _version_plan(plan: EditPlan, hook: str, cta: str, n_words: int) -> EditPlan:
+    p = EditPlan.from_dict(plan.to_dict())
+    p.hook_title = hook or p.hook_title
+    if cta:
+        ctas = [fx for fx in p.effects if fx.get("type") == "cta"]
+        for fx in ctas:
+            fx["text"] = cta
+        if not ctas:
+            p.effects.append({"type": "cta", "word": max(0, n_words - 8), "text": cta, "subtitle": "", "title": "",
+                              "look": "", "until_word": None})
+    return p
+
+
+def _make_versions(job_id: str, combos: list[tuple[str, str]]) -> None:
+    import os
+    import zipfile
+
+    workdir = JOBS_DIR / job_id
+    state = VERSIONS[job_id]
+    try:
+        words = _saved_words(workdir)
+        plan = _saved_plan(workdir)
+        src = next(workdir.glob("original.*"))
+        opts = pipeline.EditOptions(**JOBS[job_id]["options"])
+        outdir = workdir / "versiones"
+        shutil.rmtree(outdir, ignore_errors=True)
+        outdir.mkdir()
+        files = []
+        for k, (hook, cta) in enumerate(combos, 1):
+            vdir = outdir / f"v{k}"
+            vdir.mkdir()
+            # Lo que el montaje lee de la carpeta del reel (apoyo, música, fondo…), sin copiar vídeos grandes.
+            for p in [workdir / "apoyo", workdir / "fondo.jpg", workdir / "manos.json", workdir / "lienzo.mp4",
+                      *workdir.glob("musica.*")]:
+                if not p.exists():
+                    continue
+                if p.is_dir():
+                    shutil.copytree(p, vdir / p.name, copy_function=_link_or_copy)
+                else:
+                    _link_or_copy(p, vdir / p.name)
+            vopts = replace(opts, hook_title=hook or opts.hook_title)
+            pipeline.run(src, vdir, vopts, config.load(), words=words, plan=_version_plan(plan, hook, cta, len(words)))
+            name = f"version-{k}.mp4"
+            os.replace(vdir / "reel.mp4", outdir / name)
+            shutil.rmtree(vdir, ignore_errors=True)
+            files.append({"name": name, "hook": hook, "cta": cta})
+            state.update(done=k, files=list(files))
+        with zipfile.ZipFile(outdir / "versiones.zip", "w") as z:
+            for f in files:
+                z.write(outdir / f["name"], f["name"])
+            z.writestr("versiones.txt", "\n".join(f"{f['name']}: gancho «{f['hook']}»" + (f", llamada «{f['cta']}»"
+                                                                                       if f["cta"] else "")
+                                                for f in files))
+        state.update(status="done")
+    except Exception as e:  # noqa: BLE001
+        log.exception("Fallan las versiones de %s", job_id)
+        state.update(status="error", error=_friendly(e))
+
+
+def _link_or_copy(a, b):
+    import os
+
+    try:
+        os.link(a, b)
+    except OSError:
+        shutil.copy2(a, b)
+    return b
+
+
+@app.post("/api/jobs/{job_id}/versiones")
+def make_versions(job_id: str, body: VersionsIn):
+    """Varias versiones del mismo reel (para probar anuncios): cambia el gancho y la llamada a la acción."""
+    job = _job(job_id)
+    if not job or job["status"] != "done":
+        raise HTTPException(404, "No encuentro ese reel o aún se está editando")
+    if VERSIONS.get(job_id, {}).get("status") == "working":
+        raise HTTPException(409, "Ya estoy haciendo las versiones de este reel")
+    hooks = [" ".join(h.split())[:80] for h in body.hooks if h.strip()][:MAX_VERSIONS] or [""]
+    ctas = [" ".join(c.split())[:40] for c in body.ctas if c.strip()][:3] or [""]
+    combos = [(h, c) for h in hooks for c in ctas][:MAX_VERSIONS]
+    if len(combos) < 2:
+        raise HTTPException(400, "Escribe al menos dos ganchos o dos llamadas a la acción distintas")
+    VERSIONS[job_id] = {"status": "working", "done": 0, "total": len(combos), "files": [], "error": None}
+    threading.Thread(target=_make_versions, args=(job_id, combos), daemon=True).start()
+    return VERSIONS[job_id]
+
+
+@app.get("/api/jobs/{job_id}/versiones")
+def versions_state(job_id: str):
+    return VERSIONS.get(job_id) or {"status": "none", "done": 0, "total": 0, "files": [], "error": None}
+
+
+@app.get("/api/jobs/{job_id}/versiones/{name}")
+def version_file(job_id: str, name: str):
+    p = JOBS_DIR / job_id / "versiones" / name
+    if not job_id.isalnum() or "/" in name or ".." in name or not p.exists():
+        raise HTTPException(404)
+    media_type = "application/zip" if name.endswith(".zip") else "video/mp4"
+    return FileResponse(p, media_type=media_type, filename=f"reel-{job_id}-{name}")
+
+
 @app.get("/api/jobs/{job_id}/whatsapp.zip")
 def get_whatsapp(job_id: str):
     """El reel en trozos de menos de 60 s (los estados de WhatsApp cortan ahí), partido entre frases."""
