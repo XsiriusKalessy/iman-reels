@@ -60,6 +60,7 @@ class EditOptions:
     comentario: str = ""
     comentario_de: str = ""
     red: str = "instagram"  # para qué red es (iman/redes.py): instagram, tiktok, youtube, anuncio
+    ligero: bool = False  # ordenador sencillo: sin los efectos más pesados ni 4K (iman/equipo.py)
     look: str = "auto"  # "auto" = el que recomienda la IA; o color y textura de un clic (media.LOOKS): "calido", "teal", "cine", "grano", "retro", "bn"…
 
 
@@ -238,7 +239,7 @@ def review(words: list[Word], plan: EditPlan, rhythm_key: str) -> list[dict]:
 
 
 AUTO_LOOK = {"viajes": "teal"}
-AUTO_MUSIC = {"viajes": "inspiracional", "cursos": "corporativa", "productos": "alegre", "empresas": "corporativa"}
+AUTO_MUSIC = {"viajes": "aventura", "viajero": "documental", "cursos": "corporativa", "productos": "alegre", "empresas": "corporativa"}
 
 
 def pre_publish(opts: "EditOptions", plan: EditPlan, kept: list[Word], total: float, active: list[dict],
@@ -431,8 +432,8 @@ def run(
         plan = EditPlan()
         try:
             wants = opts.instructions
-            if opts.brand and brand.load().phrases_prompt():  # el "cta" y los titulares pueden usar tus frases
-                wants = f"{wants}\n\n{brand.load().phrases_prompt()}".strip()
+            if opts.brand and brand.load().copy_prompt():  # el "cta" y los titulares, con tu tono y tus frases
+                wants = f"{wants}\n\n{brand.load().copy_prompt()}".strip()
             if cfg.get("pexels_key") and not voice_only:
                 wants = f"{wants}\n\n{PEXELS_NOTE}".strip()
             if redes.get(opts.red).note:
@@ -450,6 +451,15 @@ def run(
     chapters = sorted((fx for fx in plan.effects if fx.get("type") == "capitulo"), key=lambda fx: int(fx.get("word", 0)))
     for k, fx in enumerate(chapters, 1):  # capítulos numerados en orden
         fx["_n"] = k
+    if opts.brand and brand.load().no_emojis:  # marca sin emojis: ni pegatinas ni emojis en los textos
+        plan.effects = [fx for fx in plan.effects if fx.get("type") != "objeto"]
+        for fx in plan.effects:
+            if isinstance(fx.get("text"), str):
+                fx["text"] = brand.strip_emojis(fx["text"])
+    if opts.ligero:  # ordenador sencillo: fuera lo que recorta o sigue a la persona en cada fotograma
+        from .equipo import HEAVY_EFFECTS
+
+        plan.effects = [fx for fx in plan.effects if fx.get("type") not in HEAVY_EFFECTS]
     if opts.red == "anuncio":  # estilo casero: fuera los efectos más llamativos
         plan.effects = [fx for fx in plan.effects if fx.get("type") not in redes.ANUNCIO_FUERA]
 

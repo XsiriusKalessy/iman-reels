@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import colorsys
 import json
+import re
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
@@ -96,6 +97,11 @@ class Brand:
     # Frases de marca: [{"kind": "eslogan" | "promesa" | "cta" | "actitud" | "otra", "text": …, "where": …}].
     # La IA las usa en los textos y el eslogan sale en el cierre del reel.
     phrases: list[dict] = field(default_factory=list)
+    # Tono de voz: cómo habla la marca (cercano, tú o usted, expresiones…) y textos reales suyos de ejemplo.
+    voice: str = ""
+    voice_examples: str = ""
+    avoid: str = ""  # palabras y cosas que la marca no dice nunca
+    no_emojis: bool = False  # la marca no usa emojis: ni en los textos ni en el vídeo
 
     def phrase(self, kind: str) -> str:
         return next((p.get("text", "") for p in self.phrases if p.get("kind") == kind and p.get("text")), "")
@@ -105,6 +111,22 @@ class Brand:
         rows = [f"- {p.get('kind', 'otra')}: «{p['text']}»" + (f" (se usa en: {p['where']})" if p.get("where") else "")
                 for p in self.phrases if p.get("text")]
         return "FRASES DE MARCA (úsalas tal cual cuando encajen, sin forzarlas):\n" + "\n".join(rows) if rows else ""
+
+    def voice_prompt(self) -> str:
+        parts = []
+        if self.voice.strip():
+            parts.append(f"TONO DE VOZ DE LA MARCA: {self.voice.strip()}")
+        if self.voice_examples.strip():
+            parts.append("TEXTOS REALES DE LA MARCA (imita cómo suenan, no los copies):\n" + self.voice_examples.strip())
+        if self.avoid.strip():
+            parts.append(f"LA MARCA NO DICE NUNCA: {self.avoid.strip()}")
+        if self.no_emojis:
+            parts.append("SIN EMOJIS: la marca no usa emojis ni símbolos en ningún texto, ni en pantalla ni en las publicaciones.")
+        return "\n\n".join(parts)
+
+    def copy_prompt(self) -> str:
+        """Todo lo que la IA necesita para escribir como la marca: tono de voz, ejemplos y frases."""
+        return "\n\n".join(p for p in (self.voice_prompt(), self.phrases_prompt()) if p)
 
     @property
     def active(self) -> bool:
@@ -130,6 +152,13 @@ def load() -> Brand:
 
 PHRASE_KINDS = {"eslogan": "Eslogan", "promesa": "Promesa", "cta": "Llamada a la acción", "actitud": "Actitud",
                 "otra": "Otra"}
+
+
+_EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u200D\u2190-\u21FF\u2300-\u23FF]")
+
+
+def strip_emojis(text: str) -> str:
+    return re.sub(r"[ \t]{2,}", " ", _EMOJI.sub("", text)).strip()
 
 
 def clean_phrases(raw) -> list[dict]:

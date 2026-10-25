@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ai, brand, config, copystyle, effects, jsonfile, license, media, musica, packs, pipeline, portable, redes, updates
+from . import ai, brand, config, copystyle, effects, equipo, jsonfile, license, media, musica, packs, pipeline, portable, redes, updates
 from .captions import STYLES
 from .models import EditPlan, Word
 from .rhythm import RHYTHMS
@@ -240,6 +240,7 @@ def get_settings():
 
 class SettingsIn(BaseModel):
     provider: str | None = None
+    ligero: str | None = None
     anthropic_key: str | None = None
     openai_key: str | None = None
     pexels_key: str | None = None
@@ -251,6 +252,8 @@ class SettingsIn(BaseModel):
 @app.post("/api/settings")
 def set_settings(body: SettingsIn):
     data = {k: v for k, v in body.model_dump().items() if v is not None and v != ""}
+    if data.get("ligero", "auto") not in ("auto", "si", "no"):
+        raise HTTPException(400, "Modo ligero: auto, si o no")
     return config.public(config.save(data))
 
 
@@ -357,6 +360,10 @@ class BrandIn(BaseModel):
     description: str | None = Field(None, max_length=300)
     company: str | None = Field(None, max_length=120)
     phrases: list[dict] | None = None
+    voice: str | None = Field(None, max_length=600)
+    voice_examples: str | None = Field(None, max_length=3000)
+    avoid: str | None = Field(None, max_length=1000)
+    no_emojis: bool | None = None
     primary: str | None = None
     secondary: str | None = None
     font: str | None = None
@@ -503,7 +510,10 @@ def comment_to_reel(texto: str = Form(""), autor: str = Form(""), captura: Uploa
     cfg = config.ai_config(config.load())
     if cfg.enabled:
         try:
-            return {**ai.comment_reel(cfg, texto, autor, image, _voice_samples()), "ai": True}
+            out = ai.comment_reel(cfg, texto, autor, image, _voice_samples())
+            if brand.load().no_emojis:
+                out = {k: brand.strip_emojis(v) if isinstance(v, str) else v for k, v in out.items()}
+            return {**out, "ai": True}
         except Exception as e:  # noqa: BLE001
             if not texto:
                 raise HTTPException(502, f"La IA no ha podido leer la captura: {ai.error_message(e)}") from None
@@ -517,7 +527,8 @@ def _voice_samples() -> str:
     texts = []
     for t in sorted(JOBS_DIR.glob("*/transcript.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:5]:
         texts.append(" ".join(w["text"] for w in json.loads(t.read_text(encoding="utf-8"))))
-    return "\n---\n".join(texts)
+    voice = brand.load().copy_prompt()
+    return "\n\n".join(p for p in (voice, "\n---\n".join(texts)) if p)
 
 
 def _save_background(workdir: Path, raw: bytes) -> bool:
@@ -566,7 +577,8 @@ def music_preview(key: str):
         raise HTTPException(404, "Ese estilo no existe")
     dst = config.HOME / "cache" / "musica" / f"{key}-v3.wav"  # v3: si cambia el sonido, no sirve la vieja
     if not dst.exists():
-        musica.render(key, 20, dst, seed=len(key))
+        cine = musica.STYLES[key].cine  # los de tráiler: el golpe a los 4 s, como tras un gancho
+        musica.render(key, 20, dst, seed=len(key), drop_at=4.0 if cine else None)
     return FileResponse(dst, media_type="audio/wav")
 
 
@@ -635,6 +647,9 @@ async def create_job(
         (music_style if music_style in musica.STYLES or music_style == "auto" else "")
     if names and mode == "camara":  # en "solo voz" los vídeos ya son la imagen de todo el reel
         instructions = f"{instructions}\n\n{pipeline.broll_prompt(names)}".strip()
+    light = equipo.ligero(config.load().get("ligero", "auto"))
+    if light:
+        size = "1080"  # en un ordenador sencillo, el 4K tarda demasiado
     opts = pipeline.EditOptions(rhythm, style, size, fit, hook, hook_title, hook_template, instructions,
                                 voice=voice, ruido=ruido, watermark=watermark, brand=use_brand, pack=pack,
                                 mode="voz" if mode == "voz" else "camara", background=background,
@@ -642,7 +657,8 @@ async def create_job(
                                 look=look if look in media.LOOKS or look == "auto" else "",
                                 red=red if red in redes.REDES else "instagram",
                                 comentario=" ".join(comentario.split())[:140],
-                                comentario_de=comentario_de.strip().lstrip("@")[:40])
+                                comentario_de=comentario_de.strip().lstrip("@")[:40], ligero=light,
+                                gestures=not light)
     JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0, "mode": mode,
                     "options": asdict(opts), "created": time.time(), "trial": watermark and mode != "largo"}
     target = _work_long if mode == "largo" else _work
@@ -875,6 +891,55 @@ def edit_plan(job_id: str, body: PlanEditIn):
     return JOBS[job_id]
 
 
+@app.post("/api/jobs/{job_id}/guia")
+def make_guide(job_id: str, nuevo: bool = False):
+    """Guía en PDF sacada del vídeo, para regalarla a cambio de un contacto («escríbeme GUÍA y te la mando»)."""
+    from . import guia
+
+    job = _job(job_id)
+    if not job or job["status"] != "done":
+        raise HTTPException(404, "No encuentro ese reel")
+    workdir = JOBS_DIR / job_id
+    pdf, meta = workdir / "guia.pdf", workdir / "guia.json"
+    if pdf.exists() and meta.exists() and not nuevo:
+        return json.loads(meta.read_text(encoding="utf-8"))
+    words = _saved_words(workdir)
+    b = brand.load()
+    hook = job["result"]["plan"].get("hook_title", "")
+    pack = job["options"].get("pack", "") or b.sector
+    data, used_ai = None, False
+    aicfg = config.ai_config(config.load())
+    if aicfg.enabled and words:
+        try:
+            data = ai.guide_copy(aicfg, " ".join(w.text for w in words), hook, pack,
+                                 " — ".join(x for x in (b.name, b.description) if x), b.contact, b.cta, b.copy_prompt())
+            used_ai = True
+        except Exception as e:  # noqa: BLE001 - sin IA, la guía sale de tus frases
+            log.warning("guía sin IA: %s", e)
+    if not data or not data.get("sections"):
+        data = guia.fallback(words, hook, b.cta)
+    reel = workdir / "reel.mp4"
+    dur = media.probe(reel).duration
+    frames = [media.thumbnail(reel, workdir / f"guia-{k}.jpg", dur * f) for k, f in enumerate((0.3, 0.65))]
+    try:
+        guia.render(data, pdf, frames, b)
+    finally:
+        for f in frames:
+            f.unlink(missing_ok=True)
+    out = {"title": data.get("title", ""), "sections": len(data.get("sections") or []), "ai": used_ai,
+           "url": f"/api/jobs/{job_id}/guia.pdf"}
+    meta.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
+    return out
+
+
+@app.get("/api/jobs/{job_id}/guia.pdf")
+def get_guide(job_id: str):
+    p = JOBS_DIR / job_id / "guia.pdf"
+    if not job_id.isalnum() or not p.exists():
+        raise HTTPException(404)
+    return FileResponse(p, media_type="application/pdf", filename=f"guia-{job_id}.pdf")
+
+
 @app.post("/api/jobs/{job_id}/post")
 def post_copy(job_id: str, nuevo: bool = False):
     """Texto de la publicación y hashtags, escritos por la IA con lo que dices en el vídeo."""
@@ -893,9 +958,13 @@ def post_copy(job_id: str, nuevo: bool = False):
     try:
         data = ai.post_copy(aicfg, " ".join(w.text for w in words), job["result"]["plan"].get("hook_title", ""),
                             job["options"].get("pack", "") or b.sector, b.cta, b.handle, b.description, b.contact,
-                            b.name, b.phrases_prompt())
+                            b.name, b.copy_prompt())
     except Exception as e:
         raise HTTPException(502, f"La IA no ha podido escribir el texto: {e}")
+    if b.no_emojis:
+        for d in data["platforms"].values():
+            d["text"], d["title"] = brand.strip_emojis(d["text"]), brand.strip_emojis(d.get("title", ""))
+        data["caption"] = brand.strip_emojis(data.get("caption", ""))
     cached.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return data
 
@@ -1257,6 +1326,57 @@ def cascade_file(job_id: str, name: str):
              ".txt": "text/plain; charset=utf-8"}
     return FileResponse(p, media_type=kinds.get(p.suffix, "application/octet-stream"),
                         filename=f"{job_id}-{p.name}" if p.suffix != ".png" else None)
+
+
+def _reveal(p: Path) -> None:
+    """Abre la carpeta en el explorador con el archivo marcado."""
+    import platform
+
+    system = platform.system()
+    cmd = (["explorer", f"/select,{p}"] if system == "Windows" else ["open", "-R", str(p)] if system == "Darwin"
+           else ["xdg-open", str(p.parent if p.is_file() else p)])
+    try:
+        subprocess.Popen(cmd)
+    except OSError:
+        raise HTTPException(500, f"No he podido abrir la carpeta. Está en {p}") from None
+
+
+@app.post("/api/jobs/{job_id}/mostrar")
+def show_in_folder(job_id: str):
+    """Abre la carpeta del reel con el vídeo marcado, para arrastrarlo a la red que quieras."""
+    p = JOBS_DIR / job_id / "reel.mp4"
+    if not job_id.isalnum() or not p.exists():
+        raise HTTPException(404, "No encuentro ese reel")
+    _reveal(p)
+    return {"ok": True, "path": str(p)}
+
+
+@app.get("/api/soporte")
+def support_info():
+    """Lo que hace falta para contar un fallo: versión, sistema, reels hechos y el último error."""
+    import platform
+
+    from . import __version__
+
+    errors = sorted(JOBS_DIR.glob("*/error.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+    last = ""
+    if errors:
+        last = errors[0].read_text(encoding="utf-8", errors="replace").strip().splitlines()
+        last = (last[-1] if last else "")[:300]
+    reels = sum(1 for _ in JOBS_DIR.glob("*/reel.mp4")) if JOBS_DIR.exists() else 0
+    cfg = config.load()
+    return {"version": __version__, "system": f"{platform.system()} {platform.release()} ({platform.machine()})",
+            "reels": reels, "last_error": last, "feedback_url": cfg.get("feedback_url", ""),
+            "plan": license.status(cfg).get("plan_label", "") or "Prueba"}
+
+
+@app.post("/api/soporte/registros")
+def open_logs():
+    """Abre la carpeta de Imán con el registro marcado, para mandarlo si algo falla."""
+    log_file = config.HOME / "registro.txt"
+    config.HOME.mkdir(parents=True, exist_ok=True)
+    _reveal(log_file if log_file.exists() else config.HOME)
+    return {"ok": True, "path": str(log_file)}
 
 
 @app.get("/api/jobs/{job_id}/whatsapp.mp4")

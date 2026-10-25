@@ -26,6 +26,27 @@ REVALIDATE_EVERY = 24 * 3600
 OFFLINE_GRACE = 14 * 24 * 3600
 
 
+# Planes: "normal" (la licencia de siempre), "pro" y "dueno" (el dueño de Imán: todo, sin límites).
+PLAN_LABELS = {"normal": "Licencia", "pro": "Licencia Pro", "dueno": "Licencia de dueño"}
+# Funciones que en el futuro serán solo de Pro (multimarca, varios clientes…). De momento todas son para todos.
+PRO_FEATURES: set[str] = set()
+
+
+def plan(cfg: dict) -> str:
+    key = cfg.get("license_key") or ""
+    if offline_license.is_offline(key):
+        p = (offline_license.read(key) or {}).get("p", "")
+        return p if p in PLAN_LABELS else "normal"
+    return "normal"
+
+
+def has(cfg: dict, feature: str) -> bool:
+    """Si esta licencia tiene una función. La de dueño y la Pro lo tienen todo."""
+    if feature not in PRO_FEATURES:
+        return True
+    return status(cfg)["licensed"] and plan(cfg) in ("pro", "dueno")
+
+
 class LicenseError(Exception):
     pass
 
@@ -105,13 +126,27 @@ def validate(cfg: dict) -> dict:
             "license_expires": (res.get("license_key") or {}).get("expires_at") or ""}
 
 
+def _expired(cfg: dict) -> bool:
+    """La licencia que tenía ha caducado (p. ej. una de la beta): para avisar con cariño, no con un error."""
+    key = cfg.get("license_key") or ""
+    if not key:
+        return False
+    exp = cfg.get("license_expires") or ""
+    if offline_license.is_offline(key):
+        return bool(exp) and exp < time.strftime("%Y-%m-%d")
+    return bool(exp) and exp[:10] < time.strftime("%Y-%m-%d")
+
+
 def status(cfg: dict) -> dict:
     licensed = bool(cfg.get("license_valid") and cfg.get("license_key"))
     used = int(cfg.get("free_reels_used") or 0)
     return {
         "licensed": licensed,
+        "plan": plan(cfg) if licensed else "",
+        "plan_label": PLAN_LABELS[plan(cfg)] if licensed else "",
         "expires": cfg.get("license_expires") or "",
         "free_left": 0 if licensed else max(0, FREE_REELS - used),
+        "expired": not licensed and _expired(cfg),
         "dev": os.environ.get("IMAN_DEV") == "1",
     }
 

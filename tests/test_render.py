@@ -204,6 +204,19 @@ def test_library_toggles_and_post(sample, tmp_path, monkeypatch):
     assert c.get(f"/api/jobs/{jid}/cover.jpg?t=1.0").status_code == 200
 
     assert c.post(f"/api/jobs/{jid}/post").status_code == 400  # sin IA
+    # Guía PDF para captar contactos: sin IA, con tus frases; con IA, con lo que escribe.
+    g = c.post(f"/api/jobs/{jid}/guia").json()
+    assert not g["ai"] and g["sections"] >= 1
+    r = c.get(g["url"])
+    assert r.status_code == 200 and r.content[:5] == b"%PDF-"
+    monkeypatch.setattr(ai, "guide_copy", lambda *a: {
+        "title": "Japón sin agobios", "subtitle": "Lo que nadie te cuenta", "intro": "La hemos hecho para ti.",
+        "sections": [{"heading": "Cuándo ir", "body": "En noviembre.", "tips": ["Reserva pronto"]}],
+        "checklist": ["Pasaporte"], "faq": [{"q": "¿Es caro?", "a": "Te lo damos por escrito."}], "cta": "Escríbenos."})
+    config.save({"provider": "iman"})
+    g = c.post(f"/api/jobs/{jid}/guia?nuevo=true").json()
+    assert g["ai"] and g["title"] == "Japón sin agobios"
+    assert c.get(f"/api/jobs/{jid}/guia.pdf").status_code == 200
     config.save({"provider": "iman"})
     monkeypatch.setattr(ai, "post_copy", lambda *a: {"caption": "Hola", "hashtags": ["viajes"]})
     assert c.post(f"/api/jobs/{jid}/post").json()["hashtags"] == ["viajes"]
@@ -478,7 +491,7 @@ def test_dramatic_silence_window():
     assert not any(hush[0][0] - 0.4 <= t < hush[0][1] for t, n, g in evs)
 
 
-@pytest.mark.parametrize("style", ["epica", "piano"])
+@pytest.mark.parametrize("style", ["epica", "piano", "trailer", "festival"])
 def test_iman_music_styles(sample, tmp_path, style):
     from iman import musica
 
@@ -1233,5 +1246,80 @@ def test_brand_phrases_and_preset_import(tmp_path, monkeypatch):
     preset = Path(__file__).parent / "fixtures" / "marca-viajes-xsirius.iman"
     got = portable.import_(preset.read_bytes())
     b = brand.load()
-    assert got["marca"] and b.name == "Viajes Xsirius" and b.primary == "#E5C24D" and b.cta == "Reserva por WhatsApp"
+    assert got["marca"] and b.name == "Viajes Xsirius" and b.primary == "#E5C24D"
+    assert b.cta == "Pide tu propuesta por WhatsApp"  # el archivo trae su llamada: gana la del archivo
     assert b.phrase("actitud") == "No vendemos viajes. Te quitamos las excusas." and b.company == "TRAVEL ELENELS, S.L.U."
+    # Tono de voz: entra en lo que lee la IA, sin emojis; la razón social nunca va a la IA ni al vídeo.
+    assert b.no_emojis and "De tú" in b.voice and "exclusivo" in b.avoid
+    prompt = b.copy_prompt()
+    assert "TONO DE VOZ" in prompt and "SIN EMOJIS" in prompt and "Sigue a la estrella" in prompt
+    assert "TRAVEL ELENELS" not in prompt
+    lines, _ = effects.end_card_events(b, STYLES["impacto"], 20.0)
+    assert not any("TRAVEL ELENELS" in ln for ln in lines)
+    assert brand.strip_emojis("Nos vamos ✈️ a Japón 🎌") == "Nos vamos a Japón"
+
+
+def test_copy_rules_humanize_and_owner_licence(tmp_path, monkeypatch):
+    """Los textos llevan las reglas de copy (3 cerebros, objeciones, honestidad), sin rayas de IA; la licencia
+    de dueño lo tiene todo y no tiene límite diario en el servidor."""
+    from unittest import mock
+
+    from fastapi.testclient import TestClient
+
+    from iman import ai, config, license, offline_license, server
+
+    for system in (ai.POST_SYSTEM, ai.IDEA_SYSTEM, ai.COMMENT_SYSTEM, ai.KIT_SYSTEM, ai.CASCADE_SYSTEM):
+        assert "3 cerebros" in system and "inventes escasez" in system
+    assert ai.humanize("Japón — sin prisas  y sin lío") == "Japón, sin prisas y sin lío"
+    secret = bytes(range(32))
+    pub = offline_license.public_from_secret(secret)
+    monkeypatch.setattr(offline_license, "PUBLIC_KEY", pub)
+    owner = offline_license.issue(secret, "Dueño", "", "dueno")
+    normal = offline_license.issue(secret, "Cliente")
+    assert license.plan({"license_key": owner}) == "dueno" and license.plan({"license_key": normal}) == "normal"
+    st = license.status({"license_key": owner, "license_valid": True})
+    assert st["plan"] == "dueno" and st["plan_label"] == "Licencia de dueño"
+    monkeypatch.setattr(license, "PRO_FEATURES", {"multimarca"})
+    assert license.has({"license_key": owner, "license_valid": True}, "multimarca")
+    assert not license.has({"license_key": normal, "license_valid": True}, "multimarca")
+    # Abrir la carpeta del reel para arrastrarlo a la red.
+    monkeypatch.setattr(config, "HOME", tmp_path / "home")
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    (tmp_path / "jobs" / "abc123").mkdir(parents=True)
+    (tmp_path / "jobs" / "abc123" / "reel.mp4").write_bytes(b"x")
+    c = TestClient(server.app)
+    with mock.patch.object(server.subprocess, "Popen") as popen:
+        r = c.post("/api/jobs/abc123/mostrar")
+    assert r.status_code == 200 and popen.called and "reel.mp4" in r.json()["path"]
+    assert c.post("/api/jobs/nope99/mostrar").status_code == 404
+    # Música de cine: sube, se calla un instante y explota justo donde acaba el gancho.
+    import wave
+
+    import numpy as np
+
+    from iman import musica
+
+    w = musica.render("trailer", 12, tmp_path / "cine.wav", drop_at=4.0)
+    with wave.open(str(w)) as f:
+        x = np.frombuffer(f.readframes(f.getnframes()), "<i2").reshape(-1, 2)[:, 0] / 32768
+    rms = lambda a, b: float(np.sqrt(np.mean(x[int(a * 44100):int(b * 44100)] ** 2)))  # noqa: E731
+    assert len(x) >= 12 * 44100 and rms(4.0, 4.3) > 2 * rms(3.85, 3.98) and rms(4.0, 4.3) > rms(0.5, 1.0)
+    # Modo ligero: lo decide el ordenador, o el creador.
+    from iman import equipo
+
+    assert equipo.ligero("si") and not equipo.ligero("no")
+    eq = c.get("/api/settings").json()["equipo"]
+    assert eq["cores"] >= 1 and eq["weak"] == equipo.ligero("auto")
+    assert c.post("/api/settings", json={"ligero": "raro"}).status_code == 400
+    assert c.post("/api/settings", json={"ligero": "si"}).json()["ligero"] == "si"
+    # Soporte: versión, reels hechos y el último error; la licencia beta caducada avisa con cariño.
+    (tmp_path / "jobs" / "abc123" / "error.log").write_text("Traceback…\nNo se ha podido leer el vídeo\n")
+    info = c.get("/api/soporte").json()
+    assert info["reels"] == 1 and info["last_error"] == "No se ha podido leer el vídeo" and info["version"]
+    with mock.patch.object(server.subprocess, "Popen") as popen:
+        assert c.post("/api/soporte/registros").status_code == 200 and popen.called
+    beta = offline_license.issue(secret, "Beta", "2026-01-01")
+    st = license.status({"license_key": beta, "license_valid": False, "license_expires": "2026-01-01"})
+    assert not st["licensed"] and st["expired"]
+    assert not license.status({})["expired"]

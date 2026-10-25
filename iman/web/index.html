@@ -110,13 +110,8 @@
     <!-- 1. UPLOAD -->
     <section class="panel" data-panel="upload">
       <h1>Sube tu vídeo</h1>
-      <p class="lead">Una toma en bruto, en vertical u horizontal. Imán quita los fallos, pone los subtítulos y el gancho.</p>
-      <div class="choices inline modes" id="modes">
-        <label class="choice"><input type="radio" name="mode" value="camara" checked><span>🎥 Hablo a cámara<small>Tu toma de siempre</small></span></label>
-        <label class="choice"><input type="radio" name="mode" value="voz"><span>🎙 Solo mi voz<small>Sin salir en cámara</small></span></label>
-        <label class="choice"><input type="radio" name="mode" value="vozclips"><span>🎞 Mi voz sobre mis vídeos<small>Tus clips con tu voz encima</small></span></label>
-        <label class="choice"><input type="radio" name="mode" value="largo"><span>✂️ Vídeo largo → varios reels<small>Un directo, una clase, un podcast</small></span></label>
-      </div>
+      <p class="lead">Una toma en bruto, en vertical u horizontal. Imán quita los fallos y monta el reel: gancho, subtítulos, música y efectos.</p>
+
       <label class="drop" id="drop">
         <input type="file" id="file" accept="video/*" hidden>
         <div class="drop-inner">
@@ -136,18 +131,34 @@
         </label>
         <div id="broll-list" class="broll-list"></div>
       </div>
-      <div class="row end"><button class="primary" id="to-edit" disabled>Siguiente: cómo lo editas →</button></div>
+      <details class="fine" id="fine-modes">
+        <summary>Más formas de usarlo: solo tu voz, tu voz sobre tus vídeos o un vídeo largo</summary>
+      <div class="choices inline modes" id="modes">
+        <label class="choice"><input type="radio" name="mode" value="camara" checked><span>🎥 Hablo a cámara<small>Tu toma de siempre</small></span></label>
+        <label class="choice"><input type="radio" name="mode" value="voz"><span>🎙 Solo mi voz<small>Sin salir en cámara</small></span></label>
+        <label class="choice"><input type="radio" name="mode" value="vozclips"><span>🎞 Mi voz sobre mis vídeos<small>Tus clips con tu voz encima</small></span></label>
+        <label class="choice"><input type="radio" name="mode" value="largo"><span>✂️ Vídeo largo → varios reels<small>Un directo, una clase, un podcast</small></span></label>
+      </div>
+      </details>
+      <div class="row end quick-go">
+        <button class="ghost" id="to-edit" disabled>Ajuste fino →</button>
+        <button class="primary big" id="go-quick" disabled>Hazlo tú, Imán ✦</button>
+      </div>
+      <p class="hint center" id="quick-hint">Sin tocar nada: Imán elige el gancho, los subtítulos, la música y los efectos. Si quieres decidir tú algo, entra en «Ajuste fino».</p>
     </section>
 
     <!-- 2. EDIT -->
     <section class="panel" data-panel="edit">
       <h1>Cómo lo editas</h1>
+      <p class="lead">Con elegir para dónde es y de qué va, basta. Lo demás Imán lo decide solo, y puedes cambiarlo abajo.</p>
       <div class="grid2">
         <div>
           <h3>¿Para dónde es?</h3>
           <div id="redes" class="choices inline"></div>
           <h3>¿De qué va?</h3>
           <div id="packs" class="choices inline"></div>
+          <details class="fine" id="fine-edit">
+            <summary>Ajuste fino: ritmo, subtítulos, encuadre, fondo, color, sonido y calidad</summary>
           <h3>Ritmo</h3>
           <div id="rhythms" class="choices"></div>
           <h3>Estilo de subtítulos</h3>
@@ -210,13 +221,9 @@
             <label class="choice"><input type="radio" name="size" value="1080" checked><span>1080 × 1920<small>lo normal para redes; tarda menos</small></span></label>
             <label class="choice"><input type="radio" name="size" value="4k"><span>4K<small>más nitidez si tu móvil grabó en 4K; tarda más y pesa más</small></span></label>
           </div>
+          </details>
         </div>
         <div>
-          <h3>Gancho</h3>
-          <label class="check"><input type="checkbox" id="hook" checked> Poner título de gancho al principio</label>
-          <input id="hook-title" placeholder="Escríbelo tú, o deja que lo proponga la IA">
-          <p class="hint tip">💡 Máx. 7 palabras y algo concreto: una cifra («3 errores al ir a Japón»), un problema («Si te mareas en el avión…») o una promesa («Japón por menos de 2.000 €»). Evita «Hola» o «Hoy os cuento».</p>
-          <select id="hook-template"><option value="">Plantilla de gancho (opcional)</option></select>
           <h3>Dímelo como a tu editor</h3>
           <textarea id="instructions" rows="5" placeholder="Ej.: quita la parte en la que me equivoco con el precio y resalta «gratis»"></textarea>
           <p class="hint tip">💡 Pide cosas concretas, una por frase: qué quitar («la parte del precio»), qué resaltar («la palabra gratis») y qué efecto quieres y dónde («una lista cuando digo los 3 pasos»).</p>
@@ -225,6 +232,14 @@
           <label class="check small"><input type="checkbox" id="remember"> Recordarlo para mis próximos reels</label>
           <p class="hint" id="memory-hint" hidden></p>
           <p class="hint" id="ai-hint"></p>
+          <details class="fine" id="fine-hook">
+            <summary>Ajuste fino: el gancho</summary>
+          <h3>Gancho</h3>
+          <label class="check"><input type="checkbox" id="hook" checked> Poner título de gancho al principio</label>
+          <input id="hook-title" placeholder="Escríbelo tú, o deja que lo proponga la IA">
+          <p class="hint tip">💡 Máx. 7 palabras y algo concreto: una cifra («3 errores al ir a Japón»), un problema («Si te mareas en el avión…») o una promesa («Japón por menos de 2.000 €»). Evita «Hola» o «Hoy os cuento».</p>
+          <select id="hook-template"><option value="">Plantilla de gancho (opcional)</option></select>
+          </details>
         </div>
       </div>
       <div class="row between">
@@ -266,6 +281,39 @@
           <div id="stats" class="stats"></div>
           <div id="hook-box"></div>
           <div id="check-box" class="card" hidden><h4>Revisión antes de publicar</h4><ul id="check-list" class="checks"></ul></div>
+          <h3>Publicar y vender</h3>
+          <div class="publish">
+            <p class="hint">Lo que convierte el reel en reservas: el texto para cada red, los anuncios y una guía para captar contactos.</p>
+            <div class="row tight">
+              <button class="primary" id="post-btn">✦ Textos para cada red y anuncios</button>
+              <button class="ghost" id="guide-btn" type="button">📘 Guía PDF para captar contactos</button>
+            </div>
+            <p class="hint" id="guide-msg" hidden></p>
+            <div id="post-box" hidden>
+              <p class="hint" id="post-funnel"></p>
+              <div class="view-tabs" id="post-tabs" role="tablist"></div>
+              <textarea id="post-text" rows="8"></textarea>
+              <div class="row tight">
+                <button class="ghost" id="post-copy">Copiar texto</button>
+                <button class="link" id="post-again" type="button">Escríbelos de nuevo</button>
+              </div>
+              <div class="share" id="share-box">
+                <button class="primary small" id="share-go" type="button">Copiar texto y abrir Instagram</button>
+                <button class="ghost small" id="share-folder" type="button">📂 Ver el vídeo en su carpeta</button>
+                <p class="hint" id="share-help"></p>
+              </div>
+            </div>
+            <div class="cover">
+              <img id="cover-img" alt="Portada">
+              <div>
+                <label>Portada: elige el momento<input type="range" id="cover-t" min="0" max="10" step="0.1" value="0.5"></label>
+                <a class="ghost" id="cover-dl" href="#" download>Descargar portada</a>
+              </div>
+            </div>
+            <button class="ghost" id="covers-btn">✦ Hazme 3 portadas que se pinchen</button>
+            <p class="hint" id="covers-hint" hidden>Tú recortado, con luz de borde y el gancho en grande. Cada una en vertical (portada del reel) y en horizontal (YouTube).</p>
+            <div id="covers" class="covers" hidden></div>
+          </div>
           <details id="review-box" open>
             <summary>Revisa lo que dices</summary>
             <p class="hint">Lo que se queda y lo que he quitado, frase a frase. Si algo no te cuadra, cámbialo.</p>
@@ -324,29 +372,6 @@
             <input id="new-hook" placeholder="Cambiar el gancho por…">
             <button class="ghost" type="submit">Aplicar</button>
           </form>
-          <h3>Publicar</h3>
-          <div class="publish">
-            <button class="ghost" id="post-btn">✦ Escríbeme los textos para cada red</button>
-            <div id="post-box" hidden>
-              <p class="hint" id="post-funnel"></p>
-              <div class="view-tabs" id="post-tabs" role="tablist"></div>
-              <textarea id="post-text" rows="8"></textarea>
-              <div class="row tight">
-                <button class="ghost" id="post-copy">Copiar texto</button>
-                <button class="link" id="post-again" type="button">Escríbelos de nuevo</button>
-              </div>
-            </div>
-            <div class="cover">
-              <img id="cover-img" alt="Portada">
-              <div>
-                <label>Portada: elige el momento<input type="range" id="cover-t" min="0" max="10" step="0.1" value="0.5"></label>
-                <a class="ghost" id="cover-dl" href="#" download>Descargar portada</a>
-              </div>
-            </div>
-            <button class="ghost" id="covers-btn">✦ Hazme 3 portadas que se pinchen</button>
-            <p class="hint" id="covers-hint" hidden>Tú recortado, con luz de borde y el gancho en grande. Cada una en vertical (portada del reel) y en horizontal (YouTube).</p>
-            <div id="covers" class="covers" hidden></div>
-          </div>
           <details class="versions" id="versions-box">
             <summary>Versiones para probar (anuncios)</summary>
             <p class="hint">Saco el mismo reel con otros ganchos y otras llamadas a la acción, para ver cuál funciona mejor. Hasta 6 versiones.</p>
@@ -395,6 +420,21 @@
       <p class="hint" id="license-buy">¿Aún no la tienes? <a href="https://imanreels.com/#precio" target="_blank" rel="noopener">Consigue Imán</a>: soporte, actualizaciones e IA incluidos.</p>
       <div class="row" id="license-active" hidden><button class="ghost" id="license-off" type="button">Desactivar en este ordenador</button></div>
       <p class="hint error" id="license-error" hidden></p>
+      <h3>Ayuda y opiniones</h3>
+      <p class="hint">¿Algo falla o se te ocurre una mejora? Cuéntanoslo: copiamos tu versión y el último error para que no tengas que explicarlo.</p>
+      <div class="row">
+        <button class="ghost" id="feedback-btn" type="button">Enviar opinión / Algo falla</button>
+        <button class="ghost" id="logs-btn" type="button">Abrir carpeta de registros</button>
+      </div>
+      <p class="hint" id="feedback-msg" hidden></p>
+      <h3>Tu ordenador</h3>
+      <label>Modo ligero
+        <select name="ligero">
+          <option value="auto">Automático (Imán lo decide según tu ordenador)</option>
+          <option value="si">Siempre: más rápido en ordenadores sencillos</option>
+          <option value="no">Nunca: todos los efectos</option>
+        </select></label>
+      <p class="hint" id="equipo-hint"></p>
       <h3>IA que edita</h3>
       <div class="choices inline">
         <label class="choice"><input type="radio" name="provider" value="iman"><span>Imán<small>incluida, sin cuentas extra</small></span></label>
@@ -505,6 +545,16 @@
             <label>Usuario<input name="handle" maxlength="40" placeholder="@tumarca"></label>
             <label>Nombre (si no tienes logo)<input name="name" maxlength="40"></label>
             <label>Empresa (razón social, opcional)<input name="company" maxlength="120" placeholder="Mi Empresa, S.L."></label>
+            <p class="hint">Solo para tus datos: no sale en los vídeos ni en los textos.</p>
+          </div>
+          <div>
+            <h3>Tono de voz</h3>
+            <p class="hint">Así escribe la IA tus ganchos, guiones y publicaciones: con tus palabras y no como un robot.</p>
+            <label>Cómo hablas<textarea name="voice" rows="3" maxlength="600" placeholder="De tú, cercano, como en el mostrador. Frases cortas y hechos concretos. Humor seco."></textarea></label>
+            <p class="hint tip">💡 Di si tratas de tú o de usted, cómo es tu cliente y qué expresiones usas siempre.</p>
+            <label>Textos tuyos de ejemplo<textarea name="voice_examples" rows="4" maxlength="3000" placeholder="Pega 2 o 3 publicaciones o mensajes que hayas escrito tú y que te gusten."></textarea></label>
+            <label>Lo que no dices nunca<textarea name="avoid" rows="2" maxlength="1000" placeholder="«exclusivo», «el mejor», «últimas plazas»…"></textarea></label>
+            <label class="check"><input type="checkbox" name="no_emojis"> Mi marca no usa emojis <small>Quita los emojis de los textos, de la respuesta a comentarios y de las pegatinas del vídeo.</small></label>
           </div>
           <div>
             <h3>Frases de marca</h3>

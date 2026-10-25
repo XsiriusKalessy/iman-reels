@@ -28,6 +28,10 @@ DEFAULTS = {
     "license_checked": 0,
     "license_valid": False,
     "free_reels_used": 0,
+    # Modo ligero para ordenadores sencillos: "auto" (lo decide Imán según tu ordenador), "si" o "no".
+    "ligero": "auto",
+    # Formulario de opiniones y fallos (beta). Vacío: el botón copia los datos y te dice a dónde mandarlos.
+    "feedback_url": os.environ.get("IMAN_FEEDBACK_URL", ""),
     # "Recuérdalo para mis próximos reels": preferencias que se aplican a todos los reels nuevos.
     "memory": [],
 }
@@ -86,6 +90,9 @@ def public(cfg: dict) -> dict:
     from .license import status
 
     out["license"] = status(cfg)
+    from .equipo import info
+
+    out["equipo"] = info()
     return out
 
 

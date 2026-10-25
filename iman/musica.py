@@ -212,6 +212,7 @@ class Style:
     piano_solo: bool = False  # mano izquierda en arpegio y melodía en la derecha
     room: float = 0.25  # cuánta sala (reverb) lleva
     pulse_bass: bool = False  # bajo en corcheas que no para (synthwave)
+    cine: str = ""  # pieza con estructura de tráiler (iman/musica_cine.py): entrada, subida, silencio y golpe
 
 
 STYLES: dict[str, Style] = {
@@ -271,6 +272,19 @@ STYLES["synthwave"] = Style("synthwave", "Dark Synthwave", 150, ("Am", "F", "Dm"
                             lead_steps="xxxxxxxxxxxxxxxx", chord_inst="pad", bass_steps="x" * 8, pulse_bass=True,
                             room=0.35, drums_from=2)
 
+# Cine y festival: con subida, silencio y golpe justo donde acaba el gancho.
+_E = "." * 16
+STYLES.update({
+    "trailer": Style("trailer", "Tráiler épico", 90, ("Dm", "Bb", "F", "C"), _E, _E, _E, cine="trailer"),
+    "aventura": Style("aventura", "Aventura épica (viajes)", 110, ("C", "G", "Am", "F"), _E, _E, _E, cine="aventura"),
+    "hibrida": Style("hibrida", "Cinemática híbrida", 100, ("Am", "F", "C", "G"), _E, _E, _E, cine="hibrida"),
+    "documental": Style("documental", "Documental de viajes", 80, ("F", "C", "Dm", "Bb"), _E, _E, _E,
+                        cine="documental"),
+    "festival": Style("festival", "Drop de festival (EDM)", 126, ("F", "C", "Dm", "Bb"), _E, _E, _E,
+                      cine="festival"),
+    "misterio": Style("misterio", "Misterio y tensión", 92, ("Am", "F", "Dm", "E"), _E, _E, _E, cine="misterio"),
+})
+
 LEADS = {"synth": synth, "keys": keys, "pluck": pluck, "marimba": marimba, "cowbell": cowbell, "piano": piano}
 
 
@@ -326,6 +340,10 @@ def render(style_key: str, duration: float, dst: Path, seed: int = 0, drop_at: f
     `drop_at`: segundo del reel en el que debe "explotar" la música (entra la batería), p. ej. al acabar
     el gancho. Se calcula cuántos compases de entrada hacen falta y se recorta el principio para cuadrarlo."""
     st = STYLES[style_key]
+    if st.cine:
+        from . import musica_cine
+
+        return _write(dst, musica_cine.render(st.cine, st.bpm, st.chords, duration, seed, drop_at))
     rng = np.random.default_rng(seed)
     beat = 60 / st.bpm
     step = beat / 4
@@ -410,6 +428,10 @@ def render(style_key: str, duration: float, dst: Path, seed: int = 0, drop_at: f
     out = out[int(offset * RATE):n_end]
     out[: int(0.25 * RATE)] *= np.linspace(0, 1, min(len(out), int(0.25 * RATE)))[:, None]
     out = np.tanh(out / max(1e-6, float(np.max(np.abs(out)))) * 1.25) * 0.8
+    return _write(dst, out)
+
+
+def _write(dst: Path, out: np.ndarray) -> Path:
     dst.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(dst), "wb") as w:
         w.setnchannels(2)

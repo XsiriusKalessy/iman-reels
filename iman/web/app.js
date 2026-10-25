@@ -189,6 +189,11 @@ async function loadSettings() {
     ? `Edita con ${NAMES[s.provider]}.`
     : `Sin IA: cortaré silencios y repeticiones igualmente. <a href="#" id="hint-settings">Activa la IA</a> para el gancho, los efectos y las instrucciones.`;
   renderLicense(s.license);
+  f.ligero.value = s.ligero || "auto";
+  const eq = s.equipo;
+  if (eq) $("#equipo-hint").textContent = `Tu ordenador: ${eq.cores} núcleos, ${eq.ram_gb} GB de memoria${eq.gpu ? " y tarjeta gráfica" : ""}. ` +
+    (eq.weak ? "Es sencillo, así que en automático Imán se salta lo más pesado (texto detrás de ti, anillo, lluvia, 3D y 4K) para que vaya rápido."
+             : "Tiene potencia de sobra: en automático usa todos los efectos.");
 }
 
 function renderLicense(l) {
@@ -198,11 +203,15 @@ function renderLicense(l) {
   $("#license-activate").hidden = $("#license-buy").hidden = l.licensed;
   if (l.licensed) {
     const until = l.expires ? ` hasta el ${new Date(l.expires).toLocaleDateString("es-ES")}` : "";
-    $("#license-status").textContent = `Licencia activa${until}. Gracias por confiar en Imán.`;
+    $("#license-status").textContent = l.plan === "dueno"
+      ? "Licencia de dueño: todas las opciones, también las Pro, sin límites de IA y para siempre."
+      : `${l.plan_label || "Licencia"} activa${until}. Gracias por confiar en Imán.`;
     pill.hidden = true;
   } else {
     const left = l.free_left;
-    $("#license-status").textContent = left
+    $("#license-status").textContent = l.expired
+      ? "Tu licencia de prueba ha terminado. Gracias por probar Imán. Si te ha servido, la licencia de fundador cuesta 79 € al año y ese precio se te queda mientras renueves. Tus reels y tu marca siguen aquí."
+      : left
       ? `Estás probando Imán: te quedan ${left} ${left === 1 ? "reel" : "reels"} gratis (con marca de agua).`
       : "Has usado tus reels de prueba. Activa tu licencia para seguir editando sin marca de agua.";
     pill.hidden = l.dev;
@@ -211,6 +220,24 @@ function renderLicense(l) {
   }
 }
 $("#trial-pill").onclick = e => { e.preventDefault(); $("#settings").showModal(); };
+$("#feedback-btn").onclick = async () => {
+  const msg = $("#feedback-msg");
+  try {
+    const i = await api("/api/soporte");
+    const text = `Imán ${i.version} · ${i.system} · ${i.plan} · ${i.reels} reels hechos` +
+      (i.last_error ? `\nÚltimo error: ${i.last_error}` : "") + "\n\nQué ha pasado o qué mejorarías:\n";
+    let copied = true;
+    try { await navigator.clipboard.writeText(text); } catch { copied = false; }
+    if (i.feedback_url) window.open(i.feedback_url, "_blank", "noopener");
+    msg.textContent = (copied ? "Datos copiados. Pégalos en el mensaje" : "Copia estos datos en el mensaje:\n" + text) +
+      (i.feedback_url ? " del formulario que se ha abierto." : " y mándalos por WhatsApp o correo a quien te dio Imán.");
+  } catch (err) { msg.textContent = err.message; }
+  msg.hidden = false;
+};
+$("#logs-btn").onclick = async () => {
+  try { await api("/api/soporte/registros", { method: "POST" }); }
+  catch (err) { $("#feedback-msg").textContent = err.message; $("#feedback-msg").hidden = false; }
+};
 $("#license-btn").onclick = async () => {
   const key = $("#license-input").value.trim();
   if (!key) return $("#license-input").focus();
@@ -355,7 +382,7 @@ const MODES = {
 };
 const mode = () => $("input[name=mode]:checked").value;
 function canGo() {
-  $("#to-edit").disabled = !state.file || (mode() === "vozclips" && !state.broll.length);
+  $("#to-edit").disabled = $("#go-quick").disabled = !state.file || (mode() === "vozclips" && !state.broll.length);
 }
 function setMode() {
   const m = MODES[mode()];
@@ -437,6 +464,7 @@ drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); pick(e.dataTransfer.files); };
 $("#to-edit").onclick = () => go("edit");
+$("#go-quick").onclick = () => $("#go").click();  // todo automático: con lo que Imán elige por defecto
 // Empezar de cero: olvida el vídeo elegido y el reel abierto (el anterior sigue en «Mis reels»).
 function clearUpload() {
   state.file = null; state.takes = []; state.frames = []; state.broll = []; renderBroll();
@@ -694,7 +722,8 @@ $("#fx-apply").onclick = async () => {
   catch (err) { showError(err.message); }
 };
 $("#safe-toggle").onchange = e => $("#phone").classList.toggle("show-safe", e.target.checked);
-const PLATFORM_NAMES = { instagram: "Instagram", tiktok: "TikTok", youtube: "YouTube", facebook: "Facebook", whatsapp: "WhatsApp" };
+const PLATFORM_NAMES = { instagram: "Instagram", tiktok: "TikTok", youtube: "YouTube", facebook: "Facebook", whatsapp: "WhatsApp",
+  anuncio_meta: "Anuncio Meta", anuncio_tiktok: "Anuncio TikTok" };
 const STAGES = { atraer: "atraer gente nueva", confiar: "que confíen en ti", vender: "vender" };
 function postText(p) {
   const tags = (p.hashtags || []).map(h => "#" + h).join(" ");
@@ -707,8 +736,22 @@ function showPost(p, which) {
   state.post = p;
   $("#post-tabs").innerHTML = keys.map(k => `<button type="button" data-post="${k}" class="${k === which ? "on" : ""}">${PLATFORM_NAMES[k] || k}</button>`).join("");
   $("#post-text").value = postText(p.platforms[which]);
+  state.postWhich = which;
+  setShare(which);
   $("#post-funnel").textContent = p.stage ? `Embudo: este reel sirve para ${STAGES[p.stage] || p.stage}. ${p.funnel || ""}` : "";
 }
+$("#guide-btn").onclick = async () => {
+  const btn = $("#guide-btn"), msg = $("#guide-msg");
+  btn.disabled = true; btn.textContent = "Preparando la guía…";
+  try {
+    const g = await api(`/api/jobs/${state.job.id}/guia`, { method: "POST" });
+    msg.innerHTML = `«${esc(g.title)}» lista. <a href="${g.url}" download>Descargar la guía (PDF)</a>. ` +
+      "Regálala a quien te escriba una palabra («GUÍA») por privado o por WhatsApp: así consigues su contacto y le das un motivo para pedirte la propuesta." +
+      (g.ai ? "" : " Sin IA, la guía lleva tus frases del vídeo.");
+    msg.hidden = false;
+  } catch (err) { msg.textContent = err.message; msg.hidden = false; }
+  finally { btn.disabled = false; btn.textContent = "📘 Guía PDF para captar contactos"; }
+};
 async function loadPost(again = false) {
   const btn = $("#post-btn");
   btn.disabled = true; btn.textContent = "Escribiendo…";
@@ -716,7 +759,7 @@ async function loadPost(again = false) {
     showPost(await api(`/api/jobs/${state.job.id}/post${again ? "?nuevo=true" : ""}`, { method: "POST" }));
     $("#post-box").hidden = false;
   } catch (err) { $("#post-text").value = err.message; $("#post-box").hidden = false; }
-  finally { btn.disabled = false; btn.textContent = "✦ Escríbeme los textos para cada red"; }
+  finally { btn.disabled = false; btn.textContent = "✦ Textos para cada red y anuncios"; }
 }
 $("#post-btn").onclick = () => loadPost();
 $("#post-again").onclick = () => loadPost(true);
@@ -1024,7 +1067,8 @@ function renderBrand(b) {
   renderToday();
   renderInstrIdeas();
   const f = brandForm;
-  for (const k of ["name", "cta", "contact", "handle", "description", "company"]) f[k].value = b[k] || "";
+  for (const k of ["name", "cta", "contact", "handle", "description", "company", "voice", "voice_examples", "avoid"]) f[k].value = b[k] || "";
+  f.no_emojis.checked = !!b.no_emojis;
   renderPhrases(b.phrases || []);
   f.primary.value = b.primary || "#FF5547"; f.secondary.value = b.secondary || "#141518";
   f.logo_corner.checked = b.logo_corner; f.end_card.checked = b.end_card;
@@ -1136,7 +1180,8 @@ $("#font-file").onchange = async e => {
 $("#font-remove").onclick = async () => renderBrand(await api("/api/brand/font", { method: "DELETE" }));
 function brandBody() {
   const f = brandForm;
-  return { name: f.name.value, description: f.description.value.trim(), company: f.company.value.trim(), phrases: readPhrases(), cta: f.cta.value, contact: f.contact.value, handle: f.handle.value,
+  return { name: f.name.value, description: f.description.value.trim(), company: f.company.value.trim(), phrases: readPhrases(),
+    voice: f.voice.value.trim(), voice_examples: f.voice_examples.value.trim(), avoid: f.avoid.value.trim(), no_emojis: f.no_emojis.checked, cta: f.cta.value, contact: f.contact.value, handle: f.handle.value,
     primary: f.primary.value.toUpperCase(), secondary: f.secondary.value.toUpperCase(),
     font: f.querySelector("input[name=font]:checked")?.value || "", sector: f.sector.value === "general" ? "" : f.sector.value,
     logo_corner: f.logo_corner.checked, end_card: f.end_card.checked };
@@ -1397,3 +1442,26 @@ function quickKey(b) {
   const reLook = $("#re-look");
   if (reLook) reLook.title = "Cambia el color de todo el reel. " + (LOOK_HELP[reLook.value] || "");
 })();
+
+// Publicar: por ahora, copiar el texto y abrir la red con el vídeo a mano (subirlo directo llegará con las cuentas conectadas).
+const SHARE = {
+  instagram: { url: "https://www.instagram.com/", help: "En Instagram pulsa ＋ › Reel, elige el vídeo y pega el texto. Desde el móvil, pásatelo por WhatsApp o AirDrop." },
+  tiktok: { url: "https://www.tiktok.com/upload", help: "Se abre la página de subir de TikTok: arrastra el vídeo y pega el texto." },
+  youtube: { url: "https://studio.youtube.com/", help: "En YouTube Studio pulsa Crear › Subir vídeos. Si dura menos de 3 minutos y es vertical, sale como Short. Pega el título y la descripción." },
+  facebook: { url: "https://www.facebook.com/reels/create", help: "En Facebook, Crear reel: sube el vídeo y pega el texto." },
+  anuncio_meta: { url: "https://adsmanager.facebook.com/", help: "En el Administrador de anuncios de Meta, crea una campaña de mensajes o de clientes potenciales, sube el vídeo y pega el texto principal y el titular. Así el anuncio busca reservas, no likes." },
+  anuncio_tiktok: { url: "https://ads.tiktok.com/", help: "En TikTok Ads Manager, crea un anuncio con el vídeo y pega el texto. Elige el objetivo de mensajes o de clientes potenciales." },
+  whatsapp: { url: "https://web.whatsapp.com/", help: "En WhatsApp Web, adjunta el vídeo ligero («Para WhatsApp») en el chat o en tu estado y pega el texto." },
+};
+function setShare(which) {
+  const s = SHARE[which] || SHARE.instagram;
+  $("#share-go").textContent = `Copiar texto y abrir ${PLATFORM_NAMES[which] || "la red"}`;
+  $("#share-help").textContent = s.help;
+}
+$("#share-go").onclick = async () => {
+  const which = state.postWhich || "instagram";
+  await navigator.clipboard.writeText($("#post-text").value).catch(() => {});
+  if (which === "whatsapp") $("#download-wa-mp4").click(); else $("#download").click();
+  window.open(SHARE[which].url, "_blank", "noopener");
+};
+$("#share-folder").onclick = () => api(`/api/jobs/${state.job.id}/mostrar`, { method: "POST" }).catch(err => $("#share-help").textContent = err.message);

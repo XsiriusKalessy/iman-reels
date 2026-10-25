@@ -553,3 +553,14 @@ details[open] > :not(summary) { animation: rise .35s var(--ease-out) both; }
   border: 1.5px dashed var(--line); border-radius: 18px; background: color-mix(in srgb, var(--panel) 50%, transparent);
   animation: rise .5s var(--ease-out) both;
 }
+.share { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.share .hint { flex-basis: 100%; margin: 2px 0 0; }
+
+/* Ajuste fino: lo que no hace falta tocar, recogido */
+details.fine { margin: 18px 0 6px; border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; background: color-mix(in srgb, var(--panel) 60%, transparent); }
+details.fine > summary { font-weight: 600; color: var(--text, inherit); list-style: none; }
+details.fine > summary::before { content: "＋ "; color: var(--muted); }
+details.fine[open] > summary::before { content: "－ "; }
+.quick-go { gap: 10px; }
+button.big { font-size: 18px; padding: 16px 28px; }
+.hint.center { text-align: center; }

@@ -29,7 +29,7 @@ LOOK_ENUM = ["", *TITULAR_LOOKS, *LISTA_LOOKS, "enfoque", *COLORS]
 
 CAPTION_STYLES = ["", "impacto", "editorial", "palabra", "karaoke", "caja", "neon", "gigante", "mezcla", "minimal",
                   "elegante", "manuscrita", "marcador", "hormozi", "bebas", "comic", "bloque"]
-MUSIC_STYLES = ["", "tranquila", "alegre", "cinematica", "tropical", "phonk", "corporativa", "epica", "emotiva", "inspiracional", "suspense", "acustica", "romantica", "piano", "piano_alegre", "piano_cine", "synthwave"]
+MUSIC_STYLES = ["", "tranquila", "alegre", "cinematica", "tropical", "phonk", "corporativa", "epica", "emotiva", "inspiracional", "suspense", "acustica", "romantica", "piano", "piano_alegre", "piano_cine", "synthwave", "trailer", "aventura", "hibrida", "documental", "festival", "misterio"]
 
 EDIT_SCHEMA = {
     "type": "object",
@@ -126,6 +126,8 @@ Tu trabajo:
    con las palabras del propio creador cuando sea posible. Sin emojis ni comillas. Usa una de estas fórmulas,
    la que mejor encaje con lo que dice: una cifra concreta ("3 errores que…"), un problema que duele ("Si te pasa
    esto…"), romper una creencia ("Nadie te dice que…") o una promesa clara ("Así ahorras…"). Nada genérico.
+   El gancho le habla al cerebro instintivo (algo nuevo, un riesgo, una pérdida, "tú") y tiene que sonar a la
+   persona, no a IA: sin "descubre", "increíble" ni "la magia de". Si te paso su TONO DE VOZ, úsalo.
 3. hook_line: una frase de gancho alternativa por si el creador quiere regrabar el arranque.
    hook_options: tres ganchos en pantalla más, distintos del hook_title y entre sí, con las mismas reglas.
 4. emphasis: índices de 3 a 8 palabras clave que conviene resaltar en los subtítulos (cifras, conceptos clave).
@@ -265,7 +267,12 @@ Tu trabajo:
    "cinematica" (paisajes, revelaciones), "suspense" (misterios, errores, "lo que nadie te cuenta"),
    "acustica" (naturaleza, cercanía), "romantica" (parejas, bodas, escapadas), "piano" (reflexiones, emoción
    íntima), "piano_alegre" (consejos amables, hogar), "piano_cine" (momentos solemnes, recuerdos, homenajes).
-   "synthwave" (autoridad, negocios agresivos, tecnología, noche, coches). "" si mejor sin música.
+   "synthwave" (autoridad, negocios agresivos, tecnología, noche, coches). Con estructura de tráiler (sube
+   durante el gancho y explota justo al acabarlo): "trailer" (revelaciones, anuncios grandes, lanzamientos),
+   "aventura" (viajes, rutas, grandes destinos, salidas en grupo), "hibrida" (tecnología, negocios, retos
+   modernos), "documental" (paisajes, cultura, viajes contados con calma y emoción), "festival" (fiesta,
+   verano, eventos, energía de discoteca), "misterio" ("lo que nadie te cuenta", errores, secretos, giros).
+   "" si mejor sin música.
 10. color: el look de todo el reel. "natural" por defecto; "calido" (comida, hogar, atardeceres, cercanía);
    "teal" (viajes, playa, ciudad: turquesas en agua y cielo, piel cálida); "cine" (historias, documental);
    "grano" (nostalgia, recuerdos); "retro" (gaming, cripto, años 80-90); "bn" (reflexión seria, dramático).
@@ -315,6 +322,33 @@ class AIConfig:
             or (self.provider == "claude" and bool(self.anthropic_key))
             or (self.provider == "openai" and bool(self.openai_key))
         )
+
+
+
+# --- Cómo se escribe: copy que engancha, vende y no suena a IA -------------------------
+
+COPY_RULES = """CÓMO ESCRIBES (todos los textos: ganchos, guiones, publicaciones, respuestas):
+- Habla a los 3 cerebros, en este orden: el instintivo (el gancho para el pulgar en 1 segundo: algo nuevo, un
+  riesgo, una pérdida, una cifra, "tú"), el emocional (una escena concreta que se ve, se oye y se siente: el
+  olor del ramen a las 7 de la mañana, no "una experiencia única") y el racional (el dato, el cómo, la prueba
+  que justifica la decisión).
+- Gatillos mentales, solo con cosas que sean verdad: curiosidad (bucle abierto), pertenencia ("los que viajamos
+  así…"), autoridad (experiencia propia, años, viajes hechos), prueba social real (clientes, grupos, lo que te
+  han dicho), reciprocidad (regala un consejo útil antes de pedir), compromiso (pregunta fácil de responder),
+  contraste (antes y después, lo que hace casi todo el mundo y lo que funciona) y anticipación (crear ganas de
+  lo que viene: la parte 2, la salida, el próximo destino).
+- Derrite la objeción principal del cliente sin nombrarla como objeción (precio, miedo, tiempo, "no es para
+  mí", "lo haré yo solo"): respóndela con una frase de experiencia o de hecho.
+- Cada texto es un paso del embudo: atrae, da confianza o vende, y lleva a UNA sola acción clara.
+- Para el algoritmo: primera línea que para el scroll, frases que se guardan o se envían a alguien ("mándaselo
+  a quien viajaría contigo"), una pregunta que invita a comentar y retención hasta el final (lo mejor, al final).
+- Que NO suene a IA: frases cortas y de verdad, como habla la persona; detalles concretos; nada de "sumérgete",
+  "descubre la magia", "en el mundo de hoy", "experiencia inolvidable", "sin duda", "¿Sabías que…?" de
+  plantilla, ni rayas (—), ni listas de adjetivos, ni signos de exclamación en cada frase, ni emojis en fila.
+- Usa el TONO DE VOZ y las FRASES DE MARCA del creador si te los paso: sus palabras, su forma de tratar al
+  cliente (tú o usted), sus expresiones. Por encima de todo, que suene a esa persona.
+- Persuasión honesta (ley de publicidad): nunca inventes escasez ("últimas plazas"), plazos, precios, cifras,
+  testimonios ni resultados que no estén en el vídeo o en los datos del creador."""
 
 
 def _ask_json(cfg: AIConfig, system: str, user: str, schema: dict, images: list[bytes] | None = None) -> dict:
@@ -549,7 +583,7 @@ Cada guion lleva un BUCLE ABIERTO (open loop) para que la gente se quede hasta e
 - clues: una o dos frases en mitad del guion que recuerdan que la respuesta viene ("y ahora verás por qué esto
   importa", "pero espera, que lo mejor viene ahora").
 - payoff: la frase del final que lo resuelve, justo antes de la llamada a la acción.
-Las pistas y la solución tienen que estar dentro del script, con las palabras del creador."""
+Las pistas y la solución tienen que estar dentro del script, con las palabras del creador.""" + "\n\n" + COPY_RULES
 
 
 def generate_ideas(cfg: AIConfig, topic: str, audience: str = "", voice_samples: str = "", n: int = 3) -> list[dict]:
@@ -563,7 +597,18 @@ def generate_ideas(cfg: AIConfig, topic: str, audience: str = "", voice_samples:
         user += f"\nPúblico: {audience}"
     if voice_samples:
         user += f"\n\nASÍ HABLA EL CREADOR (transcripciones de reels anteriores):\n{voice_samples[:6000]}"
-    return _ask_json(cfg, IDEA_SYSTEM, user, IDEA_SCHEMA).get("ideas", [])
+    return [_human_dict(i) for i in _ask_json(cfg, IDEA_SYSTEM, user, IDEA_SCHEMA).get("ideas", [])]
+
+
+def _human_dict(d):
+    """humanize() en todos los textos de una respuesta (anidada)."""
+    if isinstance(d, str):
+        return humanize(d)
+    if isinstance(d, list):
+        return [_human_dict(x) for x in d]
+    if isinstance(d, dict):
+        return {k: _human_dict(v) for k, v in d.items()}
+    return d
 
 
 # --- Kit de marca: la IA escribe el cierre a partir de una frase -------------------
@@ -574,7 +619,8 @@ BRAND_SCHEMA = {
         "name": {"type": "string"},
         "cta": {"type": "string"},
         "font": {"type": "string", "enum": ["Moderna", "Impacto", "Condensada", "Elegante", "Manuscrita"]},
-        "sector": {"type": "string", "enum": ["general", "viajes", "cursos", "productos", "empresas"]},
+        "sector": {"type": "string", "enum": ["general", "viajes", "cursos", "productos", "empresas", "viajero", "comida",
+                                                "fitness", "belleza", "coach", "inmobiliaria", "restaurante"]},
     },
     "required": ["name", "cta", "font", "sector"],
     "additionalProperties": False,
@@ -585,8 +631,10 @@ Te describen el negocio en una frase. Devuelve: el nombre de la marca tal cual l
 dicen), una llamada a la acción para el cierre del reel (máximo 5 palabras, en imperativo, concreta para ese
 negocio, p. ej. "Reserva tu viaje por WhatsApp", "Apúntate al curso", "Pide el tuyo hoy") y la fuente que mejor
 encaja: Moderna (limpia, versátil), Impacto (fuerte, ventas), Condensada (titulares, deporte), Elegante (lujo,
-moda, viajes premium) o Manuscrita (cercana, artesanal). Y el sector: viajes, cursos (formación, coaching),
-productos (tienda, marca de producto), empresas (servicios, negocio local) o general."""
+moda, viajes premium) o Manuscrita (cercana, artesanal). Y el sector: viajes (agencia que vende viajes), viajero
+(blogger o influencer de viajes), cursos (formación), coach (mentor, desarrollo), productos (tienda, marca de
+producto), comida (recetas, foodies), restaurante, fitness, belleza (maquillaje, moda), inmobiliaria, empresas
+(servicios, negocio local) o general."""
 
 
 def brand_copy(cfg: AIConfig, description: str) -> dict:
@@ -601,7 +649,7 @@ def brand_copy(cfg: AIConfig, description: str) -> dict:
 
 # --- Texto para publicar ------------------------------------------------------------
 
-PLATFORMS = ("instagram", "tiktok", "youtube", "facebook", "whatsapp")
+PLATFORMS = ("instagram", "tiktok", "youtube", "facebook", "whatsapp", "anuncio_meta", "anuncio_tiktok")
 _PLAIN = {"type": "object", "properties": {"text": {"type": "string"}, "hashtags": {"type": "array", "items": {"type": "string"}}},
           "required": ["text", "hashtags"], "additionalProperties": False}
 POST_SCHEMA = {
@@ -618,6 +666,10 @@ POST_SCHEMA = {
         "youtube": {"type": "object", "properties": {"title": {"type": "string"}, "text": {"type": "string"},
                                                      "hashtags": {"type": "array", "items": {"type": "string"}}},
                     "required": ["title", "text", "hashtags"], "additionalProperties": False},
+        "anuncio_meta": {"type": "object", "properties": {"title": {"type": "string"}, "text": {"type": "string"}},
+                         "required": ["title", "text"], "additionalProperties": False},
+        "anuncio_tiktok": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"],
+                           "additionalProperties": False},
     },
     "required": ["stage", "funnel", *PLATFORMS],
     "additionalProperties": False,
@@ -641,7 +693,21 @@ Cada red con su forma:
   teléfono; 2 a 3 hashtags.
 - whatsapp: texto para el estado o para enviar a la lista de difusión de clientes: 1 a 3 frases cercanas, como
   a un conocido, que inviten a responder ("¿Te apetece? Respóndeme y te cuento"); sin hashtags.
-Hashtags sin el símbolo # y sin espacios, en el idioma del vídeo."""
+- anuncio_meta (para promocionarlo en Instagram y Facebook): text = texto principal de 2 a 5 frases cortas
+  (primera línea con el deseo o el problema, una objeción respondida con un hecho y la acción: reservar, pedir
+  la propuesta o escribir por WhatsApp); title = titular de máx. 40 caracteres que diga qué se consigue.
+- anuncio_tiktok: texto de máx. 100 caracteres, directo, que lleve a pedir información o reservar.
+Los anuncios buscan RESERVAS y contactos, no likes.
+Hashtags sin el símbolo # y sin espacios, en el idioma del vídeo.""" + "\n\n" + COPY_RULES
+
+
+def humanize(text: str) -> str:
+    """Quita las marcas típicas de texto de IA que se cuelan aunque se pida que no: rayas (—) y espacios dobles."""
+    import re
+
+    text = re.sub(r"\s*[—–]\s*", ", ", text)
+    text = re.sub(r",\s*,", ",", text)
+    return re.sub(r"[ \t]{2,}", " ", text).strip()
 
 
 def _tags(raw) -> list[str]:
@@ -683,8 +749,8 @@ def post_copy(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "", ct
         d = data.get(p) or {}
         if not d.get("text"):
             continue
-        out["platforms"][p] = {"text": str(d["text"]).strip()[:2000], "hashtags": _tags(d.get("hashtags")),
-                               "title": str(d.get("title", "")).strip()[:100]}
+        out["platforms"][p] = {"text": humanize(str(d["text"]))[:2000], "hashtags": _tags(d.get("hashtags")),
+                               "title": humanize(str(d.get("title", "")))[:100]}
     ig = out["platforms"].get("instagram", {"text": "", "hashtags": []})
     out["caption"], out["hashtags"] = ig["text"], ig["hashtags"]  # como antes, para lo que lo lea así
     return out
@@ -773,7 +839,7 @@ palabras y body de 1 a 3 frases, máximo 220 caracteres); la última invita a ac
 del creador si la hay). HISTORIAS (3): textos muy cortos para anunciar el reel (máx. 90 caracteres) y un sticker
 de 1 a 3 palabras ("Nuevo reel", "¿Te pasa?", "Link en bio"…). Nada de inventar datos que no diga el vídeo.
 Si te pasan un KIT ACTUAL y un CAMBIO, devuelve el kit completo con solo ese cambio aplicado
-("en la diapositiva 3…" = la tercera, contando desde 1). En reply, una frase corta con lo que has hecho."""
+("en la diapositiva 3…" = la tercera, contando desde 1). En reply, una frase corta con lo que has hecho.""" + "\n\n" + COPY_RULES
 
 
 def kit_copy(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "", cta: str = "",
@@ -840,7 +906,7 @@ Elige los mejores momentos para convertirlos en reels independientes:
 - "from" y "to" son números de palabra; "to" es la última palabra que se queda.
 - "title" es el gancho en pantalla, de 3 a 7 palabras, con la voz del creador.
 - "why" explica en una frase por qué funciona.
-Ordénalos del mejor al peor. Responde solo con el JSON."""
+Ordénalos del mejor al peor. Responde solo con el JSON.""" + "\n\n" + COPY_RULES
 
 
 def transcript_with_times(words: list[Word]) -> str:
@@ -988,7 +1054,7 @@ CASCADE_SYSTEM = """Eres el editor de contenidos de un creador. De la transcripc
 - subject y newsletter: una newsletter escrita como habla el creador, en primera persona, con párrafos cortos,
   las 3 ideas clave del vídeo y una llamada a la acción al final. Sin inventar datos que no diga.
 - podcast: título del episodio en la primera línea y una descripción corta debajo.
-Responde en el idioma de la transcripción."""
+Responde en el idioma de la transcripción.""" + "\n\n" + COPY_RULES
 
 
 def cascade_texts(cfg: AIConfig, words: list[Word]) -> dict:
@@ -1027,7 +1093,7 @@ COMMENT_SYSTEM = """Eres el community manager y guionista de un creador. Un segu
   cada punto con una frase de experiencia propia y termina invitando a comentar. Incluye un bucle abierto: deja
   el punto más sorprendente para el final y anúncialo al principio.
 - why: por qué este reel puede funcionar.
-Escribe en el idioma del comentario. No inventes datos que no estén en el comentario o que no sean de sentido común."""
+Escribe en el idioma del comentario. No inventes datos que no estén en el comentario o que no sean de sentido común.""" + "\n\n" + COPY_RULES
 
 
 def comment_reel(cfg: AIConfig, comment: str, author: str = "", image: bytes | None = None,
@@ -1044,7 +1110,7 @@ def comment_reel(cfg: AIConfig, comment: str, author: str = "", image: bytes | N
         user += f"\nUSUARIO: {author}"
     if voice_samples:
         user += f"\n\nASÍ HABLA EL CREADOR:\n{voice_samples[:4000]}"
-    return _ask_json(cfg, COMMENT_SYSTEM, user, COMMENT_SCHEMA, [image] if image else None)
+    return _human_dict(_ask_json(cfg, COMMENT_SYSTEM, user, COMMENT_SCHEMA, [image] if image else None))
 
 
 def comment_fallback(comment: str, author: str = "") -> dict:
@@ -1061,3 +1127,64 @@ def comment_fallback(comment: str, author: str = "") -> dict:
             "hook": hook,
             "script": f"{who} me ha dejado este comentario y tiene toda la razón.\n{body}\n¿Cuál añadirías tú? Te leo en comentarios.",
             "why": "Responder a un comentario real da confianza y te da contenido sin inventarlo."}
+
+
+# --- Guía en PDF para captar contactos (lead magnet) ----------------------------------
+
+GUIDE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "description": "Título de la guía, máx. 60 caracteres."},
+        "subtitle": {"type": "string", "description": "Una línea que dice qué ganas leyéndola."},
+        "intro": {"type": "string", "description": "2 a 4 frases, en primera persona, como habla el creador."},
+        "sections": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"heading": {"type": "string"}, "body": {"type": "string"},
+                           "tips": {"type": "array", "items": {"type": "string"}}},
+            "required": ["heading", "body", "tips"], "additionalProperties": False}},
+        "checklist": {"type": "array", "items": {"type": "string"}},
+        "faq": {"type": "array", "items": {
+            "type": "object", "properties": {"q": {"type": "string"}, "a": {"type": "string"}},
+            "required": ["q", "a"], "additionalProperties": False}},
+        "cta": {"type": "string", "description": "La invitación final: qué hacer ahora y qué pasa después."},
+    },
+    "required": ["title", "subtitle", "intro", "sections", "checklist", "faq", "cta"],
+    "additionalProperties": False,
+}
+
+GUIDE_SYSTEM = """Conviertes el vídeo de un creador o de una agencia en una GUÍA PDF corta que se regala a cambio de
+un contacto ("escríbeme GUÍA y te la mando"). Tiene que ser útil de verdad, para guardarla y enseñarla, y llevar
+con naturalidad a reservar o a pedir información.
+- title y subtitle: lo que el lector va a conseguir ("Japón sin agobios: lo que nadie te cuenta antes de ir").
+- intro: por qué la has hecho, en primera persona.
+- sections: de 3 a 5 apartados con lo que dice el vídeo, ampliado solo con sentido común (body de 2 a 4 frases;
+  tips de 2 a 4 consejos cortos y concretos). Si el vídeo es de un destino: cuándo ir, qué ver, cómo moverse,
+  qué evitar, cuánto cuesta (solo cifras que diga el vídeo o los datos del creador).
+- checklist: de 5 a 8 cosas para tener listas antes de ir o de decidirse.
+- faq: 2 o 3 dudas que frenan al cliente (precio, miedo, tiempo, "¿es para mí?"), respondidas con hechos.
+- cta: una sola acción con el contacto del creador y lo que pasa después ("te mandamos la propuesta por escrito").
+Nada de datos inventados (precios, fechas, plazas, horarios). Si falta un dato, di cómo conseguirlo.""" + "\n\n" + COPY_RULES
+
+
+def guide_copy(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "", business: str = "", contact: str = "",
+               cta: str = "", brand_voice: str = "") -> dict:
+    if cfg.provider == "iman":
+        from . import cloud
+
+        data = cloud.call(cfg, "guia", {"transcript": transcript[:8000], "hook": hook, "pack": pack,
+                                        "business": business, "contact": contact, "cta": cta,
+                                        "brand_voice": brand_voice[:4000]})
+    else:
+        user = f"LO QUE DICE EL VÍDEO:\n{transcript[:8000]}\n\nTítulo del reel: {hook}"
+        if pack and pack != "general":
+            user += f"\nSector: {pack}"
+        if business:
+            user += f"\nNegocio: {business}"
+        if contact:
+            user += f"\nContacto: {contact}"
+        if cta:
+            user += f"\nLlamada a la acción del creador: {cta}"
+        if brand_voice:
+            user += f"\n\n{brand_voice}"
+        data = _ask_json(cfg, GUIDE_SYSTEM, user, GUIDE_SCHEMA)
+    return _human_dict(data)

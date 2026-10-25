@@ -58,6 +58,8 @@ def _check(key: str, instance: str, request: Request) -> None:
         if not res.get("license_valid"):
             raise HTTPException(403, "Licencia no válida o caducada")
         _valid_until[key] = now + 3600
+    if license.plan({"license_key": key}) == "dueno":  # el dueño de Imán, sin límite diario
+        return
     _count(key, DAILY_LIMIT, f"Has llegado al límite de {DAILY_LIMIT} ediciones con IA por hoy")
 
 
@@ -117,6 +119,23 @@ def cascada(request: Request, body: CascadeIn, x_iman_license: str = Header(""),
     _check(x_iman_license, x_iman_instance, request)
     words = [Word(t, 0.0, 0.0) for t in body.transcript.split()]
     return ai.cascade_texts(_cfg(), words)
+
+
+class GuideIn(BaseModel):
+    transcript: str = Field(..., max_length=8000)
+    hook: str = Field("", max_length=200)
+    pack: str = Field("", max_length=40)
+    business: str = Field("", max_length=400)
+    contact: str = Field("", max_length=120)
+    cta: str = Field("", max_length=120)
+    brand_voice: str = Field("", max_length=4000)
+
+
+@app.post("/v1/guia")
+def guia(request: Request, body: GuideIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
+    _check(x_iman_license, x_iman_instance, request)
+    return ai.guide_copy(_cfg(), body.transcript, body.hook, body.pack, body.business, body.contact, body.cta,
+                         body.brand_voice)
 
 
 class CommentIn(BaseModel):

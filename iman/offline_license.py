@@ -1,7 +1,7 @@
 """Licencias firmadas sin servidor: para el dueño, la beta y regalos.
 
 Una licencia es `IMAN-<datos>.<firma>` en base64url. Los datos son un JSON
-({"n": nombre, "exp": "AAAA-MM-DD" o ""}) y la firma es Ed25519 con la clave
+({"n": nombre, "exp": "AAAA-MM-DD" o "", "p": plan opcional}) y la firma es Ed25519 con la clave
 privada de Imán, que NO está en el repositorio. La app solo lleva la pública,
 así que nadie puede fabricar licencias.
 
@@ -135,8 +135,10 @@ def is_offline(key: str) -> bool:
     return key.strip().startswith(PREFIX)
 
 
-def issue(secret: bytes, name: str, expires: str = "") -> str:
-    data = json.dumps({"n": name, "exp": expires}, ensure_ascii=False, separators=(",", ":")).encode()
+def issue(secret: bytes, name: str, expires: str = "", plan: str = "") -> str:
+    """`plan`: "" (la normal), "pro" o "dueno" (todo desbloqueado y sin límites de IA)."""
+    info = {"n": name, "exp": expires, **({"p": plan} if plan else {})}
+    data = json.dumps(info, ensure_ascii=False, separators=(",", ":")).encode()
     return f"{PREFIX}{_b64(data)}.{_b64(sign(secret, data))}"
 
 
