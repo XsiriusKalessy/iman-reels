@@ -988,7 +988,8 @@ def test_support_photos_move_in_2_5d(tmp_path, monkeypatch):
     ops = effects.video_ops([{"type": "apoyo", "word": 2, "until_word": 8, "text": "1"}],
                             WordClock(words, list(range(20))), 8.0, assets={"1": str(photo)})
     assert len(ops) == 1 and ops[0].path.endswith(".mp4") and ops[0].ramp is False
-    assert abs(media.probe(type(photo)(ops[0].path)).duration - (ops[0].end - ops[0].start)) < 0.1
+    span = ops[0].end - ops[0].start  # la caché va a medios segundos y el montaje recorta con trim
+    assert span - 0.1 <= media.probe(type(photo)(ops[0].path)).duration <= span + 0.5
 
 
 def test_photo_tools(tmp_path, monkeypatch):
