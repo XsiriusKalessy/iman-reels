@@ -163,6 +163,7 @@ def keep_spans(
                 spans[-1].end = max(spans[-1].end, min(prev_kept.end + KEPT_PAUSE, s))
             if spans and s < spans[-1].end:
                 s = spans[-1].end
+            e = max(e, s + 0.05)  # una palabra solapada con la anterior no desaparece de los subtítulos
             spans.append(Span(s, e))
         cut_pending = False
         prev_kept = w

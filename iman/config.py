@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 
+from . import jsonfile
 from .ai import AIConfig
 
 HOME = Path(os.environ.get("IMAN_HOME", Path.home() / ".iman"))
@@ -55,10 +56,17 @@ def memory_prompt(cfg: dict) -> str:
     return "PREFERENCIAS GUARDADAS DEL CREADOR (aplícalas siempre):\n" + "\n".join(f"- {m}" for m in mem)
 
 
+def _stored() -> dict:
+    """Lo guardado en disco; si el archivo se rompió (corte de luz), se parte de los valores por defecto."""
+    data = jsonfile.load(CONFIG_FILE) if CONFIG_FILE.exists() else None
+    return {k: v for k, v in data.items() if k in DEFAULTS} if isinstance(data, dict) else {}
+
+
 def load() -> dict:
     cfg = dict(DEFAULTS)
-    if CONFIG_FILE.exists():
-        cfg.update(json.loads(CONFIG_FILE.read_text(encoding="utf-8")))
+    cfg.update(_stored())
+    if not isinstance(cfg.get("license_checked"), (int, float)) or cfg["license_checked"] > __import__("time").time() + 86400:
+        cfg["license_checked"] = 0  # un reloj adelantado no alarga la licencia
     # Las variables de entorno mandan si existen.
     cfg["anthropic_key"] = os.environ.get("ANTHROPIC_API_KEY") or cfg["anthropic_key"]
     cfg["openai_key"] = os.environ.get("OPENAI_API_KEY") or cfg["openai_key"]
@@ -67,13 +75,12 @@ def load() -> dict:
 
 def save(updates: dict) -> dict:
     cfg = dict(DEFAULTS)
-    if CONFIG_FILE.exists():
-        cfg.update(json.loads(CONFIG_FILE.read_text(encoding="utf-8")))
+    cfg.update(_stored())
     for k, v in updates.items():
         if k in DEFAULTS and v is not None:
             cfg[k] = v
     HOME.mkdir(parents=True, exist_ok=True)
-    CONFIG_FILE.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+    jsonfile.save(CONFIG_FILE, cfg, indent=2)
     try:
         CONFIG_FILE.chmod(0o600)
     except OSError:

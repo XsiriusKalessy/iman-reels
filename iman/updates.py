@@ -63,8 +63,10 @@ def _fetch_latest() -> dict | None:
 def latest(force: bool = False) -> dict | None:
     if force or time.time() - _cache["at"] > CHECK_EVERY:
         rel = _fetch_latest()
-        if rel is not None or force:
+        if rel is not None:
             _cache.update(at=time.time(), release=rel)
+        else:  # sin red: no volvemos a preguntar en un rato (y con «force» se olvida lo viejo)
+            _cache.update(at=time.time() - CHECK_EVERY + 600, release=None if force else _cache["release"])
     return _cache["release"]
 
 
@@ -107,8 +109,12 @@ def _download_and_open(info: dict) -> None:
     folder = config.HOME / "actualizaciones"
     folder.mkdir(parents=True, exist_ok=True)
     dest = folder / Path(info["name"]).name
+    url = str(info.get("url") or "")
+    if not url.startswith(f"https://github.com/{REPO}/releases/download/") or dest.suffix not in (".exe", ".dmg"):
+        _install.update(state="error", message="La descarga no viene de donde debe. Baja el instalador desde imanreels.com.")
+        return
     try:
-        req = urllib.request.Request(info["url"], headers={"User-Agent": "Iman"})
+        req = urllib.request.Request(url, headers={"User-Agent": "Iman"})
         with urllib.request.urlopen(req, timeout=30) as r, open(dest, "wb") as f:
             total = int(r.headers.get("Content-Length") or info.get("size") or 0)
             done = 0
@@ -120,14 +126,23 @@ def _download_and_open(info: dict) -> None:
     except OSError:
         _install.update(state="error", message="No se ha podido descargar. Revisa tu conexión y vuelve a probar.")
         return
+    if total and dest.stat().st_size != total:
+        _install.update(state="error", message="La descarga se ha cortado. Vuelve a probar.")
+        return
     _install["progress"] = 1.0
-    if sys.platform == "win32":
-        # El instalador cierra Imán, se instala sin preguntar y lo vuelve a abrir.
-        subprocess.Popen([str(dest), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS"])
-        _install.update(state="installing", message="Instalando… Imán se cerrará y volverá a abrirse solo.")
-        threading.Timer(1.5, os._exit, args=(0,)).start()
-    elif sys.platform == "darwin":
-        subprocess.Popen(["open", str(dest)])
+    try:
+        if sys.platform == "win32":
+            # El instalador cierra Imán, se instala sin preguntar y lo vuelve a abrir.
+            subprocess.Popen([str(dest), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS"])
+            _install.update(state="installing", message="Instalando… Imán se cerrará y volverá a abrirse solo.")
+            threading.Timer(1.5, os._exit, args=(0,)).start()
+            return
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", str(dest)])
+    except OSError:
+        _install.update(state="error", message=f"No he podido abrir el instalador. Está descargado en {dest}")
+        return
+    if sys.platform == "darwin":
         _install.update(state="ready", message="Se ha abierto el instalador: arrastra Imán a Aplicaciones y "
                                                 "elige «Reemplazar». Después vuelve a abrir Imán.")
     else:

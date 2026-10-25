@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable
 
-from . import ai, brand, copystyle, effects, fondos, gestos, hands, jsonfile, limpiar, media, musica, packfx, packs, pexels, redes, segment, seguir, sfx
+from . import ai, brand, captions, copystyle, effects, fondos, gestos, hands, jsonfile, limpiar, media, musica, packfx, packs, pexels, redes, segment, seguir, sfx
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Word
@@ -61,6 +61,7 @@ class EditOptions:
     comentario_de: str = ""
     red: str = "instagram"  # para qué red es (iman/redes.py): instagram, tiktok, youtube, anuncio
     ligero: bool = False  # ordenador sencillo: sin los efectos más pesados ni 4K (iman/equipo.py)
+    letra: str = "normal"  # tamaño de los subtítulos: normal, grande o enorme (captions.SIZES)
     look: str = "auto"  # "auto" = el que recomienda la IA; o color y textura de un clic (media.LOOKS): "calido", "teal", "cine", "grano", "retro", "bn"…
 
 
@@ -75,6 +76,7 @@ class EditResult:
     ai_warning: str = ""
     notices: list[str] = field(default_factory=list)  # avisos: algo se ha quitado para que el reel salga
     checks: list[dict] = field(default_factory=list)
+    fixes: list[str] = field(default_factory=list)  # «Revisado y arreglado solo»: lo que Imán ha decidido por ti
 
     def summary(self) -> dict:
         return {
@@ -87,6 +89,7 @@ class EditResult:
             "ai_warning": self.ai_warning,
             "notices": self.notices,
             "checks": self.checks,
+            "fixes": self.fixes,
         }
 
 
@@ -267,10 +270,13 @@ def pre_publish(opts: "EditOptions", plan: EditPlan, kept: list[Word], total: fl
     return out
 
 
+AUDIO_EXT = (".mp3", ".m4a", ".aac", ".wav", ".ogg", ".flac", ".opus", ".mp4", ".mov")
+
+
 def _music(choice, workdir: Path, total: float, drop_at: float | None = None) -> Path | None:
     """La música del reel: la tuya (subida como musica.*) o una de Imán generada a la medida del reel."""
     if choice is True or choice == "mia":
-        return next((p for p in sorted(workdir.glob("musica.*")) if p.suffix != ".tmp"), None)
+        return next((p for p in sorted(workdir.glob("musica.*")) if p.suffix.lower() in AUDIO_EXT), None)
     if choice in musica.STYLES:
         return musica.render(choice, total, workdir / "musica_iman.wav", seed=len(choice), drop_at=drop_at)
     return None
@@ -311,6 +317,50 @@ def _pexels(active: list[dict], assets: dict[str, str], key: str, progress: Prog
         if p:
             assets[f"pexels{k}"] = str(p)
             fx["_file"] = f"pexels{k}"
+
+
+def _fixes(dur_in: float, dur_out: float, drops, beats, active: list[dict], clock) -> list[str]:
+    """Lo que Imán ha revisado y arreglado por su cuenta, en frases: para que la persona sepa qué ha decidido
+    la máquina y lo cambie si no le convence."""
+    out = []
+    saved = dur_in - dur_out
+    if saved >= 1.0:
+        out.append(f"He quitado {saved:.0f} s de silencios, muletillas y tomas repetidas"
+                   + (f" ({len(drops)} palabras fuera)." if drops else "."))
+    if beats:
+        out.append(f"En {len(beats)} momentos no cambiaba nada en pantalla: he metido un cambio de plano al ritmo "
+                   "de la música.")
+    names = {"anillo": "Anillo", "lluvia": "Lluvia", "detras": "Detrás de ti", "fondo": "Fondo", "desenfoque": "Desenfoque",
+             "bruto": "Toma en bruto", "pagina": "Página", "viaje": "Itinerario", "titular": "Titular", "cifra": "Cifra",
+             "bocadillo": "Bocadillo", "hueca": "Palabra hueca", "marco": "Marco", "lista": "Lista", "paso": "Paso",
+             "progreso": "Barra de progreso"}
+    defaults = {**{k: v[0] for k, v in effects.SEG_KINDS.items()}, **{k: v[0] for k, v in effects.VIDEO_KINDS.items()}}
+    for fx in active:
+        start, nxt = clock.at(effects.word_of(fx)), fx.get("_next")
+        if start is None or nxt is None:
+            continue
+        want = defaults.get(fx.get("type"), 2.0)
+        room = nxt - start - 0.05
+        if room < want - 0.3:
+            out.append(f"«{names.get(fx.get('type'), fx.get('type'))}» del segundo {start:.1f} duraba {want:.1f} s y solo "
+                       f"cabían {room:.1f} s antes del siguiente efecto: lo he acortado para que no se pisen.")
+    return out[:8]
+
+
+def _snap(spans: list, fps: float) -> list:
+    """Los cortes, en el reloj de fotogramas: ffmpeg recorta el vídeo por fotogramas enteros y el audio por
+    muestras; si el corte cae entre dos fotogramas, cada corte suma hasta uno de más y los subtítulos y efectos
+    se van desincronizando poco a poco (casi un segundo en un reel con cien cortes)."""
+    fps = fps if fps and fps > 1 else 30.0
+    out = []
+    for s in spans:
+        s.start = round(s.start * fps) / fps
+        s.end = round(s.end * fps) / fps
+        if out and s.start < out[-1].end:
+            s.start = out[-1].end
+        if s.end - s.start >= 1.5 / fps:
+            out.append(s)
+    return out or spans
 
 
 def _music_grid(choice, workdir: Path, duration: float, drop_at: float | None) -> list[float]:
@@ -448,9 +498,10 @@ def run(
     if opts.comentario and opts.effects and not any(fx.get("type") == "comentario" for fx in plan.effects):
         plan.effects.insert(0, {"type": "comentario", "word": 0, "text": opts.comentario[:140],
                                 "title": opts.comentario_de, "subtitle": "", "look": "", "until_word": None})
-    chapters = sorted((fx for fx in plan.effects if fx.get("type") == "capitulo"), key=lambda fx: int(fx.get("word", 0)))
-    for k, fx in enumerate(chapters, 1):  # capítulos numerados en orden
-        fx["_n"] = k
+    for kind in ("capitulo", "paso"):  # capítulos y pasos numerados en orden
+        numbered = sorted((fx for fx in plan.effects if fx.get("type") == kind), key=lambda fx: int(fx.get("word", 0)))
+        for k, fx in enumerate(numbered, 1):
+            fx["_n"] = k
     if opts.brand and brand.load().no_emojis:  # marca sin emojis: ni pegatinas ni emojis en los textos
         plan.effects = [fx for fx in plan.effects if fx.get("type") != "objeto"]
         for fx in plan.effects:
@@ -467,16 +518,20 @@ def run(
     rhythm = RHYTHMS[opts.rhythm]
     spans, drops = keep_spans(words, info.duration, rhythm, plan.drop + plan.cut, plan.restore, plan.pauses)
     zooms_wanted = plan.zooms if opts.effects else []
-    spans = effects.split_spans(spans, words, zooms_wanted)
+    spans = _snap(effects.split_spans(spans, words, zooms_wanted), info.fps)
     choice = opts.music
     if choice == "auto":  # la que recomienda la IA; sin IA, una según el sector
         choice = plan.music if plan.music in musica.STYLES else AUTO_MUSIC.get(opts.pack, "inspiracional")
         plan.music = choice  # para que la app muestre cuál ha elegido
-    drop_at = 2.8 if opts.hook and plan.hook_title else None
+    # Con gancho siempre hay título (si la IA no lo da, sale de tus palabras): la música "explota" al irse.
+    drop_at = 2.8 if opts.hook and (plan.hook_title or words) else None
     beats: set[float] = set()
     if opts.auto_zoom and rhythm.cut and not voice_only:
         # Un cambio de plano cada 2-3 s, y a ser posible justo en un golpe de la música.
-        spans, beats = effects.beat_spans(spans, words, grid=_music_grid(choice, workdir, info.duration, drop_at))
+        pre = sum(s.duration for s in spans)
+        grid = _music_grid(choice, workdir, pre, min(drop_at, pre) if drop_at else None)
+        spans, beats = effects.beat_spans(spans, words, grid=grid)
+        spans = _snap(spans, info.fps)
     zoom = effects.zoom_flags(spans, words, zooms_wanted, opts.auto_zoom and rhythm.cut, beats)
     kept, kept_idx = remap_words(words, spans, drops)
     # Los tramos que se quedan, para la pestaña «Sin silencios» (tu vídeo tal cual, solo con los cortes).
@@ -505,6 +560,7 @@ def run(
 
     active = [dict(fx) for fx in plan.effects if not fx.get("off")]  # los que el creador ha apagado no salen
     gestos.attach(active, found, hand_frames, effects.WordClock(kept, kept_idx))
+    effects.assign_next(active, effects.WordClock(kept, kept_idx))
     frames = None
     if opts.fit == "recortar" and not voice_only:
         try:
@@ -520,6 +576,7 @@ def run(
     kit = brand.load() if opts.brand else None
     style_key = opts.style if opts.style in STYLES else plan.caption_style
     style = brand.apply(STYLES[style_key], kit) if kit else STYLES[style_key]
+    style = captions.sized(style, opts.letra)
     red = redes.get(opts.red)
     if red.caption_y and style.y > red.caption_y:  # la zona de abajo la tapa el texto de la red
         style = replace(style, y=red.caption_y)
@@ -528,7 +585,8 @@ def run(
     total = out_duration + tail
     end_lines, end_window = effects.end_card_events(kit, style, total)
     ass_path = None
-    if opts.captions or opts.hook or opts.watermark or end_lines or opts.barra:
+
+    def write_subs() -> Path:
         emphasis_out = {j for j, i in enumerate(kept_idx) if i in set(plan.emphasis)}
         fx_lines, fx_windows = ([], [])
         if opts.effects:
@@ -542,8 +600,12 @@ def run(
             + (packfx.progress_bar_events(out_duration, style) if opts.barra else []),
             hide=fx_windows + ([end_window] if end_window else []),
         )
-        ass_path = workdir / "subs.ass"
-        ass_path.write_text(ass, encoding="utf-8")
+        p = workdir / "subs.ass"
+        p.write_text(ass, encoding="utf-8")
+        return p
+
+    if opts.captions or opts.hook or opts.watermark or end_lines or opts.barra:
+        ass_path = write_subs()
 
     progress("Montando tu reel", 0.65)
     final = workdir / "reel.mp4"
@@ -576,7 +638,7 @@ def run(
             sound = sfx.bed(evs, total, workdir / "sfx.wav")
     # La música "explota" justo cuando se va el texto del gancho.
     music = _music(choice, workdir, total, min(drop_at, out_duration) if drop_at else None)
-    punch = opts.punch and not voice_only
+    punch = opts.punch and not voice_only and out_duration > 1.0  # el zoom de entrada necesita medio segundo
     look = opts.look
     if look == "auto":
         look = plan.color if plan.color in media.LOOKS else AUTO_LOOK.get(opts.pack, "natural")
@@ -602,6 +664,9 @@ def run(
         except Exception as e:  # noqa: BLE001 - sin los efectos de detrás, el reel sale igual
             log.warning("Falla la pasada con la persona recortada: %s", e)
             warnings.append("No he podido recortarte del fondo en este vídeo; el reel sale sin el cambio de fondo.")
+            # El anillo y el confeti vuelven enteros delante: el ASS se hizo con la mitad de atrás aparte.
+            if any(fx.pop("_behind", None) for fx in active) and ass_path is not None:
+                ass_path = write_subs()
         finally:
             for p in (base, mask):
                 p.unlink(missing_ok=True)
@@ -634,4 +699,5 @@ def run(
         ai_warning=ai_warning,
         notices=warnings,
         checks=pre_publish(opts, plan, kept, total, active, kit, music is not None),
+        fixes=_fixes(info.duration, out_duration, drops, beats, active, clock),
     )

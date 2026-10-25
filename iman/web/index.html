@@ -163,6 +163,12 @@
           <div id="rhythms" class="choices"></div>
           <h3>Estilo de subtítulos</h3>
           <div id="styles" class="choices inline"></div>
+          <h3>Tamaño de letra</h3>
+          <div class="choices inline" id="letra-choices">
+            <label class="choice"><input type="radio" name="letra" value="normal" checked><span>Normal<small>hasta 3 palabras por bloque</small></span></label>
+            <label class="choice"><input type="radio" name="letra" value="grande"><span>Grande<small>letras grandes, 2 palabras por bloque</small></span></label>
+            <label class="choice"><input type="radio" name="letra" value="enorme"><span>Enorme<small>una palabra que llena la pantalla</small></span></label>
+          </div>
           <div class="copy-style">
             <button class="ghost" type="button" id="copy-style-btn">✦ Copiar el estilo de un reel que te gusta</button>
             <div id="copy-style-box" class="stack" hidden>
@@ -254,7 +260,7 @@
         <div class="phone" id="phone">
           <video id="out" controls playsinline hidden></video>
           <div class="safe" aria-hidden="true"><i class="s-top"></i><i class="s-bottom"></i><i class="s-right"></i></div>
-          <div id="working" class="working">
+          <div id="working" class="working" hidden>
             <div class="spinner"></div>
             <strong id="step">Preparando tu vídeo</strong>
             <div class="bar"><i id="bar"></i></div>
@@ -263,7 +269,7 @@
         </div>
         <div class="side">
           <h1>Tu reel</h1>
-          <div class="view-tabs" id="view-tabs" role="tablist" hidden>
+          <div class="view-tabs" id="view-tabs" role="tablist" aria-label="Vistas" hidden>
             <button type="button" data-view="cut">Sin silencios</button>
             <button type="button" data-view="reel" class="on">Reel terminado</button>
             <button type="button" data-view="orig">Vídeo original</button>
@@ -280,6 +286,7 @@
           <div id="result-tools">
           <div id="stats" class="stats"></div>
           <div id="hook-box"></div>
+          <div id="fixes-box" hidden></div>
           <div id="check-box" class="card" hidden><h4>Revisión antes de publicar</h4><ul id="check-list" class="checks"></ul></div>
           <h3>Publicar y vender</h3>
           <div class="publish">
@@ -330,6 +337,7 @@
           <div id="chat" class="chat"></div>
           <form id="chat-form" class="chat-form">
             <input id="chat-input" placeholder="Ej.: pon una lista con los 3 pasos y quita la parte del precio" autocomplete="off">
+            <button class="ghost mic" type="button" id="chat-mic" title="Dictar el cambio" aria-label="Dictar el cambio" hidden>🎙</button>
             <button class="primary" type="submit">Enviar</button>
           </form>
           <p class="hint tip">💡 Di qué cambiar y dónde: «el titular del principio más corto», «quita los efectos del final», «música más tranquila».</p>
@@ -355,6 +363,8 @@
             <button data-style="bebas">Bebas</button>
             <button data-style="comic">Cómic</button>
             <button data-style="bloque">Bloque</button>
+            <button data-style="cursiva">Cursiva</button>
+            <label class="quick-music">🔠 Letra <select id="re-letra"><option value="normal">Normal</option><option value="grande">Grande</option><option value="enorme">Enorme</option></select></label>
             <label class="quick-music">🎨 Color <select id="re-look"><option value="natural">Natural</option><option value="calido">Cálido</option><option value="teal">Teal &amp; Orange (viajes)</option><option value="cine">Cine</option><option value="grano">Película con grano</option><option value="retro">Retro (CRT)</option><option value="bn">Blanco y negro</option></select></label>
             <label class="quick-music">🎵 Música <select id="re-music"><option value="">Sin música</option></select></label>
             <button data-background="desenfoque">Fondo desenfocado</button>
@@ -559,7 +569,7 @@
           <div>
             <h3>Frases de marca</h3>
             <p class="hint">Tu eslogan sale en el cierre del reel, y la IA usa tus frases en los textos y en las llamadas a la acción.</p>
-            <div id="phrases" class="phrases"></div>
+            <div id="brand-phrases" class="phrases"></div>
             <button class="ghost small" id="phrase-add" type="button">＋ Añadir frase</button>
           </div>
           <label class="check"><input type="checkbox" name="logo_corner"> Logo pequeño en la esquina</label>

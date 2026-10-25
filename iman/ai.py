@@ -17,18 +17,20 @@ OPENAI_MODEL = "gpt-4o"
 EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "color", "comentario",
                 "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                 "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque", "aparece",
-                "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas", "particulas", "bloques", "pexels", "lluvia", "capitulo"]
+                "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas", "particulas", "bloques", "pexels", "lluvia", "capitulo",
+                "bocadillo", "hueca", "marco", "progreso", "paso"]
 FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
                    "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                    "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque",
-                   "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas", "particulas", "bloques", "pexels", "lluvia", "capitulo")
+                   "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas", "particulas", "bloques", "pexels", "lluvia", "capitulo",
+                   "bocadillo", "hueca", "marco", "progreso", "paso")
 LISTA_LOOKS = ("checklist", "capitulos", "itinerario")
 TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
 LOOK_ENUM = ["", *TITULAR_LOOKS, *LISTA_LOOKS, "enfoque", *COLORS]
 
 CAPTION_STYLES = ["", "impacto", "editorial", "palabra", "karaoke", "caja", "neon", "gigante", "mezcla", "minimal",
-                  "elegante", "manuscrita", "marcador", "hormozi", "bebas", "comic", "bloque"]
+                  "elegante", "manuscrita", "marcador", "hormozi", "bebas", "comic", "bloque", "cursiva"]
 MUSIC_STYLES = ["", "tranquila", "alegre", "cinematica", "tropical", "phonk", "corporativa", "epica", "emotiva", "inspiracional", "suspense", "acustica", "romantica", "piano", "piano_alegre", "piano_cine", "synthwave", "trailer", "aventura", "hibrida", "documental", "festival", "misterio"]
 
 EDIT_SCHEMA = {
@@ -151,6 +153,15 @@ Tu trabajo:
    - "frase": una frase corta y emocional (1 a 4 palabras) a pantalla completa en letra manuscrita. Con look
      "enfoque", una afirmación de hasta 12 palabras en serif que entra desenfocada sobre fondo oscuro.
    - "dato": etiqueta pequeña junto a la cara con un dato (text: la cifra, "12"; subtitle: "horas de vídeo").
+   - "bocadillo": bocadillo oscuro arriba a la derecha con una cifra grande en color y su explicación debajo,
+     señalando al creador (text: la cifra o dato corto, "97" o "x2"; subtitle: 2 a 5 palabras, "euros de regalo").
+     Ideal para precios, plazas, cuántos y regalos. Como mucho dos por reel.
+   - "hueca": la palabra clave que acaba de decir, enorme en serif y solo con el contorno en color, cruzando la
+     pantalla (text: una sola palabra, p. ej. "Agotando"). Para una palabra con peso emocional. Una o dos por reel.
+   - "marco": marco fino blanco alrededor del vídeo con una palabra en mayúsculas serif arriba (text: 1 palabra,
+     p. ej. "MEJORARLO"), para un momento de afirmación o promesa. Dura hasta until_word.
+   - "progreso": caja oscura con una frase corta y una barra que se va llenando (text: lo que está pasando,
+     p. ej. "Editando tu vídeo…"), para cuando el creador cuenta que algo se está haciendo o cargando.
    - "contador": cuando el creador habla de cuánto dura la toma en bruto o del tiempo que ahorra; muestra la
      duración real de la toma bajando hasta la del reel. Deja text en "-" y title y subtitle vacíos.
    - "portada": el vídeo convertido en portada de revista (text: la cabecera, 1 palabra corta, p. ej. la
@@ -161,6 +172,10 @@ Tu trabajo:
      (text: "-"). Muy de vez en cuando.
    - "pagina": el vídeo encogido dentro de una hoja de revista (text: titular de la hoja, 2 a 6 palabras;
      subtitle: remate a mano o vacío).
+   - "paso": un paso de un tutorial o proceso (de 2 a 4 pasos por vídeo, cuando el creador explica cómo se hace
+     algo): tarjeta clara arriba con el título del paso (text: 2 a 6 palabras, sin número, se numera solo) y sus
+     puntos (subtitle: de 0 a 5 puntos separados por ";"; un punto que empieza por "x " sale tachado, para lo que
+     ya no hace falta), el vídeo encogido abajo y la palabra que se dice en grande. Dura hasta until_word.
    - "detras": una palabra gigante DETRÁS del creador, que le tapa parte de las letras (text: 1 palabra,
      la marca o el concepto clave; subtitle: 1 a 3 palabras encima o vacío; look: color o vacío). Es el efecto
      más llamativo: úsalo en el gancho o en el momento clave, una vez.
@@ -283,7 +298,8 @@ Tu trabajo:
    "gigante" (pocas palabras muy fuertes), "mezcla" (reflexiones, frases para guardar), "minimal" (lujo,
    moda, calma), "elegante" (bodas, hoteles, gastronomía), "manuscrita" (diario personal, cercanía),
    "marcador" (enseñar, datos, listas), "bebas" (deporte, motor, titulares), "comic" (humor, niños, juegos),
-   "bloque" (avisos, polémicas, opiniones fuertes).
+   "bloque" (avisos, polémicas, opiniones fuertes), "cursiva" (estilo de vida, belleza, hogar: palabras sueltas
+   en blanco y las clave en cursiva dorada).
 Respeta el idioma del vídeo. Sigue las instrucciones del creador si las hay."""
 
 REVISE_SYSTEM = EDIT_SYSTEM + """
@@ -359,7 +375,7 @@ def _ask_json(cfg: AIConfig, system: str, user: str, schema: dict, images: list[
     if cfg.provider == "claude":
         import anthropic
 
-        client = anthropic.Anthropic(api_key=cfg.anthropic_key)
+        client = anthropic.Anthropic(api_key=cfg.anthropic_key, timeout=150, max_retries=1)
         content = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": d}} for d in b64]
         resp = client.beta.messages.create(
             model=cfg.claude_model,
@@ -372,12 +388,16 @@ def _ask_json(cfg: AIConfig, system: str, user: str, schema: dict, images: list[
         )
         if resp.stop_reason == "refusal":
             raise RuntimeError("Claude no ha podido procesar este vídeo")
-        text = next(b.text for b in resp.content if b.type == "text")
+        if resp.stop_reason == "max_tokens":
+            raise RuntimeError("La respuesta de Claude se ha quedado a medias: prueba con un vídeo más corto")
+        text = next((b.text for b in resp.content if b.type == "text"), "")
+        if not text:
+            raise RuntimeError("Claude ha devuelto una respuesta vacía")
         return json.loads(text)
     if cfg.provider == "openai":
         from openai import OpenAI
 
-        client = OpenAI(api_key=cfg.openai_key)
+        client = OpenAI(api_key=cfg.openai_key, timeout=150, max_retries=1)
         resp = client.chat.completions.create(
             model=cfg.openai_model,
             messages=[{"role": "system", "content": system}, {"role": "user", "content": [
@@ -386,7 +406,12 @@ def _ask_json(cfg: AIConfig, system: str, user: str, schema: dict, images: list[
             ] if b64 else user}],
             response_format={"type": "json_schema", "json_schema": {"name": "respuesta", "schema": schema, "strict": True}},
         )
-        return json.loads(resp.choices[0].message.content)
+        choice = resp.choices[0]
+        if getattr(choice.message, "refusal", None) or not choice.message.content:
+            raise RuntimeError("ChatGPT no ha querido procesar este vídeo")
+        if choice.finish_reason == "length":
+            raise RuntimeError("La respuesta de ChatGPT se ha quedado a medias: prueba con un vídeo más corto")
+        return json.loads(choice.message.content)
     raise RuntimeError("No hay proveedor de IA configurado")
 
 
@@ -484,7 +509,7 @@ REVISE_SCHEMA = {
             "properties": {
                 "rhythm": {"type": "string", "enum": ["", "rapido", "dinamico", "natural", "sin_tocar"]},
                 "style": {"type": "string", "enum": ["", "impacto", "editorial", "palabra", "karaoke", "caja", "neon", "gigante",
-                                                    "mezcla", "minimal", "elegante", "manuscrita", "marcador", "hormozi", "bebas", "comic", "bloque"]},
+                                                    "mezcla", "minimal", "elegante", "manuscrita", "marcador", "hormozi", "bebas", "comic", "bloque", "cursiva"]},
             },
             "required": ["rhythm", "style"],
             "additionalProperties": False,
@@ -583,7 +608,14 @@ Cada guion lleva un BUCLE ABIERTO (open loop) para que la gente se quede hasta e
 - clues: una o dos frases en mitad del guion que recuerdan que la respuesta viene ("y ahora verás por qué esto
   importa", "pero espera, que lo mejor viene ahora").
 - payoff: la frase del final que lo resuelve, justo antes de la llamada a la acción.
-Las pistas y la solución tienen que estar dentro del script, con las palabras del creador.""" + "\n\n" + COPY_RULES
+Las pistas y la solución tienen que estar dentro del script, con las palabras del creador.
+
+Cuando el reel tiene que VENDER algo (un servicio, un viaje, una plaza, una cita), el guion sigue estos 7 pasos,
+en este orden y cada uno en una o dos frases: 1) GANCHO: promete el resultado en la primera frase ("así llenas
+tu agenda"). 2) PROBLEMA: nómbralo con las palabras del cliente. 3) AGITACIÓN: hazle sentir lo que le cuesta
+seguir así. 4) INTRIGA: deja algo abierto para que se quede hasta el final (es el bucle abierto). 5) SOLUCIÓN:
+presenta el servicio como la salida, sin vender humo. 6) EL FALLO: el error que comete la mayoría. 7) CIERRE:
+una sola acción clara ("comenta VIAJE y te cuento cómo"). Si el reel no vende nada, no fuerces los pasos.""" + "\n\n" + COPY_RULES
 
 
 def generate_ideas(cfg: AIConfig, topic: str, audience: str = "", voice_samples: str = "", n: int = 3) -> list[dict]:
@@ -686,6 +718,9 @@ Usa el contacto y la llamada a la acción del creador si te los pasa; no invente
 Cada red con su forma:
 - instagram: primera línea que engancha (no repitas el título del vídeo), 2 a 4 frases cortas de valor y la
   llamada a la acción; máx. 600 caracteres; como mucho 2 emojis; 5 a 8 hashtags de nicho y generales.
+  Las descripciones de Instagram salen en Google: la palabra clave por la que alguien buscaría esto (p. ej.
+  "viaje a Japón en grupo") va en los primeros 50 caracteres, de forma natural, y al menos una frase responde
+  a esa búsqueda tal cual la escribiría la persona (dónde, cuánto, cómo).
 - tiktok: muy corto (máx. 150 caracteres), tono directo, con una pregunta para comentarios; 3 a 5 hashtags.
 - youtube (Shorts): title de máx. 70 caracteres con la palabra clave al principio; text de 2 a 3 frases con el
   enlace o contacto si lo hay; 3 hashtags.
@@ -705,8 +740,9 @@ def humanize(text: str) -> str:
     """Quita las marcas típicas de texto de IA que se cuelan aunque se pida que no: rayas (—) y espacios dobles."""
     import re
 
-    text = re.sub(r"\s*[—–]\s*", ", ", text)
+    text = re.sub(r"\s*—\s*|\s+[–-]\s+", ", ", text)
     text = re.sub(r",\s*,", ",", text)
+    text = re.sub(r"([.!?:;])\s*,\s*", r"\1 ", text)
     return re.sub(r"[ \t]{2,}", " ", text).strip()
 
 
@@ -724,9 +760,9 @@ def post_copy(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "", ct
     if cfg.provider == "iman":
         from . import cloud
 
-        data = cloud.call(cfg, "post", {"transcript": transcript[:6000], "hook": hook, "pack": pack,
-                                        "cta": cta, "handle": handle, "business": business, "contact": contact,
-                                        "name": name, "phrases": phrases})
+        data = cloud.call(cfg, "post", {"transcript": transcript[:6000], "hook": hook[:200], "pack": pack[:20],
+                                        "cta": cta[:60], "handle": handle[:60], "business": business[:300],
+                                        "contact": contact[:60], "name": name[:60], "phrases": phrases[:3000]})
     else:
         user = f"LO QUE DICE EL VÍDEO:\n{transcript[:6000]}\n\nTítulo en pantalla: {hook}"
         if name or business:
@@ -742,6 +778,8 @@ def post_copy(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "", ct
         if phrases:
             user += f"\n\n{phrases}"
         data = _ask_json(cfg, POST_SYSTEM, user, POST_SCHEMA)
+    if isinstance(data.get("platforms"), dict):  # el servidor de Imán ya lo devuelve preparado
+        return data
     if "caption" in data and "instagram" not in data:  # servidor antiguo: un solo texto
         data = {"instagram": {"text": data["caption"], "hashtags": data.get("hashtags", [])}}
     out = {"stage": str(data.get("stage", "")), "funnel": str(data.get("funnel", "")).strip(), "platforms": {}}
@@ -986,7 +1024,15 @@ def error_message(e: Exception) -> str:
     """Lo que le decimos a la persona cuando falla la IA, en vez de un «Error 500»."""
     msg = str(e)
     if type(e).__name__ == "CloudError":
-        return SETUP_AI if msg.startswith(("No hay conexión", "El servidor de Imán respondió")) else msg
+        code = getattr(e, "code", 0)
+        if code in (401, 403) or (code == 0 and not getattr(e, "licensed", True)):
+            return SETUP_AI
+        if code == 0:
+            return ("No hay conexión con el servidor de Imán. Revisa internet y vuelve a probar. Si sigue así, "
+                    "puedes usar tu propia clave en Ajustes › IA que edita.")
+        if code >= 500 or code == 404:
+            return "El servidor de Imán no responde ahora mismo. Vuelve a probar en un momento."
+        return msg
     origin = type(e).__module__.split(".")[0]
     if origin in ("anthropic", "openai"):
         who = "Claude" if origin == "anthropic" else "ChatGPT"
@@ -1104,7 +1150,8 @@ def comment_reel(cfg: AIConfig, comment: str, author: str = "", image: bytes | N
         from . import cloud
 
         return cloud.call(cfg, "comentario", {"comment": comment[:3000], "author": author[:60],
-                                              "image": base64.b64encode(image).decode() if image else ""})
+                                              "image": base64.b64encode(image).decode() if image else "",
+                                              "voice_samples": voice_samples[:6000]})
     user = f"COMENTARIO: {comment or '(en la captura)'}"
     if author:
         user += f"\nUSUARIO: {author}"

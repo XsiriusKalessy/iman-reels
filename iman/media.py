@@ -150,8 +150,9 @@ SIZES = {"1080": (1080, 1920), "4k": (2160, 3840)}
 
 
 def _filter_path(p: Path) -> str:
-    # Escapado para usar rutas dentro de un filtergraph.
-    return str(p).replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
+    # Escapado para usar rutas dentro de un filtergraph (va entre comillas simples: la comilla se cierra,
+    # se escapa y se vuelve a abrir, y el segundo nivel de ffmpeg vuelve a comerse una barra).
+    return str(p).replace("\\", "/").replace(":", r"\:").replace("'", r"'\\\''")
 
 
 def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx]", src: str = "[0:v]",
@@ -161,6 +162,7 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx
     - bruto: tarjeta inclinada con la toma original sin cortar, arriba a la derecha.
     - fantasma: una copia del propio reel, un instante retrasada y semitransparente.
     - pagina: el reel encogido sobre una hoja de revista color crema.
+    - paso: el reel encogido en un marco blanco sobre fondo azul noche, bajo la tarjeta del paso (texto en ASS).
     """
     k_scale = W / 1080
     for k, op in enumerate(ops):
@@ -193,6 +195,16 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx
             parts.append(f"[p{k}]trim=start={a:.3f}:end={b:.3f},scale={pw}:{ph}:force_original_aspect_ratio=increase,"
                          f"crop={pw}:{ph},setsar=1[pv{k}]")
             parts.append(f"[bgp{k}][pv{k}]overlay={(W - pw) // 2}:{int(560 * k_scale)}:eof_action=pass[pg{k}]")
+            parts.append(f"[m{k}][pg{k}]overlay=0:0:{on}:eof_action=pass[o{k}]")
+        elif op.kind == "paso":
+            pw, ph = int(820 * k_scale) // 2 * 2, int(600 * k_scale) // 2 * 2
+            brd = int(8 * k_scale)
+            parts.append(f"{cur}split[m{k}][p{k}]")
+            parts.append(f"color=c=0x1B2A44:s={W}x{H}:r=30:d={b - a:.3f},setpts=PTS+{a:.3f}/TB[bgp{k}]")
+            # Recorta más arriba del centro: ahí suele estar la cara.
+            parts.append(f"[p{k}]trim=start={a:.3f}:end={b:.3f},scale={pw}:{ph}:force_original_aspect_ratio=increase,"
+                         f"crop={pw}:{ph}:(iw-{pw})/2:(ih-{ph})*0.3,setsar=1,pad={pw + 2 * brd}:{ph + 2 * brd}:{brd}:{brd}:white[pv{k}]")
+            parts.append(f"[bgp{k}][pv{k}]overlay={(W - pw) // 2 - brd}:{int(1120 * k_scale)}:eof_action=pass[pg{k}]")
             parts.append(f"[m{k}][pg{k}]overlay=0:0:{on}:eof_action=pass[o{k}]")
         elif op.kind == "endcard":
             parts.append(f"color=c=0x{op.color.lstrip('#')}:s={W}x{H}:r=30:d={b - a:.3f},"
@@ -295,8 +307,9 @@ def _hush(hush: list[tuple[float, float]] | None) -> str:
     """Silencio dramático: la música se corta en seco en esos tramos (solo queda la voz)."""
     if not hush:
         return ""
-    cond = "+".join(f"between(t,{a:.3f},{b:.3f})" for a, b in hush)
-    return f",volume='if({cond},0,1)':eval=frame"
+    # Rampas de 40 ms a la entrada y a la salida de cada tramo: un corte en seco hace «clic».
+    expr = "*".join(f"(1-clip((t-{a:.3f})/0.04,0,1)+clip((t-{b:.3f})/0.04,0,1))" for a, b in hush)
+    return f",volume='{expr}':eval=frame"
 
 
 def build_filtergraph(
@@ -319,6 +332,7 @@ def build_filtergraph(
     `sfx_bed`: pista con los efectos de sonido; `music`: tu música, que baja sola cuando hablas.
     `punch`: zoom rápido de entrada en el primer medio segundo (que nada esté quieto al empezar)."""
     W, H = SIZES[size]
+    pad = float(tail)  # «tail» se reutiliza más abajo como trozo de filtergraph
     zooms = zooms or [False] * len(spans)
     w0, h0 = info.width - info.width % 2, info.height - info.height % 2
     parts = []
@@ -393,8 +407,11 @@ def build_filtergraph(
         audio = "[vo]"
     if music is not None:
         # La música, en bucle y baja; se aparta sola cuando hablas (sidechain con la voz).
-        parts.append(f"[{nxt}:a]aloop=loop=-1:size=2000000000,aresample=48000,aformat=channel_layouts=stereo,"
-                     f"volume=0.22,afade=t=in:d=0.6{_hush(hush)}[mu]")
+        reel_len = sum(sp.duration for sp in spans) + pad
+        # En bucle solo lo que dura el reel (una canción larga no se carga entera en memoria) y con fundido al final.
+        parts.append(f"[{nxt}:a]aloop=loop=-1:size={int(48000 * (reel_len + 1)):d},aresample=48000,"
+                     f"aformat=channel_layouts=stereo,atrim=duration={reel_len:.3f},"
+                     f"volume=0.22,afade=t=in:d=0.6,afade=t=out:st={max(0.0, reel_len - 0.9):.3f}:d=0.9{_hush(hush)}[mu]")
         parts.append(f"{audio}asplit[vk][vs]")
         parts.append("[mu][vs]sidechaincompress=threshold=0.02:ratio=6:attack=30:release=500[md]")
         parts.append("[vk][md]amix=inputs=2:duration=first:normalize=0[vm]")

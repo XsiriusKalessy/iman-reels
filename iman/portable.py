@@ -46,20 +46,33 @@ def import_(raw: bytes) -> dict:
         raise ImportError_("El archivo es demasiado grande para ser unos ajustes de Imán")
     try:
         z = zipfile.ZipFile(io.BytesIO(raw))
+        if any(i.file_size > MAX_SIZE for i in z.infolist()):
+            raise ImportError_("El archivo es demasiado grande para ser unos ajustes de Imán")
         payload = json.loads(z.read("ajustes.json"))
     except (zipfile.BadZipFile, KeyError, ValueError) as e:
         raise ImportError_("Este archivo no son unos ajustes de Imán") from e
-    data = payload.get("ajustes") or {}
+    data = payload.get("ajustes") if isinstance(payload, dict) else None
+    if not isinstance(data, dict):
+        raise ImportError_("Este archivo no son unos ajustes de Imán")
     updates = {k: data[k] for k in PREFS + SECRETS if k in data and data[k] not in (None, "")}
+    updates = {k: v for k, v in updates.items()
+               if (k == "memory" and isinstance(v, list)) or (k != "memory" and isinstance(v, str))}
+    if "memory" in updates:
+        updates["memory"] = [" ".join(str(m).split())[:300] for m in updates["memory"] if str(m).strip()][:config.MEMORY_MAX]
+    for k in SECRETS:
+        if k in updates:
+            updates[k] = updates[k].strip()[:300]
     config.save(updates)
     got = {"ajustes": True, "marca": False, "logo": False, "claves": any(k in updates for k in SECRETS), "licencia": False}
 
     names = set(z.namelist())
     if "marca/brand.json" in names:
         info = json.loads(z.read("marca/brand.json"))
+        if not isinstance(info, dict):
+            raise ImportError_("La marca de ese archivo está rota")
         # Se suma a tu marca: lo que trae el archivo manda, y lo que no trae (tu fuente, tu logo…) se queda.
         mine = asdict(brand.load())
-        info = {**mine, **{k: v for k, v in info.items() if v not in ("", None, []) and k in mine}}
+        info = {**mine, **{k: v for k, v in brand.clean(info).items() if v not in ("", None, [])}}
         brand.save(brand.Brand(**info))
         got["marca"] = True
     if "marca/logo.png" in names:

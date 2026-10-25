@@ -40,7 +40,10 @@ def _cfg() -> ai.AIConfig:
 
 def _count(bucket: str, limit: int, msg: str) -> None:
     with _lock:
-        k = (bucket, date.today().isoformat())
+        today = date.today().isoformat()
+        for old in [k for k in _usage if k[1] != today]:  # los contadores de otros días sobran
+            del _usage[old]
+        k = (bucket, today)
         _usage[k] = _usage.get(k, 0) + 1
         if _usage[k] > limit:
             raise HTTPException(429, msg)
@@ -54,8 +57,17 @@ def _check(key: str, instance: str, request: Request) -> None:
         return
     now = time.time()
     if _valid_until.get(key, 0) < now:
-        res = license.validate({"license_key": key, "license_instance": instance, "license_checked": 0})
+        try:
+            res = license.validate({"license_key": key, "license_instance": instance, "license_checked": 0})
+        except license.LicenseError:
+            res = {}
+        if not res:  # la tienda de licencias no contesta: quien ya estaba validado sigue un rato
+            if key in _valid_until:
+                _valid_until[key] = now + 900
+                return
+            raise HTTPException(503, "No se ha podido comprobar tu licencia. Vuelve a probar en un momento.")
         if not res.get("license_valid"):
+            _valid_until.pop(key, None)
             raise HTTPException(403, "Licencia no válida o caducada")
         _valid_until[key] = now + 3600
     if license.plan({"license_key": key}) == "dueno":  # el dueño de Imán, sin límite diario
@@ -142,6 +154,7 @@ class CommentIn(BaseModel):
     comment: str = Field("", max_length=3000)
     author: str = Field("", max_length=60)
     image: str = Field("", max_length=4_000_000)
+    voice_samples: str = Field("", max_length=6000)
 
 
 @app.post("/v1/comentario")
@@ -149,8 +162,11 @@ def comentario(request: Request, body: CommentIn, x_iman_license: str = Header("
     import base64
 
     _check(x_iman_license, x_iman_instance, request)
-    image = base64.b64decode(body.image) if body.image else None
-    return ai.comment_reel(_cfg(), body.comment, body.author, image)
+    try:
+        image = base64.b64decode(body.image, validate=True) if body.image else None
+    except ValueError:
+        raise HTTPException(422, "La captura no es una imagen válida") from None
+    return ai.comment_reel(_cfg(), body.comment, body.author, image, body.voice_samples)
 
 
 class BrandIn(BaseModel):

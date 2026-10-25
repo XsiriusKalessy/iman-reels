@@ -1,11 +1,13 @@
 # PyInstaller: app de escritorio de Imán (macOS .app y Windows).
 # Uso: pyinstaller packaging/iman.spec   (con ffmpeg y ffprobe en packaging/bin/)
+import re
 import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 root = Path(SPECPATH).parent
+version = re.search(r'__version__ = "([^"]+)"', (root / "iman" / "__init__.py").read_text(encoding="utf-8")).group(1)
 bin_dir = Path(SPECPATH) / "bin"
 exe = ".exe" if sys.platform == "win32" else ""
 
@@ -34,5 +36,6 @@ coll = COLLECT(exe_, a.binaries, a.datas, name="Iman")
 if sys.platform == "darwin":
     app = BUNDLE(coll, name="Imán.app", bundle_identifier="com.imanreels.app",
                  icon=str(icon_mac) if icon_mac.exists() else None,
-                 info_plist={"CFBundleShortVersionString": "0.1.0", "LSUIElement": False,
+                 info_plist={"CFBundleShortVersionString": version.split("-")[0], "CFBundleVersion": version.split("-")[0],
+                             "LSUIElement": False,
                              "NSHighResolutionCapable": True})

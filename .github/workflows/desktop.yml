@@ -70,7 +70,10 @@ jobs:
       - name: Comprobar el ejecutable
         if: runner.os == 'Windows'
         timeout-minutes: 15
-        run: dist\Iman\Iman.exe --smoke --transcribe
+        # Es una app sin consola: PowerShell no espera ni recoge su salida si no se le pide.
+        run: |
+          $p = Start-Process -FilePath "dist\Iman\Iman.exe" -ArgumentList "--smoke","--transcribe" -Wait -PassThru -NoNewWindow
+          exit $p.ExitCode
       - name: Comprobar la app
         if: runner.os == 'macOS'
         timeout-minutes: 15
@@ -81,6 +84,7 @@ jobs:
         run: |
           choco install innosetup -y --no-progress
           iscc packaging\iman.iss
+          Move-Item packaging\Output\*.exe .
       - name: DMG de Mac
         if: runner.os == 'macOS'
         run: |
@@ -91,8 +95,9 @@ jobs:
         with:
           name: iman-${{ matrix.name }}
           path: |
-            packaging/Output/*.exe
+            *.exe
             *.dmg
+          if-no-files-found: error
 
   # Al etiquetar una versión (v0.2.0…), sube los instaladores al repositorio público de descargas.
   # La app mira ahí si hay versión nueva. Necesita el secreto RELEASES_TOKEN con permiso sobre ese repositorio.
@@ -111,7 +116,8 @@ jobs:
           NOTES: ${{ github.event.head_commit.message }}
         run: |
           if [ -z "$GH_TOKEN" ]; then echo "Falta el secreto RELEASES_TOKEN: no se publica."; exit 0; fi
-          gh release create "${{ github.ref_name }}" out/* \
+          ls -R out
+          gh release create "${{ github.ref_name }}" $(find out -type f \( -name '*.exe' -o -name '*.dmg' \)) \
             --repo XsiriusKalessy/iman-descargas \
             --title "Imán ${{ github.ref_name }}" \
             --notes "${NOTES:-Mejoras y correcciones.}"

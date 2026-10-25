@@ -517,7 +517,8 @@ def test_everything_sound_and_new_effects_together(sample, tmp_path):
                        plan=plan)
     # El anillo pasa por detrás de la persona: va en dos pasadas y el grafo de audio está en la primera.
     graph = "".join(p.read_text(encoding="utf-8") for p in (tmp_path / "w").glob("*.filters.txt"))
-    assert "between(t," in graph and "sidechaincompress" in graph and "zoompan" in graph
+    # El silencio dramático entra y sale con rampa (clip), no con un corte en seco (between).
+    assert "clip((t-" in graph and "sidechaincompress" in graph and "zoompan" in graph
     assert abs(media.probe(res.video).duration - res.duration_out) < 0.3
 
 
@@ -1323,3 +1324,60 @@ def test_copy_rules_humanize_and_owner_licence(tmp_path, monkeypatch):
     st = license.status({"license_key": beta, "license_valid": False, "license_expires": "2026-01-01"})
     assert not st["licensed"] and st["expired"]
     assert not license.status({})["expired"]
+
+
+def test_audit_fixes_and_guinda_ideas(tmp_path, monkeypatch):
+    """Lo de la auditoría del 25 de octubre y los efectos sacados de las capturas: letra grande, bocadillo,
+    hueca, marco, informe de arreglos, servidor solo local y rutas seguras."""
+    from fastapi.testclient import TestClient
+
+    from iman import captions, config, effects, server, textfit
+    from iman.models import Word
+
+    monkeypatch.setattr(config, "HOME", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    monkeypatch.setattr(server, "PHOTOS_DIR", tmp_path / "fotos")
+    big = captions.sized(captions.STYLES["impacto"], "enorme")
+    assert big.size > captions.STYLES["impacto"].size and big.max_words == 1
+    assert captions.sized(captions.STYLES["impacto"], "normal") is captions.STYLES["impacto"]
+    words = [Word("hola", 0.0, 0.4), Word("agotando", 0.5, 1.0), Word("ya", 1.1, 1.4), Word("fin", 1.5, 1.9)]
+    clock = effects.WordClock(words, [0, 1, 2, 3])
+    assert clock.at(-1) is None and clock.at(99) is None and clock.at(1) == 0.5
+    active = [{"type": "hueca", "word": 1, "text": "Agotando"}, {"type": "bocadillo", "word": 2, "text": "97", "subtitle": "euros"},
+              {"type": "marco", "word": 3, "text": "mejorarlo"}, {"type": "objeto", "word": 2, "text": "🔥"}]
+    effects.assign_next(active, clock)
+    assert active[0]["_next"] == 1.1 and active[1]["_next"] == 1.5  # el objeto no acorta a nadie
+    lines, windows = effects.build_effects(active, clock, captions.STYLES["impacto"], 3.0)
+    assert any("MEJORARLO" in ln for ln in lines) and any("Agotando" in ln for ln in lines)
+    assert len(windows) == 1  # solo «hueca» oculta los subtítulos
+    # un efecto roto no tumba el montaje
+    lines2, _ = effects.build_effects([{"type": "cifra", "word": None}, {"type": "lista", "items": "mal"}], clock,
+                                      captions.STYLES["impacto"], 3.0)
+    assert lines2 == []
+    from iman import pipeline
+
+    fixes = pipeline._fixes(30.0, 20.0, {1, 2}, {3.0, 6.0}, active, clock)
+    assert fixes and "10 s" in fixes[0] and any("cambio de plano" in f for f in fixes)
+    # Ideas del reel de Lily: estilo cursiva, paso de tutorial (vídeo encogido) y barra de progreso.
+    cur = captions.STYLES["cursiva"]
+    assert cur.alt_font == "Cursiva Iman" and (textfit.FONTS_DIR / textfit.FILES["Cursiva Iman"]).exists()
+    steps = [{"type": "paso", "word": 1, "text": "Pones tu vídeo", "subtitle": "mi historia; x editar a mano", "_n": 2},
+             {"type": "progreso", "word": 3, "text": "Editando…"}]
+    lines3, win3 = effects.build_effects(steps, clock, cur, 3.0)
+    assert any("2 · Pones tu vídeo" in ln for ln in lines3) and any("\\s1" in ln and "editar a mano" in ln for ln in lines3)
+    assert len(win3) == 1 and [op.kind for op in effects.video_ops(steps, clock, 3.0)] == ["paso"]
+    parts = []
+    media._video_overlays(parts, effects.video_ops(steps, clock, 3.0), 1080, 1920)
+    assert any("0x1B2A44" in pt for pt in parts) and any("pad=836:616" in pt for pt in parts)
+    # el servidor solo atiende a este ordenador y a nombres de archivo dentro de la carpeta
+    c = TestClient(server.app, raise_server_exceptions=False)
+    assert c.get("/api/options").status_code == 200
+    assert c.get("/api/options", headers={"host": "evil.example"}).status_code == 403
+    assert c.post("/api/settings", json={"ligero": "si"}, headers={"origin": "https://evil.example"}).status_code == 403
+    assert c.post("/api/settings", json={"ligero": "si"}, headers={"origin": "http://localhost:8765"}).status_code == 200
+    assert c.post("/api/settings", json={"provider": "raro"}).status_code == 400
+    for bad in ("../x.png", "a/b.png", "c:x.png", ".hidden"):
+        assert c.get(f"/api/jobs/abc123/kit/{bad}").status_code == 404
+    assert c.get("/api/jobs/abc123/cover.jpg?t=nan").status_code == 404
+    assert c.get("/api/jobs/a%2F..%2Fb/reel.mp4").status_code == 404

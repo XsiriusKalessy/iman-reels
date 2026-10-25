@@ -1,5 +1,5 @@
 ; Instalador de Windows (Inno Setup). Lo genera el flujo de GitHub Actions.
-#define Version GetEnv("IMAN_VERSION")
+#define Version StringChange(GetEnv("IMAN_VERSION"), "v", "")
 
 [Setup]
 AppId={{6F3C2A91-5D1E-4B7A-9C3E-1A2B3C4D5E6F}

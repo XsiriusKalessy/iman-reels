@@ -8,7 +8,7 @@ def test_cloud_down_says_what_to_set_up(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "load", lambda: {**config.DEFAULTS, "provider": "iman"})
 
     def down(*a, **k):
-        raise cloud.CloudError("No hay conexión con el servidor de Imán")
+        raise cloud.CloudError("No hay conexión con el servidor de Imán", 0, licensed=False)
 
     monkeypatch.setattr(cloud, "call", down)
     r = TestClient(server.app, raise_server_exceptions=False).post("/api/ideas", json={"topic": "Japón", "audience": "grupo"})
@@ -27,4 +27,9 @@ def test_messages_for_ai_errors():
         __module__ = "anthropic._exceptions"
 
     assert "no es válida" in ai.error_message(AuthenticationError("bad key"))
-    assert ai.error_message(cloud.CloudError("Licencia no válida o caducada")) == "Licencia no válida o caducada"
+    assert ai.error_message(cloud.CloudError("Licencia no válida o caducada", 403)) == ai.SETUP_AI
+    assert ai.error_message(cloud.CloudError("Límite", 429)) == "Límite"
+    # Con licencia y sin red: no se manda a la persona a pagar su propia clave, se le dice que es la conexión
+    assert "Revisa internet" in ai.error_message(cloud.CloudError("No hay conexión con el servidor de Imán", 0))
+    assert "no responde" in ai.error_message(cloud.CloudError("El servidor de Imán respondió 502", 502))
+    assert ai.humanize("Japón 18–29 nov — con Elena") == "Japón 18–29 nov, con Elena"

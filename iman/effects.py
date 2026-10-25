@@ -10,9 +10,13 @@ import bisect
 
 from dataclasses import dataclass
 
+import logging
+
 from . import textfit
 from .captions import H, W, Style, _esc, _ts, rgb
 from .models import Span, Word
+
+_log = logging.getLogger(__name__)
 
 LISTA = "lista"
 PALABRA = "palabra"
@@ -60,10 +64,10 @@ class WordClock:
         self.kept_idx = kept_idx
 
     def at(self, orig_idx: int) -> float | None:
-        for w, i in zip(self.kept, self.kept_idx):
-            if i >= orig_idx:
-                return w.start
-        return None
+        if orig_idx < 0:
+            return None
+        k = bisect.bisect_left(self.kept_idx, orig_idx)
+        return self.kept[k].start if k < len(self.kept) else None
 
     def end_of(self, orig_idx: int) -> float | None:
         best = None
@@ -73,6 +77,29 @@ class WordClock:
             else:
                 break
         return best
+
+
+def word_of(fx: dict) -> int:
+    """Índice de la palabra donde empieza un efecto (o el de su primer elemento); -1 si no tiene o está roto."""
+    w = fx.get("word")
+    items = fx.get("items")
+    if w is None and isinstance(items, list) and items and isinstance(items[0], dict):
+        w = items[0].get("at_word")
+    try:
+        return int(w)
+    except (TypeError, ValueError):
+        return -1
+
+
+def assign_next(effects: list[dict], clock: WordClock) -> None:
+    """Guarda en cada efecto cuándo empieza el siguiente (`_next`), una sola vez para las tres pasadas
+    (subtítulos delante, subtítulos detrás y vídeo): si cada una lo calculara a su manera, el anillo o el
+    confeti de delante y de detrás no coincidirían."""
+    starts = [clock.at(word_of(fx)) for fx in effects]
+    for i, fx in enumerate(effects):
+        later = [t for j, t in enumerate(starts) if j != i and t is not None and starts[i] is not None
+                 and t > starts[i] and not _floats(effects[j])]
+        fx["_next"] = min(later) if later else None
 
 
 def _dim(start: float, end: float, alpha: str = "60") -> str:
@@ -328,12 +355,15 @@ def _rect(x: float, y: float, w: float, h: float, r: float = 18) -> str:
 
 
 def _span(effect: dict, clock: WordClock, duration: float, default: float, minimum: float) -> tuple[float, float] | None:
-    start = clock.at(int(effect.get("word", -1)))
+    start = clock.at(word_of(effect))
     if start is None:
         return None
     end = None
     if effect.get("until_word") is not None:
-        end = clock.end_of(int(effect["until_word"]))
+        try:
+            end = clock.end_of(int(effect["until_word"]))
+        except (TypeError, ValueError):
+            end = None
     end = end if end and end > start + minimum else start + default
     # Nunca pisa al efecto siguiente.
     nxt = effect.get("_next")
@@ -620,6 +650,112 @@ def dato_events(effect: dict, clock: WordClock, style: Style, duration: float) -
     return lines, None
 
 
+def bocadillo_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Bocadillo oscuro con una cifra grande en color y su explicación debajo, con la puntita señalando al creador.
+    Arriba a la derecha, sin tapar la cara."""
+    span = _span(effect, clock, duration, 2.4, 1.4)
+    if not span:
+        return [], None
+    start, end = span
+    num = str(effect.get("text", "")).strip()[:12]
+    sub = str(effect.get("subtitle", "")).strip()[:40]
+    if not num:
+        return [], None
+    fs_num = textfit.fit(num, "Figtree ExtraBold", 150, 420)
+    rows = _wrap(sub, "Figtree ExtraBold", 44, 440)[:2] if sub else []
+    w = max(textfit.width(num, "Figtree ExtraBold", fs_num), *(textfit.width(r, "Figtree ExtraBold", 44) for r in rows), 200) + 90
+    h = fs_num * 1.15 + len(rows) * 52 + 60
+    x, y = min(W - 60 - w, 560), 330
+    t = f"{_ts(start)},{_ts(end)}"
+    pop = "\\fscx60\\fscy60\\t(0,160,\\fscx104\\fscy104)\\t(160,240,\\fscx100\\fscy100)\\fad(0,180)"
+    cx = x + w / 2
+    tip = f"m {cx - 26:.0f} {h:.0f} l {cx + 26:.0f} {h:.0f} {cx:.0f} {h + 30:.0f}"
+    lines = [
+        f"Dialogue: 4,{t},Sub,,0,0,0,,{{\\an7\\pos({x:.0f},{y}){pop}\\bord5\\shad0\\1c{rgb('#15161A')}&"
+        f"\\3c{_accent(style)}&\\p1}}{_rect(0, 0, w, h, 30)}",
+        f"Dialogue: 4,{t},Sub,,0,0,0,,{{\\an7\\pos({x:.0f},{y}){pop}\\bord0\\shad0\\1c{_accent(style)}&\\p1}}{tip}",
+        f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an8\\pos({cx:.0f},{y + 22}){pop}\\fnFigtree ExtraBold\\fs{fs_num:.0f}"
+        f"\\bord0\\shad0\\c{_accent(style)}&}}{_esc(num)}",
+    ]
+    for k, r in enumerate(rows):
+        lines.append(f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an8\\pos({cx:.0f},{y + 30 + fs_num * 1.1 + k * 52:.0f}){pop}"
+                     f"\\fnFigtree ExtraBold\\fs44\\bord0\\shad0\\c&H00FFFFFF&}}{_esc(r)}")
+    return lines, None
+
+
+def hueca_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Una palabra enorme en serif, solo el contorno en color, cruzando la pantalla sobre el vídeo oscurecido."""
+    span = _span(effect, clock, duration, 1.6, 1.0)
+    if not span:
+        return [], None
+    start, end = span
+    text = str(effect.get("text", "")).strip()[:16]
+    if not text:
+        w = next((w for w, i in zip(clock.kept, clock.kept_idx) if i >= word_of(effect)), None)
+        text = w.text.strip(".,;:!?¡¿") if w else ""
+    if not text:
+        return [], None
+    text = text[:1].upper() + text[1:]
+    fs = textfit.fit(text, "Playfair Display ExtraBold", 330, 1040)
+    acc = _accent(style)
+    return [
+        _dim(start, end, "70"),
+        f"Dialogue: 6,{_ts(start)},{_ts(end)},Sub,,0,0,0,,{{\\an5\\pos(540,1060)\\fnPlayfair Display ExtraBold"
+        f"\\fs{fs:.0f}\\bord5\\shad0\\1a&HFF&\\3c{acc}&\\fad(0,150)\\fscx85\\fscy85"
+        f"\\t(0,220,\\fscx100\\fscy100)}}{_esc(text)}",
+        # La primera letra, rellena: lo que hace que la palabra parezca escrita a mano con el acento
+        f"Dialogue: 6,{_ts(start)},{_ts(end)},Sub,,0,0,0,,{{\\an5\\pos(540,1060)\\fnPlayfair Display ExtraBold"
+        f"\\fs{fs:.0f}\\bord5\\shad0\\3c{acc}&\\fad(0,150)\\fscx85\\fscy85\\t(0,220,\\fscx100\\fscy100)}}"
+        f"{{\\1c{acc}&}}{_esc(text[0])}{{\\1a&HFF&}}{_esc(text[1:])}",
+    ], Window(start, end)
+
+
+def marco_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Marco fino blanco alrededor del vídeo y una palabra en serif mayúsculas arriba, como una portada editorial."""
+    span = _span(effect, clock, duration, 2.6, 1.6)
+    if not span:
+        return [], None
+    start, end = span
+    text = str(effect.get("text", "")).strip().upper()[:14]
+    t = f"{_ts(start)},{_ts(end)}"
+    m, w, h = 40, W - 80, H - 480
+    frame = (f"m {m} {m} l {m + w} {m} {m + w} {m + h} {m} {m + h} {m} {m} "
+             f"m {m + 4} {m + 4} l {m + 4} {m + h - 4} {m + w - 4} {m + h - 4} {m + w - 4} {m + 4} {m + 4} {m + 4}")
+    lines = [f"Dialogue: 4,{t},Sub,,0,0,0,,{{\\an7\\pos(0,0)\\bord0\\shad0\\1c&H00FFFFFF&\\fad(200,200)\\p1}}{frame}"]
+    if text:
+        fs = textfit.fit(text, "Playfair Display ExtraBold", 190, 960)
+        lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an8\\pos(540,{m + 60})\\fnPlayfair Display ExtraBold\\fs{fs:.0f}"
+                     f"\\bord0\\shad0\\c&H00FFFFFF&\\fad(200,200)\\fscy80\\t(0,260,\\fscy100)}}{_esc(text)}")
+    return lines, None
+
+
+def progreso_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Caja oscura con una frase y una barra de progreso que se llena durante el efecto, como una app cargando."""
+    span = _span(effect, clock, duration, 2.4, 1.4)
+    if not span:
+        return [], None
+    start, end = span
+    text = str(effect.get("text", "")).strip()[:40] or "Cargando…"
+    t = f"{_ts(start)},{_ts(end)}"
+    w, h, x, y = 720, 160, (W - 720) / 2, 1500  # por debajo de los subtítulos
+    lines = [f"Dialogue: 4,{t},Sub,,0,0,0,,{{\\an7\\pos({x:.0f},{y})\\bord0\\shad0\\1c&H00262626&\\alpha&H30&\\fad(150,200)\\p1}}"
+             f"{_rect(0, 0, w, h, 10)}",
+             f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an5\\pos(540,{y + 50})\\fnFigtree SemiBold\\fs34\\bord0\\shad0\\c&H00FFFFFF&"
+             f"\\fad(150,200)}}{_esc(text)}",
+             f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an7\\pos({x + 40:.0f},{y + 100})\\bord0\\shad0\\1c&H00555555&\\fad(150,200)\\p1}}"
+             f"{_rect(0, 0, w - 80, 16, 6)}"]
+    # La barra crece a saltos pequeños: no llega al 100 % hasta el final.
+    steps = 16
+    run = end - start - 0.25
+    for k in range(1, steps + 1):
+        a = start + run * (k - 1) / steps
+        b = start + run * k / steps if k < steps else end
+        bw = (w - 80) * (0.08 + 0.9 * (k / steps) ** 0.8)
+        lines.append(f"Dialogue: 6,{_ts(a)},{_ts(b)},Sub,,0,0,0,,{{\\an7\\pos({x + 40:.0f},{y + 100})\\bord0\\shad0"
+                     f"\\1c{_accent(style)}&{'\\fad(0,200)' if k == steps else ''}\\p1}}{_rect(0, 0, bw, 16, 6)}")
+    return lines, None
+
+
 def frase_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
     """Frase corta a pantalla completa en letra manuscrita; las palabras entran al ritmo de la voz."""
     span = _span(effect, clock, duration, 1.8, 1.2)
@@ -665,13 +801,14 @@ class SegOp:
 
 
 def _seg_spans(effects: list[dict], clock: WordClock, duration: float):
-    starts = [clock.at(int(fx.get("word", -1))) for fx in effects or []]
-    for i, fx in enumerate(effects or []):
+    effects = list(effects or [])
+    if any("_next" not in fx for fx in effects):
+        assign_next(effects, clock)
+    for fx in effects:
         kind = fx.get("type")
         if kind not in SEG_KINDS:
             continue
-        later = [t for j, t in enumerate(starts) if j != i and t is not None and starts[i] is not None and t > starts[i]]
-        span = _span({**fx, "_next": min(later) if later else None}, clock, duration, *SEG_KINDS[kind])
+        span = _span(fx, clock, duration, *SEG_KINDS[kind])
         if span:
             yield fx, span
 
@@ -717,7 +854,7 @@ def behind_events(effects: list[dict], clock: WordClock, style: Style, duration:
     return lines
 
 
-VIDEO_KINDS = {"viaje": (5.0, 3.0), "bruto": (3.0, 2.0), "fantasma": (1.6, 0.8), "pagina": (2.6, 1.6), "apoyo": (3.0, 1.5),
+VIDEO_KINDS = {"viaje": (5.0, 3.0), "bruto": (3.0, 2.0), "fantasma": (1.6, 0.8), "pagina": (2.6, 1.6), "paso": (4.0, 2.0), "apoyo": (3.0, 1.5),
                "objeto": (2.2, 1.0), "captura": (2.6, 1.4), "collage": (2.8, 1.6),
                "tarjetas": (4.5, 2.5), "pexels": (1.8, 1.0)}
 PERSON_TYPES = (*SEG_KINDS, "apoyo")  # necesitan a alguien delante de la cámara
@@ -776,6 +913,65 @@ def pagina_events(effect: dict, clock: WordClock, style: Style, duration: float)
     return lines, Window(start, end)
 
 
+def paso_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Paso de un tutorial: tarjeta clara arriba con el título del paso y sus puntos (los que empiezan por "x "
+    salen tachados), la palabra que se dice en serif grande y el vídeo encogido abajo (lo pinta ffmpeg)."""
+    span = _span(effect, clock, duration, *VIDEO_KINDS["paso"])
+    if not span:
+        return [], None
+    start, end = span
+    t = f"{_ts(start)},{_ts(end)}"
+    title = str(effect.get("text", "")).strip()[:46]
+    n = effect.get("_n")
+    if title and n and not title[:1].isdigit():
+        title = f"{n} · {title}"
+    items = [i.strip() for i in str(effect.get("subtitle", "")).split(";") if i.strip()][:5]
+    cx, cy, cw, ch = 80, 140, W - 160, 620
+    lines = [f"Dialogue: 4,{t},Sub,,0,0,0,,{{\\an7\\pos({cx},{cy})\\bord0\\shad0\\1c{rgb('#F4ECDF')}&\\fad(200,200)\\p1}}"
+             f"{_rect(0, 0, cw, ch, 30)}"]
+    if items:
+        row_h, top = 70, cy + 50
+        for k, item in enumerate(items):
+            y = top + k * (row_h + 18)
+            off = item[:2].lower() == "x "
+            label = item[2:].strip() if off else item
+            fs = textfit.fit(label, "Figtree SemiBold", 34, cw - 200)
+            lines.append(f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an7\\pos({cx + 40},{y})\\bord0\\shad0\\1c{rgb('#E6E0D2')}&\\fad(200,200)\\p1}}"
+                         f"{_rect(0, 0, cw - 80, row_h, 14)}")
+            # Casilla: verde con un visto dibujado, o roja con una cruz.
+            bx, by = cx + 62, y + row_h / 2 - 17
+            lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an7\\pos({bx},{by:.0f})\\bord0\\shad0"
+                         f"\\1c{rgb('#C0392B') if off else rgb('#2E9E5B')}&\\fad(200,200)\\p1}}{_rect(0, 0, 34, 34, 8)}")
+            mark = ("m 9 8 l 17 16 25 8 27 10 19 18 27 26 25 28 17 20 9 28 7 26 15 18 7 10" if off
+                    else "m 7 18 l 14 25 28 11 25 8 14 19 10 15")
+            lines.append(f"Dialogue: 7,{t},Sub,,0,0,0,,{{\\an7\\pos({bx},{by:.0f})\\bord0\\shad0\\1c&H00FFFFFF&\\fad(200,200)\\p1}}{mark}")
+            lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an4\\pos({cx + 120},{y + row_h / 2:.0f})\\fnFigtree SemiBold\\fs{fs:.0f}"
+                         f"\\bord0\\shad0\\c{rgb('#9A2F2F') if off else rgb('#1B2A44')}&{'\\s1' if off else ''}\\fad(200,200)}}{_esc(label)}")
+    elif title:  # sin puntos: el título grande en el centro de la tarjeta
+        rows = _wrap(title, "Figtree ExtraBold", 64, cw - 160)[:3]
+        for k, r in enumerate(rows):
+            lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an5\\pos(540,{cy + 300 + (k - (len(rows) - 1) / 2) * 76:.0f})"
+                         f"\\fnFigtree ExtraBold\\fs64\\bord0\\shad0\\c{rgb('#1B2A44')}&\\fad(200,200)}}{_esc(r)}")
+    if title:
+        fs = textfit.fit(title, "Figtree ExtraBold", 40, cw - 140)
+        lines.append(f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an7\\pos({cx + 30},{cy + ch - 106})\\bord0\\shad0\\1c{rgb('#1B2A44')}&\\fad(200,200)\\p1}}"
+                     f"{_rect(0, 0, cw - 60, 76, 16)}")
+        lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an5\\pos(540,{cy + ch - 68})\\fnFigtree ExtraBold\\fs{fs:.0f}\\bord0\\shad0"
+                     f"\\c&H00FFFFFF&\\fad(200,200)}}{_esc(title)}")
+    # La palabra que se dice, en serif grande entre la tarjeta y el vídeo (sustituye a los subtítulos).
+    spoken = [w for w in clock.kept if start <= w.start < end]
+    for k, w in enumerate(spoken):
+        a = w.start
+        b = spoken[k + 1].start if k + 1 < len(spoken) else end
+        txt = w.text.strip(",.;:!?¡¿")
+        if b - a < 0.08 or not txt:
+            continue
+        fs = textfit.fit(txt, "Playfair Display ExtraBold", 120, 960)
+        lines.append(f"Dialogue: 6,{_ts(a)},{_ts(b)},Sub,,0,0,0,,{{\\an5\\pos(540,1000)\\fnPlayfair Display ExtraBold\\fs{fs:.0f}"
+                     f"\\bord0\\shad3\\c&H00FFFFFF&\\fad(60,0)}}{_esc(txt)}")
+    return lines, Window(start, end)
+
+
 def _floats(fx: dict) -> bool:
     """Las pegatinas de objetos van por encima de lo demás: no acortan al efecto que esté en pantalla."""
     return fx.get("type") == "objeto"
@@ -786,14 +982,14 @@ def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=Non
     """Los efectos de vídeo de un plan, en tiempos del reel. `src_of(t)` da el segundo de la toma original.
     `assets`: número de vídeo de apoyo ("1", "2"…) -> archivo."""
     ops = []
-    starts = [clock.at(int(fx.get("word", -1))) for fx in effects or []]
-    for i, fx in enumerate(effects or []):
+    effects = list(effects or [])
+    if any("_next" not in fx for fx in effects):
+        assign_next(effects, clock)
+    for fx in effects:
         kind = fx.get("type")
         if kind not in VIDEO_KINDS:
             continue
-        later = [t for j, t in enumerate(starts) if j != i and t is not None and starts[i] is not None and t > starts[i]
-                 and (kind == "objeto" or not _floats(effects[j]))]
-        span = _span({**fx, "_next": min(later) if later else None}, clock, duration, *VIDEO_KINDS[kind])
+        span = _span(fx, clock, duration, *VIDEO_KINDS[kind])
         if not span:
             continue
         # La tarjeta "bruto" enseña la toma sin cortar desde el principio de lo que se dice ahí.
@@ -866,9 +1062,10 @@ def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=Non
     return ops
 
 
-BUILDERS = {"bruto": bruto_events, "pagina": pagina_events, LISTA: lista_events, PALABRA: palabra_events, TITULAR: titular_events, CIFRA: cifra_events, FRASE: frase_events,
+BUILDERS = {"bruto": bruto_events, "pagina": pagina_events, "paso": paso_events, LISTA: lista_events, PALABRA: palabra_events, TITULAR: titular_events, CIFRA: cifra_events, FRASE: frase_events,
             TECLEO: tecleo_events, "color": color_events, "comentario": comentario_events,
-            "contador": contador_events, "portada": portada_events, "cta": cta_events, "dato": dato_events}
+            "contador": contador_events, "portada": portada_events, "cta": cta_events, "dato": dato_events,
+            "bocadillo": bocadillo_events, "hueca": hueca_events, "marco": marco_events, "progreso": progreso_events}
 
 
 def _pack_builders() -> dict:
@@ -881,16 +1078,20 @@ def _pack_builders() -> dict:
 def build_effects(effects: list[dict], clock: WordClock, style: Style, duration: float, source_duration: float = 0.0) -> tuple[list[str], list[Window]]:
     lines: list[str] = []
     windows: list[Window] = []
-    starts = [clock.at(int(fx.get("word", fx.get("items", [{}])[0].get("at_word", -1) if fx.get("items") else -1)))
-              for fx in effects or []]
-    for i, fx in enumerate(effects or []):
-        later = [t for j, t in enumerate(starts) if j != i and t is not None and starts[i] is not None and t > starts[i]
-                 and not _floats(effects[j])]
-        fx = {**fx, "_next": min(later) if later else None, "_from": source_duration}
+    effects = list(effects or [])
+    if any("_next" not in fx for fx in effects):
+        assign_next(effects, clock)
+    for fx in effects:
+        fx = {**fx, "_from": source_duration}
         builder = BUILDERS.get(fx.get("type")) or _pack_builders().get(fx.get("type"))
         if not builder:
             continue
-        ev, win = builder(fx, clock, style, duration)
+        try:
+            ev, win = builder(fx, clock, style, duration)
+        except (KeyError, TypeError, ValueError, AttributeError, IndexError) as e:
+            # Un efecto roto (plan editado a mano, IA antigua) no se lleva el reel entero: se salta.
+            _log.warning("Efecto %s saltado: %s", fx.get("type"), e)
+            continue
         lines += ev
         if win:
             windows.append(win)

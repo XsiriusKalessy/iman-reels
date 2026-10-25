@@ -19,6 +19,7 @@ FILES = {
     "Archivo Black": "ArchivoBlack-Regular.ttf",
     "Bangers": "Bangers-Regular.ttf",
     "Poppins ExtraBold": "Poppins-ExtraBold.ttf",
+    "Cursiva Iman": "CursivaIman-ExtraBoldItalic.ttf",
 }
 
 

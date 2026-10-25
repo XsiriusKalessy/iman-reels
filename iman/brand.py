@@ -12,7 +12,7 @@ import re
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
-from . import config
+from . import config, jsonfile
 from .captions import STYLES, Style, rgb
 
 FONTS = {  # nombre visible -> fuente incluida
@@ -146,8 +146,33 @@ def load() -> Brand:
     f = brand_dir() / "brand.json"
     if not f.exists():
         return Brand()
-    data = json.loads(f.read_text(encoding="utf-8"))
-    return Brand(**{k: v for k, v in data.items() if k in Brand.__dataclass_fields__})
+    data = jsonfile.load(f)
+    if not isinstance(data, dict):
+        return Brand()
+    return Brand(**clean(data))
+
+
+def clean(data: dict) -> dict:
+    """Solo los campos de la marca, con su tipo (un archivo editado a mano o importado no rompe Imán)."""
+    out = {}
+    for name, f in Brand.__dataclass_fields__.items():
+        if name not in data:
+            continue
+        v, want = data[name], f.type
+        if want in ("bool", bool):
+            out[name] = bool(v)
+        elif want in ("str", str):
+            v = str(v if v is not None else "")
+            if name in ("primary", "secondary") and v and not is_hex(v):
+                continue
+            if name == "font" and v and v not in FONTS and v != MINE:
+                continue
+            out[name] = v[:2000]
+        elif name == "phrases":
+            out[name] = clean_phrases(v if isinstance(v, list) else [])
+        elif isinstance(v, list):
+            out[name] = [str(x)[:300] for x in v][:20]
+    return out
 
 
 PHRASE_KINDS = {"eslogan": "Eslogan", "promesa": "Promesa", "cta": "Llamada a la acción", "actitud": "Actitud",
@@ -173,7 +198,7 @@ def clean_phrases(raw) -> list[dict]:
 
 def save(b: Brand) -> Brand:
     brand_dir().mkdir(parents=True, exist_ok=True)
-    (brand_dir() / "brand.json").write_text(json.dumps(asdict(b), ensure_ascii=False, indent=2), encoding="utf-8")
+    jsonfile.save(brand_dir() / "brand.json", asdict(b), indent=2)
     return b
 
 

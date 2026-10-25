@@ -10,6 +10,9 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import atexit
+import functools
+import threading
 import numpy as np
 
 from . import media
@@ -105,6 +108,29 @@ def person_masks(video: Path, out: Path, windows: list[tuple[float, float]], fps
     return out
 
 
+_seg_lock = threading.Lock()
+
+
+@functools.lru_cache(maxsize=1)
+def _segmenter():
+    """Un solo modelo cargado por proceso: cargarlo en cada foto tardaba más que la propia foto."""
+    from mediapipe.tasks.python import BaseOptions, vision
+
+    opts = vision.ImageSegmenterOptions(base_options=BaseOptions(model_asset_path=str(MODEL)),
+                                        output_confidence_masks=True, output_category_mask=False)
+    seg = vision.ImageSegmenter.create_from_options(opts)
+    atexit.register(_quiet_close, seg)  # cerrarlo a tiempo, no cuando Python ya está a medio apagar
+    return seg
+
+
+def _quiet_close(seg) -> None:
+    try:
+        seg.close()
+    except Exception:  # noqa: BLE001
+        pass
+    type(seg).__del__ = lambda self: None  # ya está cerrado: que no vuelva a intentarlo cuando Python se apaga
+
+
 def subject(img) -> tuple[float, float, float] | None:
     """Dónde está la persona en una foto (PIL): (centro x de la cabeza, alto de la cabeza, alto de la cara),
     en proporción a la imagen. None si no hay nadie o no está el modelo."""
@@ -115,10 +141,8 @@ def subject(img) -> tuple[float, float, float] | None:
         from mediapipe.tasks.python import BaseOptions, vision
 
         small = np.ascontiguousarray(np.asarray(img.convert("RGB").resize((MASK_W, MASK_H))))
-        opts = vision.ImageSegmenterOptions(base_options=BaseOptions(model_asset_path=str(MODEL)),
-                                            output_confidence_masks=True, output_category_mask=False)
-        with vision.ImageSegmenter.create_from_options(opts) as seg:
-            conf = seg.segment(mp.Image(image_format=mp.ImageFormat.SRGB, data=small)).confidence_masks[0]
+        with _seg_lock:
+            conf = _segmenter().segment(mp.Image(image_format=mp.ImageFormat.SRGB, data=small)).confidence_masks[0]
             m = conf.numpy_view().reshape(MASK_H, MASK_W) > 0.5
     except Exception:  # noqa: BLE001
         return None
@@ -148,10 +172,8 @@ def person_mask(img):
 
         rgb = img.convert("RGB")
         small = np.ascontiguousarray(np.asarray(rgb.resize((MASK_W, MASK_H))))
-        opts = vision.ImageSegmenterOptions(base_options=BaseOptions(model_asset_path=str(MODEL)),
-                                            output_confidence_masks=True, output_category_mask=False)
-        with vision.ImageSegmenter.create_from_options(opts) as seg:
-            conf = seg.segment(mp.Image(image_format=mp.ImageFormat.SRGB, data=small)).confidence_masks[0]
+        with _seg_lock:
+            conf = _segmenter().segment(mp.Image(image_format=mp.ImageFormat.SRGB, data=small)).confidence_masks[0]
             conf = conf.numpy_view().reshape(MASK_H, MASK_W).astype(np.float32)
     except Exception:  # noqa: BLE001
         return None

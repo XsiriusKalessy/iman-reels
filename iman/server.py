@@ -5,6 +5,8 @@ from __future__ import annotations
 import io
 import json
 import logging
+import math
+import re
 import shutil
 import subprocess
 import threading
@@ -19,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import ai, brand, config, copystyle, effects, equipo, jsonfile, license, media, musica, packs, pipeline, portable, redes, updates
+from . import captions as captions_mod
 from .captions import STYLES
 from .models import EditPlan, Word
 from .rhythm import RHYTHMS
@@ -38,10 +41,108 @@ async def _any_error(request, e: Exception):
     return JSONResponse({"detail": ai.error_message(e)}, status_code=500)
 JOBS: dict[str, dict] = {}
 _lock = threading.Lock()
+_cfg_lock = threading.Lock()  # los contadores de ajustes se tocan de uno en uno
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "testserver"}
+
+
+@app.middleware("http")
+async def _solo_local(request, call_next):
+    """Imán solo atiende a este ordenador: una web abierta en el navegador no puede darle órdenes (DNS rebinding,
+    peticiones cruzadas)."""
+    from urllib.parse import urlparse
+
+    if (request.url.hostname or "").lower() not in _LOCAL_HOSTS:
+        return JSONResponse({"detail": "Imán solo responde desde este ordenador"}, status_code=403)
+    origin = request.headers.get("origin")
+    if origin and request.method not in ("GET", "HEAD", "OPTIONS") \
+            and (urlparse(origin).hostname or "").lower() not in _LOCAL_HOSTS:
+        return JSONResponse({"detail": "Petición rechazada"}, status_code=403)
+    return await call_next(request)
+
+
+def _dir(job_id: str) -> Path:
+    """Carpeta del reel; 404 si el id no tiene la pinta de un id de Imán."""
+    if not job_id.isalnum():
+        raise HTTPException(404)
+    return JOBS_DIR / job_id
+
+
+def _child(base: Path, name: str) -> Path:
+    """Archivo dentro de una carpeta del reel; 404 si el nombre intenta salir de ella (también en Windows)."""
+    if not name or ".." in name or any(c in name for c in "/\\:\0") or name.startswith("."):
+        raise HTTPException(404)
+    p = base / name
+    try:
+        p.resolve().relative_to(base.resolve())
+    except ValueError:
+        raise HTTPException(404) from None
+    if not p.is_file():
+        raise HTTPException(404)
+    return p
+
+
+def _original(workdir: Path) -> Path:
+    src = next(workdir.glob("original.*"), None)
+    if src is None:
+        raise HTTPException(409, "Falta el vídeo original de ese reel: súbelo otra vez")
+    return src
+
+
+def _done_job(job_id: str) -> dict:
+    """Un reel terminado con su plan (los vídeos largos se reparten en reels: hay que elegir uno)."""
+    job = _job(job_id)
+    if not job or job["status"] != "done":
+        raise HTTPException(404, "No encuentro ese reel")
+    if not (job.get("result") or {}).get("plan"):
+        raise HTTPException(409, "Ese vídeo largo se ha repartido en varios reels: elige uno de ellos")
+    return job
+
+
+def _count_trial(delta: int) -> None:
+    with _cfg_lock:
+        used = int(config.load().get("free_reels_used") or 0)
+        config.save({"free_reels_used": max(0, used + delta)})
+
+
+MAX_VIDEO = 6 * 1024 ** 3
+MAX_MEDIA = 1024 ** 3
+MAX_PHOTO = 60 * 1024 ** 2
+VIDEO_TYPES = (".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".3gp", ".mts")
+
+
+def _save_upload(up: UploadFile, dst: Path, limit: int) -> None:
+    """Copia la subida a trozos y corta si pasa del límite (sin cargarla entera en memoria)."""
+    total = 0
+    with dst.open("wb") as f:
+        while chunk := up.file.read(1 << 20):
+            total += len(chunk)
+            if total > limit:
+                f.close()
+                dst.unlink(missing_ok=True)
+                raise HTTPException(413, f"El archivo es demasiado grande (máximo {limit // 1024 ** 2} MB)")
+            f.write(chunk)
+
+
+def _read_upload(up: UploadFile, limit: int) -> bytes:
+    data = up.file.read(limit + 1)
+    if len(data) > limit:
+        raise HTTPException(413, f"El archivo es demasiado grande (máximo {limit // 1024 ** 2} MB)")
+    return data
+
+
+_file_locks: dict[Path, threading.Lock] = {}
+
+
+def _lock_for(path: Path) -> threading.Lock:
+    """Un candado por archivo generado: dos pestañas no lanzan el mismo ffmpeg a la vez."""
+    with _lock:
+        return _file_locks.setdefault(path, threading.Lock())
 
 
 def _set(job_id: str, **kw) -> None:
     with _lock:
+        if kw.get("status") == "done":
+            kw.setdefault("finished", time.time())
         JOBS[job_id].update(kw)
         if JOBS[job_id].get("status") != "working":
             _save_job(JOBS[job_id])
@@ -73,7 +174,7 @@ def _save_job(job: dict) -> None:
     """Guarda el estado del reel en disco para que siga en la biblioteca al reiniciar Imán."""
     d = JOBS_DIR / job["id"]
     if d.exists():
-        (d / "job.json").write_text(json.dumps({k: v for k, v in job.items() if k != "trial"}, ensure_ascii=False), encoding="utf-8")
+        jsonfile.save(d / "job.json", {k: v for k, v in job.items() if k != "trial"})
 
 
 def _job(job_id: str) -> dict | None:
@@ -81,10 +182,9 @@ def _job(job_id: str) -> dict | None:
         return JOBS[job_id]
     if not job_id.isalnum():
         return None
-    f = JOBS_DIR / job_id / "job.json"
-    if not f.exists():
+    job = jsonfile.load(JOBS_DIR / job_id / "job.json")
+    if not isinstance(job, dict) or job.get("id") != job_id:
         return None
-    job = json.loads(f.read_text(encoding="utf-8"))
     if job.get("status") == "working":  # Imán se cerró a mitad
         job.update(status="error", error="La edición se interrumpió. Vuelve a aplicar los cambios.")
     with _lock:
@@ -111,8 +211,13 @@ def delete_job(job_id: str):
     job = _job(job_id)
     if not job or job["status"] == "working":
         raise HTTPException(404, "No encuentro ese reel o aún se está editando")
+    if (VERSIONS.get(job_id) or {}).get("status") == "working" or (CASCADES.get(job_id) or {}).get("status") == "working":
+        raise HTTPException(409, "Espera a que terminen las versiones o la cascada de ese reel")
     shutil.rmtree(JOBS_DIR / job_id, ignore_errors=True)
-    JOBS.pop(job_id, None)
+    with _lock:
+        JOBS.pop(job_id, None)
+    VERSIONS.pop(job_id, None)
+    CASCADES.pop(job_id, None)
     return {"ok": True}
 
 
@@ -188,7 +293,7 @@ async def copy_style(file: UploadFile = File(...), name: str = Form("")):
         try:
             analysis = ai.style_from_frames(aicfg, shots)
         except Exception as e:
-            raise HTTPException(502, f"La IA no ha podido analizar el reel: {e}")
+            raise HTTPException(502, f"La IA no ha podido analizar el reel. {ai.error_message(e)}")
         saved = copystyle.save(name.strip() or analysis.get("name") or "Mi estilo", analysis,
                                copystyle.rhythm_for(rate))
     finally:
@@ -254,7 +359,16 @@ def set_settings(body: SettingsIn):
     data = {k: v for k, v in body.model_dump().items() if v is not None and v != ""}
     if data.get("ligero", "auto") not in ("auto", "si", "no"):
         raise HTTPException(400, "Modo ligero: auto, si o no")
-    return config.public(config.save(data))
+    if data.get("provider", "iman") not in ("iman", "claude", "openai", "none") \
+            or data.get("transcriber", "local") not in ("local", "openai") \
+            or data.get("whisper_model", "small") not in ("tiny", "base", "small", "medium", "large-v3") \
+            or not re.fullmatch(r"[a-z]{2}", data.get("language", "es")):
+        raise HTTPException(400, "Opción no válida")
+    for k in ("anthropic_key", "openai_key", "pexels_key"):
+        if k in data:
+            data[k] = data[k].strip()[:300]
+    with _cfg_lock:
+        return config.public(config.save(data))
 
 
 class KeyTestIn(BaseModel):
@@ -287,7 +401,7 @@ def export_settings(claves: bool = False):
 @app.post("/api/settings/import")
 async def import_settings(file: UploadFile = File(...)):
     try:
-        got = portable.import_(await file.read())
+        got = portable.import_(_read_upload(file, portable.MAX_SIZE))
     except portable.ImportError_ as e:
         raise HTTPException(400, str(e))
     return {"got": got, "settings": config.public(config.load())}
@@ -463,7 +577,7 @@ def brand_auto(body: BrandAutoIn):
     try:
         data = ai.brand_copy(cfg, body.description[:400])
     except Exception as e:
-        raise HTTPException(502, f"La IA no ha podido preparar tu marca: {e}")
+        raise HTTPException(502, f"La IA no ha podido preparar tu marca. {ai.error_message(e)}")
     b = brand.load()
     b.name = b.name or data.get("name", "")
     b.cta = data.get("cta") or b.cta
@@ -526,7 +640,9 @@ def _voice_samples() -> str:
     """Transcripciones de reels anteriores, para que las ideas suenen a ti."""
     texts = []
     for t in sorted(JOBS_DIR.glob("*/transcript.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:5]:
-        texts.append(" ".join(w["text"] for w in json.loads(t.read_text(encoding="utf-8"))))
+        words = jsonfile.load(t)
+        if isinstance(words, list):
+            texts.append(" ".join(str(w.get("text", "")) for w in words if isinstance(w, dict)))
     voice = brand.load().copy_prompt()
     return "\n\n".join(p for p in (voice, "\n---\n".join(texts)) if p)
 
@@ -553,8 +669,7 @@ def _save_music(workdir: Path, upload: UploadFile) -> bool:
     if suffix not in MUSIC_TYPES:
         return False
     dst = workdir / f"musica{suffix}"
-    with dst.open("wb") as f:
-        shutil.copyfileobj(upload.file, f)
+    _save_upload(upload, dst, MAX_MEDIA)
     try:
         streams = media.probe_streams(dst)
     except Exception:  # noqa: BLE001 - archivo roto
@@ -576,9 +691,10 @@ def music_preview(key: str):
     if key not in musica.STYLES:
         raise HTTPException(404, "Ese estilo no existe")
     dst = config.HOME / "cache" / "musica" / f"{key}-v3.wav"  # v3: si cambia el sonido, no sirve la vieja
-    if not dst.exists():
-        cine = musica.STYLES[key].cine  # los de tráiler: el golpe a los 4 s, como tras un gancho
-        musica.render(key, 20, dst, seed=len(key), drop_at=4.0 if cine else None)
+    with _lock_for(dst):
+        if not dst.exists():
+            cine = musica.STYLES[key].cine  # los de tráiler: el golpe a los 4 s, como tras un gancho
+            musica.render(key, 20, dst, seed=len(key), drop_at=4.0 if cine else None)
     return FileResponse(dst, media_type="audio/wav")
 
 
@@ -609,6 +725,7 @@ async def create_job(
     barra: bool = Form(False),
     transiciones: bool = Form(True),
     look: str = Form("auto"),
+    letra: str = Form("normal"),
     red: str = Form("instagram"),
     comentario: str = Form(""),
     comentario_de: str = Form(""),
@@ -632,17 +749,21 @@ async def create_job(
     workdir = JOBS_DIR / job_id
     workdir.mkdir(parents=True, exist_ok=True)
     takes = []
-    for k, up in enumerate(video[:MAX_TAKES]):
-        suffix = Path(up.filename or "video.mp4").suffix or ".mp4"
-        take = workdir / (f"original{suffix}" if len(video) == 1 else f"toma-{k + 1:02d}{suffix}")
-        with take.open("wb") as f:
-            shutil.copyfileobj(up.file, f)
-        takes.append(take)
+    try:
+        for k, up in enumerate(video[:MAX_TAKES]):
+            suffix = Path(up.filename or "video.mp4").suffix.lower()
+            suffix = suffix if suffix in VIDEO_TYPES else ".mp4"
+            take = workdir / (f"original{suffix}" if len(video) == 1 else f"toma-{k + 1:02d}{suffix}")
+            _save_upload(up, take, MAX_VIDEO)
+            takes.append(take)
+        names = _save_broll(workdir, broll or [])
+        if background == "foto":
+            if not background_photo or not _save_background(workdir, _read_upload(background_photo, MAX_PHOTO)):
+                background = ""  # sin foto válida, se queda el fondo de verdad
+    except HTTPException:
+        shutil.rmtree(workdir, ignore_errors=True)
+        raise
     src = takes[0] if len(takes) == 1 else workdir / "original.mp4"
-    names = _save_broll(workdir, broll or [])
-    if background == "foto":
-        if not background_photo or not _save_background(workdir, await background_photo.read()):
-            background = ""  # sin foto válida, se queda el fondo de verdad
     music = "mia" if music_file and _save_music(workdir, music_file) else \
         (music_style if music_style in musica.STYLES or music_style == "auto" else "")
     if names and mode == "camara":  # en "solo voz" los vídeos ya son la imagen de todo el reel
@@ -655,12 +776,16 @@ async def create_job(
                                 mode="voz" if mode == "voz" else "camara", background=background,
                                 sfx=sfx, music=music, punch=punch, barra=barra, transiciones=transiciones,
                                 look=look if look in media.LOOKS or look == "auto" else "",
+                                letra=letra if letra in captions_mod.SIZES else "normal",
                                 red=red if red in redes.REDES else "instagram",
                                 comentario=" ".join(comentario.split())[:140],
                                 comentario_de=comentario_de.strip().lstrip("@")[:40], ligero=light,
                                 gestures=not light)
-    JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0, "mode": mode,
-                    "options": asdict(opts), "created": time.time(), "trial": watermark and mode != "largo"}
+    if watermark:  # el reel de prueba se cuenta al crearlo (si falla, se devuelve)
+        _count_trial(+1)
+    with _lock:
+        JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0, "mode": mode,
+                        "options": asdict(opts), "created": time.time(), "trial": watermark}
     target = _work_long if mode == "largo" else _work
     if len(takes) > 1:
         threading.Thread(target=_join_then, args=(target, takes, job_id, src, workdir, opts), daemon=True).start()
@@ -705,19 +830,25 @@ def _work_long(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions
             for m in workdir.glob("musica.*"):  # cada reel del vídeo largo lleva tu música
                 shutil.copy(m, cdir / m.name)
             copts = replace(opts, hook_title=opts.hook_title or pick["title"])
-            JOBS[cid] = {"id": cid, "status": "working", "step": "En cola", "progress": 0.0, "from_long": job_id,
-                         "options": asdict(copts), "created": time.time(), "trial": opts.watermark}
+            with _lock:
+                JOBS[cid] = {"id": cid, "status": "working", "step": "En cola", "progress": 0.0, "from_long": job_id,
+                             "options": asdict(copts), "created": time.time()}
             _work(cid, csrc, cdir, copts)
             if JOBS[cid]["status"] == "done":
                 r = JOBS[cid]["result"]
                 made.append({"id": cid, "title": r["plan"].get("hook_title", ""), "why": pick["why"],
                              "duration": r["duration_out"]})
         if not made:
-            raise ValueError(next((JOBS[c]["error"] for c in JOBS if JOBS[c].get("from_long") == job_id
-                                   and JOBS[c].get("error")), "No he podido editar ningún reel"))
+            with _lock:
+                errors = [j.get("error") for j in list(JOBS.values()) if j.get("from_long") == job_id and j.get("error")]
+            raise ValueError(errors[0] if errors else "No he podido editar ningún reel")
+        JOBS[job_id].pop("trial", None)
         _set(job_id, status="done", progress=1.0, result={"clips": made})
     except Exception as e:
-        _set(job_id, status="error", error=str(e))
+        log.exception("Falla el vídeo largo %s", job_id)
+        if JOBS[job_id].pop("trial", False):
+            _count_trial(-1)
+        _set(job_id, status="error", error=_friendly(e))
 
 
 def _save_broll(workdir: Path, files: list[UploadFile]) -> list[str]:
@@ -729,8 +860,7 @@ def _save_broll(workdir: Path, files: list[UploadFile]) -> list[str]:
             continue
         d = workdir / "apoyo"
         d.mkdir(exist_ok=True)
-        with (d / f"{len(names) + 1:02d}{ext}").open("wb") as f:
-            shutil.copyfileobj(up.file, f)
+        _save_upload(up, d / f"{len(names) + 1:02d}{ext}", MAX_MEDIA)
         names.append(Path(up.filename).stem[:60])
     return names
 
@@ -739,9 +869,7 @@ def _work(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions, pla
     try:
         res = pipeline.run(src, workdir, opts, config.load(),
                            progress=lambda msg, pct: _set(job_id, step=msg, progress=pct), plan=plan)
-        if JOBS[job_id].pop("trial", False):
-            cfg = config.load()
-            config.save({"free_reels_used": int(cfg.get("free_reels_used") or 0) + 1})
+        JOBS[job_id].pop("trial", None)
         _set(job_id, status="done", result=res.summary())
     except Exception as e:
         log.exception("Falla la edición de %s", job_id)
@@ -750,6 +878,8 @@ def _work(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions, pla
         except OSError:
             pass
         prev = JOBS[job_id].get("result")
+        if JOBS[job_id].pop("trial", False) and not prev:
+            _count_trial(-1)
         if prev:
             # Un cambio que falla no se lleva el reel que ya estaba hecho.
             _set(job_id, status="done", error=None, options=JOBS[job_id].get("prev_options") or JOBS[job_id]["options"],
@@ -765,9 +895,8 @@ def reedit(job_id: str, body: dict):
     if not job or job["status"] == "working":
         raise HTTPException(404, "No encuentro ese reel o aún se está editando")
     workdir = JOBS_DIR / job_id
-    src = next(workdir.glob("original.*"))
-    known = {f.name for f in fields(pipeline.EditOptions)}
-    merged = {**job["options"], **{k: v for k, v in body.items() if k in known}}
+    src = _original(workdir)
+    merged = {**job["options"], **_edit_fields(body)}
     opts = pipeline.EditOptions(**merged)
     _claim(job_id, step="Aplicando cambios", progress=0.0, options=asdict(opts), error=None)
     plan_file = workdir / "plan.json"
@@ -779,8 +908,24 @@ def reedit(job_id: str, body: dict):
     return JOBS[job_id]
 
 
+def _edit_fields(body: dict) -> dict:
+    """Solo las opciones que existen, con el tipo que toca (un texto donde iba un sí/no rompería el montaje)."""
+    out = {}
+    for f in fields(pipeline.EditOptions):
+        if f.name not in body:
+            continue
+        v = body[f.name]
+        if f.type in ("bool", bool):
+            out[f.name] = bool(v)
+        elif f.type in ("str", str):
+            out[f.name] = str(v if v is not None else "")[:2000]
+        elif f.type in ("int", int, "float", float) and isinstance(v, (int, float)) and math.isfinite(v):
+            out[f.name] = v
+    return out
+
+
 class ChatIn(BaseModel):
-    message: str
+    message: str = Field(..., max_length=2000)
     remember: bool = False
 
 
@@ -801,7 +946,7 @@ def chat(job_id: str, body: ChatIn):
         new_plan, settings, reply = ai.revise_plan(aicfg, words, plan, body.message, opts.rhythm,
                                                      opts.style if opts.style in STYLES else plan.caption_style)
     except Exception as e:
-        raise HTTPException(502, f"La IA no ha podido aplicar el cambio: {e}")
+        raise HTTPException(502, f"La IA no ha podido aplicar el cambio. {ai.error_message(e)}")
     # Lo que el creador decidió a mano en "Revisa lo que dices" se mantiene.
     new_plan.cut, new_plan.restore = plan.cut, plan.restore
     if body.remember:
@@ -812,9 +957,9 @@ def chat(job_id: str, body: ChatIn):
         opts.style = settings["style"]
     opts.hook_title = ""  # el gancho lo decide ahora el plan revisado
     history = job.get("chat", []) + [{"role": "user", "text": body.message}, {"role": "iman", "text": reply}]
+    src = _original(workdir)
     _claim(job_id, step="Aplicando tus cambios", progress=0.0, options=asdict(opts),
          error=None, chat=history)
-    src = next(workdir.glob("original.*"))
     threading.Thread(target=_work, args=(job_id, src, workdir, opts, new_plan), daemon=True).start()
     return JOBS[job_id]
 
@@ -885,8 +1030,8 @@ def edit_plan(job_id: str, body: PlanEditIn):
         plan.hook_title = body.hook_title.strip()[:80]
         opts.hook_title = plan.hook_title
         opts.hook = bool(plan.hook_title)
+    src = _original(workdir)
     _claim(job_id, step="Aplicando cambios", progress=0.0, options=asdict(opts), error=None)
-    src = next(workdir.glob("original.*"))
     threading.Thread(target=_work, args=(job_id, src, workdir, opts, plan), daemon=True).start()
     return JOBS[job_id]
 
@@ -896,13 +1041,11 @@ def make_guide(job_id: str, nuevo: bool = False):
     """Guía en PDF sacada del vídeo, para regalarla a cambio de un contacto («escríbeme GUÍA y te la mando»)."""
     from . import guia
 
-    job = _job(job_id)
-    if not job or job["status"] != "done":
-        raise HTTPException(404, "No encuentro ese reel")
+    job = _done_job(job_id)
     workdir = JOBS_DIR / job_id
     pdf, meta = workdir / "guia.pdf", workdir / "guia.json"
-    if pdf.exists() and meta.exists() and not nuevo:
-        return json.loads(meta.read_text(encoding="utf-8"))
+    if pdf.exists() and not nuevo and (saved := jsonfile.load(meta)):
+        return saved
     words = _saved_words(workdir)
     b = brand.load()
     hook = job["result"]["plan"].get("hook_title", "")
@@ -928,14 +1071,14 @@ def make_guide(job_id: str, nuevo: bool = False):
             f.unlink(missing_ok=True)
     out = {"title": data.get("title", ""), "sections": len(data.get("sections") or []), "ai": used_ai,
            "url": f"/api/jobs/{job_id}/guia.pdf"}
-    meta.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
+    jsonfile.save(meta, out)
     return out
 
 
 @app.get("/api/jobs/{job_id}/guia.pdf")
 def get_guide(job_id: str):
-    p = JOBS_DIR / job_id / "guia.pdf"
-    if not job_id.isalnum() or not p.exists():
+    p = _dir(job_id) / "guia.pdf"
+    if not p.exists():
         raise HTTPException(404)
     return FileResponse(p, media_type="application/pdf", filename=f"guia-{job_id}.pdf")
 
@@ -943,13 +1086,11 @@ def get_guide(job_id: str):
 @app.post("/api/jobs/{job_id}/post")
 def post_copy(job_id: str, nuevo: bool = False):
     """Texto de la publicación y hashtags, escritos por la IA con lo que dices en el vídeo."""
-    job = _job(job_id)
-    if not job or job["status"] != "done":
-        raise HTTPException(404, "No encuentro ese reel")
+    job = _done_job(job_id)
     workdir = JOBS_DIR / job_id
     cached = workdir / "post-redes.json"
-    if cached.exists() and not nuevo:
-        return json.loads(cached.read_text(encoding="utf-8"))
+    if not nuevo and (saved := jsonfile.load(cached)):
+        return saved
     aicfg = config.ai_config(config.load())
     if not aicfg.enabled:
         raise HTTPException(400, "Activa la IA en Ajustes para que te escriba el texto de la publicación")
@@ -960,7 +1101,7 @@ def post_copy(job_id: str, nuevo: bool = False):
                             job["options"].get("pack", "") or b.sector, b.cta, b.handle, b.description, b.contact,
                             b.name, b.copy_prompt())
     except Exception as e:
-        raise HTTPException(502, f"La IA no ha podido escribir el texto: {e}")
+        raise HTTPException(502, f"La IA no ha podido escribir el texto. {ai.error_message(e)}")
     if b.no_emojis:
         for d in data["platforms"].values():
             d["text"], d["title"] = brand.strip_emojis(d["text"]), brand.strip_emojis(d.get("title", ""))
@@ -996,11 +1137,11 @@ def make_kit(job_id: str, body: KitIn):
             data = ai.kit_copy(aicfg, " ".join(w.text for w in words), hook, job["options"].get("pack", ""), b.cta,
                                current, body.message)
         except Exception as e:
-            raise HTTPException(502, f"La IA no ha podido preparar el carrusel: {e}")
+            raise HTTPException(502, f"La IA no ha podido preparar el carrusel. {ai.error_message(e)}")
     else:
         data = kit.fallback(words, hook, b.cta)
     # Fotogramas limpios (sin subtítulos) de la toma original: la portada y unos cuantos más.
-    src = workdir / "lienzo.mp4" if (workdir / "lienzo.mp4").exists() else next(workdir.glob("original.*"))
+    src = workdir / "lienzo.mp4" if (workdir / "lienzo.mp4").exists() else _original(workdir)
     dur = float(job["result"]["duration_in"])
     first = words[0].start if words else 0.5
     t0 = body.cover_t if body.cover_t is not None else first + 0.4
@@ -1029,9 +1170,7 @@ def _sharpest(src: Path, workdir: Path, k: int, t: float, dur: float) -> Path:
 
 @app.get("/api/jobs/{job_id}/kit/{name}")
 def kit_file(job_id: str, name: str):
-    p = JOBS_DIR / job_id / "kit" / name
-    if not job_id.isalnum() or "/" in name or ".." in name or not p.exists():
-        raise HTTPException(404)
+    p = _child(_dir(job_id) / "kit", name)
     media = "application/zip" if name.endswith(".zip") else "image/png"
     return FileResponse(p, media_type=media, filename=f"{job_id}-{name}" if name.endswith(".zip") else None)
 
@@ -1041,11 +1180,9 @@ def make_covers(job_id: str):
     """Tres portadas tipo YouTube (tú recortado, luz de borde, texto grande), en vertical y en horizontal."""
     from . import miniaturas
 
-    job = _job(job_id)
-    if not job or job["status"] != "done":
-        raise HTTPException(404, "No encuentro ese reel")
+    job = _done_job(job_id)
     workdir = JOBS_DIR / job_id
-    src = workdir / "lienzo.mp4" if (workdir / "lienzo.mp4").exists() else next(workdir.glob("original.*"))
+    src = workdir / "lienzo.mp4" if (workdir / "lienzo.mp4").exists() else _original(workdir)
     dur = float(job["result"]["duration_in"])
     frames = [media.thumbnail(src, workdir / f"portada-frame-{k}.jpg", max(0.0, min(dur * f, dur - 0.1)))
               for k, f in enumerate((0.08, 0.2, 0.32, 0.45, 0.58, 0.7, 0.85))]
@@ -1064,10 +1201,7 @@ def make_covers(job_id: str):
 
 @app.get("/api/jobs/{job_id}/portadas/{name}")
 def cover_file(job_id: str, name: str):
-    p = JOBS_DIR / job_id / "portadas" / name
-    if not job_id.isalnum() or "/" in name or ".." in name or not p.exists():
-        raise HTTPException(404)
-    return FileResponse(p, media_type="image/jpeg")
+    return FileResponse(_child(_dir(job_id) / "portadas", name), media_type="image/jpeg")
 
 
 PHOTOS_DIR = config.HOME / "fotos"
@@ -1112,29 +1246,27 @@ def photo_tool(foto: UploadFile = File(...), accion: str = Form("mejorar"), luz:
 
 @app.get("/api/imagen/{name}")
 def photo_file(name: str):
-    p = PHOTOS_DIR / name
-    if "/" in name or "\\" in name or ".." in name or not p.exists():
-        raise HTTPException(404)
+    p = _child(PHOTOS_DIR, name)
     return FileResponse(p, media_type="image/png" if name.endswith(".png") else "image/jpeg", filename=name)
 
 
 @app.get("/api/jobs/{job_id}/cover.jpg")
 def get_cover(job_id: str, t: float = 0.5):
     """Fotograma del reel para usarlo de portada."""
-    p = JOBS_DIR / job_id / "reel.mp4"
-    if not job_id.isalnum() or not p.exists():
+    p = _dir(job_id) / "reel.mp4"
+    if not p.exists():
         raise HTTPException(404)
-    out = JOBS_DIR / job_id / f"cover-{int(max(0.0, t) * 10)}.jpg"
-    if not out.exists():
-        from . import media
-
-        media.thumbnail(p, out, max(0.0, t))
+    t = max(0.0, min(t, 3600.0)) if math.isfinite(t) else 0.5
+    out = JOBS_DIR / job_id / f"cover-{int(t * 10)}.jpg"
+    with _lock_for(out):
+        if not out.exists():
+            media.thumbnail(p, out, t)
     return FileResponse(out, media_type="image/jpeg", filename=f"portada-{job_id}.jpg")
 
 
 @app.get("/api/jobs/{job_id}/reel.mp4")
 def get_video(job_id: str):
-    p = JOBS_DIR / job_id / "reel.mp4"
+    p = _dir(job_id) / "reel.mp4"
     if not p.exists():
         raise HTTPException(404)
     return FileResponse(p, media_type="video/mp4", filename=f"reel-{job_id}.mp4")
@@ -1143,26 +1275,23 @@ def get_video(job_id: str):
 @app.get("/api/jobs/{job_id}/sin-silencios.mp4")
 def get_rough(job_id: str):
     """Pestaña «Sin silencios»: tu vídeo solo con los cortes, para revisar lo que se queda."""
-    workdir = JOBS_DIR / job_id
+    workdir = _dir(job_id)
     dst = workdir / "sin-silencios.mp4"
     if not dst.exists():
         spans = jsonfile.load(workdir / "tramos.json")
         src = next(workdir.glob("original.*"), None)
         if not spans or src is None:
             raise HTTPException(404)
-        with _rough_lock:
+        with _lock_for(dst):
             if not dst.exists():
                 media.rough_cut(src, [tuple(s) for s in spans], dst)
     return FileResponse(dst, media_type="video/mp4")
 
 
-_rough_lock = threading.Lock()
-
-
 @app.get("/api/jobs/{job_id}/original")
 def get_original(job_id: str):
     """Pestaña «Vídeo original»: lo que subiste, tal cual."""
-    src = next((JOBS_DIR / job_id).glob("original.*"), None)
+    src = next(_dir(job_id).glob("original.*"), None)
     if src is None:
         raise HTTPException(404)
     return FileResponse(src, media_type="video/quicktime" if src.suffix.lower() == ".mov" else "video/mp4")
@@ -1199,7 +1328,7 @@ def _make_versions(job_id: str, combos: list[tuple[str, str]]) -> None:
     try:
         words = _saved_words(workdir)
         plan = _saved_plan(workdir)
-        src = next(workdir.glob("original.*"))
+        src = _original(workdir)
         opts = pipeline.EditOptions(**JOBS[job_id]["options"])
         outdir = workdir / "versiones"
         shutil.rmtree(outdir, ignore_errors=True)
@@ -1271,9 +1400,7 @@ def versions_state(job_id: str):
 
 @app.get("/api/jobs/{job_id}/versiones/{name}")
 def version_file(job_id: str, name: str):
-    p = JOBS_DIR / job_id / "versiones" / name
-    if not job_id.isalnum() or "/" in name or ".." in name or not p.exists():
-        raise HTTPException(404)
+    p = _child(_dir(job_id) / "versiones", name)
     media_type = "application/zip" if name.endswith(".zip") else "video/mp4"
     return FileResponse(p, media_type=media_type, filename=f"reel-{job_id}-{name}")
 
@@ -1287,7 +1414,7 @@ def _make_cascade(job_id: str) -> None:
     workdir = JOBS_DIR / job_id
     state = CASCADES[job_id]
     try:
-        src = next(p for p in workdir.glob("original.*"))
+        src = _original(workdir)
         res = cascada.render(src, _saved_words(workdir), workdir / "cascada", config.load(),
                              lambda msg, pct: state.update(step=msg, progress=pct))
         state.update(status="done", progress=1.0, result=res)
@@ -1311,16 +1438,17 @@ def make_cascade(job_id: str):
 
 @app.get("/api/jobs/{job_id}/cascada")
 def cascade_state(job_id: str):
-    if job_id not in CASCADES and (JOBS_DIR / job_id / "cascada" / "cascada.zip").exists():
+    if job_id not in CASCADES and (_dir(job_id) / "cascada" / "cascada.zip").exists():
         return {"status": "done", "step": "", "progress": 1.0, "result": None, "error": None}
     return CASCADES.get(job_id) or {"status": "none", "step": "", "progress": 0.0, "result": None, "error": None}
 
 
 @app.get("/api/jobs/{job_id}/cascada/{name:path}")
 def cascade_file(job_id: str, name: str):
-    base = JOBS_DIR / job_id / "cascada"
-    p = base / name
-    if not job_id.isalnum() or ".." in name or name.startswith("/") or not p.is_file():
+    base = _dir(job_id) / "cascada"
+    parts = name.split("/")
+    p = _child(base.joinpath(*parts[:-1]), parts[-1]) if all(parts) else None
+    if p is None or any(".." in q or q.startswith(".") for q in parts):
         raise HTTPException(404)
     kinds = {".zip": "application/zip", ".mp4": "video/mp4", ".mp3": "audio/mpeg", ".png": "image/png",
              ".txt": "text/plain; charset=utf-8"}
@@ -1344,8 +1472,8 @@ def _reveal(p: Path) -> None:
 @app.post("/api/jobs/{job_id}/mostrar")
 def show_in_folder(job_id: str):
     """Abre la carpeta del reel con el vídeo marcado, para arrastrarlo a la red que quieras."""
-    p = JOBS_DIR / job_id / "reel.mp4"
-    if not job_id.isalnum() or not p.exists():
+    p = _dir(job_id) / "reel.mp4"
+    if not p.exists():
         raise HTTPException(404, "No encuentro ese reel")
     _reveal(p)
     return {"ok": True, "path": str(p)}
@@ -1382,18 +1510,19 @@ def open_logs():
 @app.get("/api/jobs/{job_id}/whatsapp.mp4")
 def get_whatsapp_video(job_id: str):
     """El reel ligero para enviarlo por WhatsApp (a un grupo o a la lista de difusión) sin que lo destroce."""
-    workdir = JOBS_DIR / job_id
+    workdir = _dir(job_id)
     p = workdir / "reel.mp4"
-    if not job_id.isalnum() or not p.exists():
+    if not p.exists():
         raise HTTPException(404)
     out = workdir / "whatsapp.mp4"
-    if not out.exists() or out.stat().st_mtime < p.stat().st_mtime:
-        tmp = workdir / "whatsapp.tmp.mp4"
-        subprocess.run([media.FFMPEG, "-v", "error", "-y", "-i", str(p), "-vf", "scale=720:-2", "-c:v", "libx264",
-                        "-preset", "veryfast", "-crf", "24", "-maxrate", "2500k", "-bufsize", "5000k",
-                        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(tmp)],
-                       check=True)
-        tmp.replace(out)
+    with _lock_for(out):
+        if not out.exists() or out.stat().st_mtime < p.stat().st_mtime:
+            tmp = workdir / "whatsapp.tmp.mp4"
+            subprocess.run([media.FFMPEG, "-v", "error", "-y", "-i", str(p), "-vf", "scale=720:-2", "-c:v", "libx264",
+                            "-preset", "veryfast", "-crf", "24", "-maxrate", "2500k", "-bufsize", "5000k",
+                            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(tmp)],
+                           check=True)
+            tmp.replace(out)
     return FileResponse(out, media_type="video/mp4", filename=f"reel-{job_id}-whatsapp.mp4")
 
 
@@ -1402,29 +1531,30 @@ def get_whatsapp(job_id: str):
     """El reel en trozos de menos de 60 s (los estados de WhatsApp cortan ahí), partido entre frases."""
     import zipfile
 
-    workdir = JOBS_DIR / job_id
+    workdir = _dir(job_id)
     p = workdir / "reel.mp4"
     if not p.exists():
         raise HTTPException(404)
     out = workdir / "whatsapp.zip"
-    if not out.exists() or out.stat().st_mtime < p.stat().st_mtime:
-        dur = media.probe(p).duration
-        marks = [0.0, *media.split_points(dur, media.silences(p)), dur]
-        parts = []
-        for k, (a, b) in enumerate(zip(marks, marks[1:])):
-            parts.append(media.cut(p, workdir / f"estado-{k + 1}.mp4", a, b))
-        tmp = out.with_suffix(".tmp")
-        with zipfile.ZipFile(tmp, "w") as z:
-            for k, part in enumerate(parts):
-                z.write(part, f"estado-{k + 1}-de-{len(parts)}.mp4")
-                part.unlink(missing_ok=True)
-        tmp.replace(out)
+    with _lock_for(out):
+        if not out.exists() or out.stat().st_mtime < p.stat().st_mtime:
+            dur = media.probe(p).duration
+            marks = [0.0, *media.split_points(dur, media.silences(p)), dur]
+            parts = []
+            for k, (a, b) in enumerate(zip(marks, marks[1:])):
+                parts.append(media.cut(p, workdir / f"estado-{k + 1}.mp4", a, b))
+            tmp = out.with_suffix(".tmp")
+            with zipfile.ZipFile(tmp, "w") as z:
+                for k, part in enumerate(parts):
+                    z.write(part, f"estado-{k + 1}-de-{len(parts)}.mp4")
+                    part.unlink(missing_ok=True)
+            tmp.replace(out)
     return FileResponse(out, media_type="application/zip", filename=f"reel-{job_id}-estados-whatsapp.zip")
 
 
 @app.get("/api/jobs/{job_id}/reel.jpg")
 def get_thumb(job_id: str):
-    p = JOBS_DIR / job_id / "reel.jpg"
+    p = _dir(job_id) / "reel.jpg"
     if not p.exists():
         raise HTTPException(404)
     return FileResponse(p, media_type="image/jpeg")

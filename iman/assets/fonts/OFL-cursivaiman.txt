@@ -1,0 +1,5 @@
+«Cursiva Iman» es una instancia estática (peso 800, cursiva) de Playfair Display Italic,
+Copyright 2017 The Playfair Display Project Authors (https://github.com/clauseggers/Playfair-Display),
+con el nombre de fuente reservado "Playfair Display". Por ser una versión modificada, la OFL obliga a
+distribuirla con otro nombre: por eso se llama «Cursiva Iman». La licencia es la misma SIL Open Font License 1.1
+que acompaña a PlayfairDisplay-ExtraBold.ttf (ver OFL-playfairdisplay.txt en esta carpeta).

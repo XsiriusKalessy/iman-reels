@@ -37,6 +37,22 @@ class Style:
     alt_size: int = 0
 
 
+# Tamaño de letra de los subtítulos: «grande» y «enorme» llenan la pantalla con 1-2 palabras por bloque.
+SIZES = {"normal": (1.0, 0, 0), "grande": (1.32, 2, 12), "enorme": (1.65, 1, 9)}
+
+
+def sized(style: Style, size: str) -> Style:
+    """El estilo con la letra más grande (y menos palabras por bloque, para que quepan)."""
+    from dataclasses import replace
+
+    k, max_words, max_chars = SIZES.get(size, SIZES["normal"])
+    if k == 1.0:
+        return style
+    return replace(style, size=int(style.size * k), title_size=int(style.title_size * k),
+                   alt_size=int(style.alt_size * k), max_words=min(style.max_words, max_words),
+                   max_chars=min(style.max_chars, max_chars), outline_w=style.outline_w * (1 + (k - 1) / 2))
+
+
 def rgb(hex6: str) -> str:
     """'#RRGGBB' -> '&H00BBGGRR' (formato ASS)."""
     h = hex6.lstrip("#")
@@ -121,6 +137,12 @@ STYLES: dict[str, Style] = {
         "bloque", "Bloque", "Archivo Black", 76, rgb("#FFFFFF"), rgb("#FF5547"), rgb("#111111"),
         14, 0, True, "Archivo Black", 92, rgb("#FFFFFF"), rgb("#111111"), max_words=3, max_chars=16, y=1360,
         pop=False, box=rgb("#111111"), entry="pop",
+    ),
+    # Cursiva: palabras sueltas en blanco grande y las clave en cursiva serif dorada, a media altura.
+    "cursiva": Style(
+        "cursiva", "Cursiva", "Figtree ExtraBold", 110, rgb("#FFFFFF"), rgb("#F2C46D"), rgb("#000000"),
+        0, 4, False, "Figtree ExtraBold", 96, rgb("#FFFFFF"), rgb("#141518"), max_words=2, max_chars=14, y=1240,
+        pop=False, entry="sube", alt_font="Cursiva Iman", alt_size=176,
     ),
 }
 

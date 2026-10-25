@@ -345,6 +345,8 @@ def render(style_key: str, duration: float, dst: Path, seed: int = 0, drop_at: f
 
         return _write(dst, musica_cine.render(st.cine, st.bpm, st.chords, duration, seed, drop_at))
     rng = np.random.default_rng(seed)
+    global _rng
+    _rng = np.random.default_rng(seed + 11)  # los ruidos de piano, caja y palmas también van con la semilla
     beat = 60 / st.bpm
     step = beat / 4
     bar = beat * 4

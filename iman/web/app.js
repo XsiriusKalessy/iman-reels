@@ -46,6 +46,14 @@ async function api(path, opts = {}) {
 const postJSON = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+// Copiar al portapapeles también fuera de https (p. ej. abriendo Imán desde otro aparato de casa).
+async function copyText(text, el) {
+  try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; } } catch {}
+  try {
+    const ta = el && el.tagName === "TEXTAREA" ? el : Object.assign(document.body.appendChild(document.createElement("textarea")), { value: text });
+    ta.select(); const ok = document.execCommand("copy"); if (ta !== el) ta.remove(); return ok;
+  } catch { return false; }
+}
 // ---------- opciones ----------
 async function loadOptions() {
   const o = await api("/api/options");
@@ -215,7 +223,7 @@ function renderLicense(l) {
       ? `Estás probando Imán: te quedan ${left} ${left === 1 ? "reel" : "reels"} gratis (con marca de agua).`
       : "Has usado tus reels de prueba. Activa tu licencia para seguir editando sin marca de agua.";
     pill.hidden = l.dev;
-    pill.textContent = left ? `Prueba · ${left} gratis` : "Activa tu licencia";
+    pill.textContent = l.expired ? "Licencia caducada" : left ? `Prueba · ${left} gratis` : "Activa tu licencia";
     pill.classList.toggle("warn", !left);
   }
 }
@@ -227,7 +235,7 @@ $("#feedback-btn").onclick = async () => {
     const text = `Imán ${i.version} · ${i.system} · ${i.plan} · ${i.reels} reels hechos` +
       (i.last_error ? `\nÚltimo error: ${i.last_error}` : "") + "\n\nQué ha pasado o qué mejorarías:\n";
     let copied = true;
-    try { await navigator.clipboard.writeText(text); } catch { copied = false; }
+    copied = await copyText(text);
     if (i.feedback_url) window.open(i.feedback_url, "_blank", "noopener");
     msg.textContent = (copied ? "Datos copiados. Pégalos en el mensaje" : "Copia estos datos en el mensaje:\n" + text) +
       (i.feedback_url ? " del formulario que se ha abierto." : " y mándalos por WhatsApp o correo a quien te dio Imán.");
@@ -275,11 +283,16 @@ $("#save-settings").onclick = async e => {
   const f = $("#settings-form");
   const body = Object.fromEntries(new FormData(f));
   delete body.license_input;
-  await api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  f.anthropic_key.value = ""; f.openai_key.value = ""; f.pexels_key.value = "";
-  await loadSettings();
-  $("#settings").close();
+  try {
+    await api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    f.anthropic_key.value = ""; f.openai_key.value = ""; f.pexels_key.value = "";
+    await loadSettings();
+    $("#settings").close();
+  } catch (err) { $("#license-error").textContent = err.message; $("#license-error").hidden = false; }
 };
+// Enter en un campo guarda, no cierra sin guardar.
+$("#settings-form").addEventListener("submit", e => { if (!e.submitter || e.submitter.value !== "cancel") { e.preventDefault(); $("#save-settings").click(); } });
+$("#brand-form").addEventListener("submit", e => { if (!e.submitter || e.submitter.value !== "cancel") { e.preventDefault(); $("#brand-save").click(); } });
 
 // ---------- 0. idea ----------
 // Ideas listas para grabar, según el sector de «Mi marca». No usan la IA: salen siempre.
@@ -364,7 +377,7 @@ $("#idea-form").onsubmit = async e => {
 document.addEventListener("click", e => {
   const b = e.target.closest(".use-idea");
   if (!b) return;
-  $("#hook-title").value = b.dataset.hook;
+  showHook(b.dataset.hook);
   go("upload");
 });
 
@@ -476,7 +489,10 @@ function clearUpload() {
 function newReel() {
   clearTimeout(state.poll);
   clearUpload();
-  state.job = null;
+  state.job = null; state.comment = null; state.longId = null; state.post = null;
+  $("#post-tabs").innerHTML = ""; $("#post-box").hidden = true;
+  for (const id of ["#working", "#result-tools", "#early", "#clips", "#download", "#download-wa-mp4"]) if ($(id)) $(id).hidden = true;
+  if ($("#comment-bubble")) $("#comment-bubble").checked = false;
   for (const id of ["#hook-title", "#hook-template", "#instructions", "#chat-input"]) if ($(id)) $(id).value = "";
   $("#out").pause?.(); $("#out").removeAttribute("src");
   renderInstrIdeas();
@@ -488,13 +504,16 @@ $("#change-file").onclick = e => { e.preventDefault(); clearUpload(); $("#file")
 // ---------- 2. editar ----------
 $("#go").onclick = async () => {
   if (!state.file) return go("upload");
+  if (state.uploading) return;  // un doble clic no debe crear dos reels
+  state.uploading = true;
+  $("#go").disabled = $("#go-quick").disabled = true;
   const fd = new FormData();
   fd.append("video", state.file);
   if (mode() === "camara") for (const t of state.takes || []) fd.append("video", t);
-  fd.append("rhythm", $("input[name=rhythm]:checked").value);
-  fd.append("style", $("input[name=style]:checked").value);
-  fd.append("fit", $("input[name=fit]:checked").value);
-  fd.append("size", $("input[name=size]:checked").value);
+  fd.append("rhythm", $("input[name=rhythm]:checked")?.value ?? "rapido");
+  fd.append("style", $("input[name=style]:checked")?.value ?? "auto");
+  fd.append("fit", $("input[name=fit]:checked")?.value ?? "recortar");
+  fd.append("size", $("input[name=size]:checked")?.value ?? "1080");
   fd.append("hook", $("#hook").checked);
   fd.append("voice", $("#voice").checked);
   fd.append("ruido", $("#ruido").checked);
@@ -513,6 +532,7 @@ $("#go").onclick = async () => {
   fd.append("barra", $("#barra").checked);
   fd.append("transiciones", $("#transiciones").checked);
   fd.append("look", $("#look").value);
+  fd.append("letra", $("input[name=letra]:checked")?.value || "normal");
   fd.append("red", $("input[name=red]:checked")?.value || "instagram");
   if (state.comment?.text) { fd.append("comentario", state.comment.text); fd.append("comentario_de", state.comment.author || ""); }
   const ms = $("#music-style").value;
@@ -527,13 +547,14 @@ $("#go").onclick = async () => {
   } catch (err) {
     if (err.status === 402) { showError(err.message, true); $("#settings").showModal(); }
     else showError(err.message);
-  }
+  } finally { state.uploading = false; $("#go").disabled = false; canGo(); }
 };
 
 // ---------- 3. resultado ----------
 function showWorking(step, pct) {
   $("#working").hidden = false; $("#out").hidden = true;
-  $("#working").innerHTML = `<div class="spinner"></div><strong>${esc(step)}</strong><div class="bar"><i style="width:${Math.round(pct * 100)}%"></i></div><span class="hint">Puedes hacer otra cosa mientras tanto.</span>`;
+  const p = Math.max(0, Math.min(100, Math.round((pct || 0) * 100)));
+  $("#working").innerHTML = `<div class="spinner"></div><strong>${esc(step)}</strong><div class="bar"><i style="width:${p}%"></i></div><span class="hint">${p} % · Puedes hacer otra cosa mientras tanto.</span>`;
 }
 function showError(msg, needsLicense = false) {
   $("#working").hidden = false; $("#out").hidden = true;
@@ -541,10 +562,19 @@ function showError(msg, needsLicense = false) {
     ? `<strong>Tu prueba gratis ha terminado</strong><span class="hint">${esc(msg)}</span><button class="primary" id="hint-settings">Activar licencia</button>`
     : `<strong class="error">No he podido editarlo</strong><span class="hint">${esc(msg)}</span>`;
 }
-function poll() {
+function poll(retries = 0) {
   clearTimeout(state.poll);
+  const id = state.job?.id;
+  if (!id) return;
   state.poll = setTimeout(async () => {
-    const j = await api(`/api/jobs/${state.job.id}`);
+    let j;
+    try { j = await api(`/api/jobs/${id}`); }
+    catch (err) {
+      if (state.job?.id !== id) return;
+      if (retries < 8 && err.status !== 404) { showWorking("Esperando a Imán… (reconectando)", state.job.progress || 0); return poll(retries + 1); }
+      return showError(err.status === 404 ? "Imán se ha reiniciado y este reel se ha perdido. Vuelve a subirlo." : "He perdido la conexión con Imán. Comprueba que sigue abierto y vuelve a intentarlo.");
+    }
+    if (state.job?.id !== id) return;  // ya has empezado otro reel: este sondeo sobra
     state.job = j;
     if (j.status === "working") { showWorking(j.step, j.progress); earlyReview(j); return poll(); }
     $("#early").hidden = true;
@@ -616,6 +646,41 @@ function renderChat(j) {
   $("#chat").innerHTML = (j.chat || []).map(m => `<div class="msg ${m.role === "user" ? "user" : "iman"}">${esc(m.text)}</div>`).join("");
   $("#chat").scrollTop = 1e6;
 }
+function madeIn(j) {
+  if (!j.finished || !j.created) return "";
+  const secs = Math.max(1, Math.round(j.finished - j.created));
+  const txt = secs >= 60 ? `${Math.floor(secs / 60)} min ${secs % 60} s` : `${secs} s`;
+  return `<div><b>${txt}</b><span>montado en</span></div>`;
+}
+
+function renderFixes(fixes) {
+  const box = $("#fixes-box");
+  box.hidden = !fixes.length;
+  box.innerHTML = fixes.length ? `<details class="card fixes"><summary>✓ Revisado y arreglado solo (${fixes.length})</summary><ul>${fixes.map(f => `<li>${esc(f)}</li>`).join("")}</ul></details>` : "";
+}
+
+// Dictar el cambio al chat: reconocimiento de voz del navegador (Chrome y Edge lo traen; si no, el botón no sale).
+(() => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition, mic = $("#chat-mic");
+  if (!SR || !mic) return;
+  mic.hidden = false;
+  let rec = null;
+  mic.onclick = () => {
+    if (rec) { rec.stop(); return; }
+    rec = new SR();
+    rec.lang = "es-ES"; rec.interimResults = true; rec.continuous = false;
+    const input = $("#chat-input"), before = input.value.trim();
+    mic.classList.add("on"); mic.textContent = "⏹";
+    rec.onresult = ev => {
+      const said = Array.from(ev.results).map(r => r[0].transcript).join(" ").trim();
+      input.value = (before ? before + " " : "") + said;
+    };
+    rec.onerror = () => { mic.title = "No he podido escucharte. Revisa el permiso del micrófono."; };
+    rec.onend = () => { rec = null; mic.classList.remove("on"); mic.textContent = "🎙"; input.focus(); };
+    try { rec.start(); } catch { rec = null; }
+  };
+})();
+
 $("#chat-form").onsubmit = async e => {
   e.preventDefault();
   const input = $("#chat-input"), msg = input.value.trim();
@@ -699,14 +764,15 @@ const FX_NAMES = { lista: "Lista", grafico: "Gráfico de barras", texto3d: "Text
   fondo: "Fondo de color", desenfoque: "Fondo desenfocado", ubicacion: "Ubicación", objeto: "Objeto", viaje: "Itinerario del viaje", oferta: "Oferta", ruta: "Ruta",
   testimonio: "Testimonio", plazas: "Plazas", precio: "Precio", apoyo: "Vídeo de apoyo",
   notificaciones: "Notificaciones", buscador: "Buscador", chat: "Chat de mensajes", captura: "Captura", collage: "Collage", foco: "Foco", anillo: "Anillo de texto",
-  sube: "Sube con tu dedo", choque: "El choque", aparece: "Aparece donde señalas" };
+  sube: "Sube con tu dedo", choque: "El choque", aparece: "Aparece donde señalas",
+  bocadillo: "Bocadillo con cifra", hueca: "Palabra hueca", marco: "Marco editorial", progreso: "Barra de progreso", paso: "Paso del tutorial" };
 function renderEffects(j) {
-  const list = j.result.plan.effects || [];
+  const list = (j.result.plan || {}).effects || [];
   $("#fx-box").hidden = !list.length;
   $("#fx-apply").hidden = true;
   $("#fx-list").innerHTML = list.map((fx, i) => {
     const name = fx.type === "lista" && fx.look === "itinerario" ? "Itinerario" : FX_NAMES[fx.type] || fx.type;
-    const detail = fx.type === "lista" ? fx.items.map(it => it.text).join(" · ") : [fx.text, fx.subtitle].filter(x => x && x !== "-").join(" · ");
+    const detail = fx.type === "lista" ? (fx.items || []).map(it => it.text).join(" · ") : [fx.text, fx.subtitle].filter(x => x && x !== "-").join(" · ");
     return `<label class="fx ${fx.off ? "off" : ""}"><input type="checkbox" class="switch" data-i="${i}" ${fx.off ? "" : "checked"}>
       <span class="grow">${esc(name)}<small>${esc(detail)}</small></span></label>`;
   }).join("");
@@ -731,10 +797,10 @@ function postText(p) {
 }
 function showPost(p, which) {
   const keys = Object.keys(p.platforms || {});
-  if (!keys.length) { $("#post-text").value = postText({ text: p.caption, hashtags: p.hashtags }); return; }
+  if (!keys.length) { $("#post-tabs").innerHTML = ""; state.post = null; state.postWhich = "instagram"; setShare("instagram"); $("#post-text").value = postText({ text: p.caption, hashtags: p.hashtags }); return; }
   which = keys.includes(which) ? which : keys[0];
   state.post = p;
-  $("#post-tabs").innerHTML = keys.map(k => `<button type="button" data-post="${k}" class="${k === which ? "on" : ""}">${PLATFORM_NAMES[k] || k}</button>`).join("");
+  $("#post-tabs").innerHTML = keys.map(k => `<button type="button" role="tab" aria-selected="${k === which}" data-post="${k}" class="${k === which ? "on" : ""}">${PLATFORM_NAMES[k] || k}</button>`).join("");
   $("#post-text").value = postText(p.platforms[which]);
   state.postWhich = which;
   setShare(which);
@@ -765,7 +831,7 @@ $("#post-btn").onclick = () => loadPost();
 $("#post-again").onclick = () => loadPost(true);
 $("#post-tabs").onclick = e => { const b = e.target.closest("[data-post]"); if (b) showPost(state.post, b.dataset.post); };
 $("#post-copy").onclick = async () => {
-  await navigator.clipboard.writeText($("#post-text").value).catch(() => $("#post-text").select());
+  await copyText($("#post-text").value, $("#post-text"));
   $("#post-copy").textContent = "Copiado ✓";
   setTimeout(() => $("#post-copy").textContent = "Copiar texto", 1500);
 };
@@ -803,6 +869,7 @@ async function loadLibrary() {
       <div><strong>${esc(r.title || "Sin título")}</strong><span>${fmt(r.duration)} · ${new Date(r.created * 1000).toLocaleDateString("es-ES")}</span></div>
     </div>`).join("");
 }
+$("#library").onkeydown = e => { if ((e.key === "Enter" || e.key === " ") && e.target.closest(".reel-card")) { e.preventDefault(); e.target.closest(".reel-card").click(); } };
 $("#library").onclick = async e => {
   const del = e.target.closest("[data-del]");
   if (del) {
@@ -950,13 +1017,16 @@ function setView(view) {
 $("#view-tabs").onclick = e => { const b = e.target.closest("[data-view]"); if (b) setView(b.dataset.view); };
 function showResult(j) {
   const om = j.options && j.options.music;
-  const used = om === "auto" ? (j.result.plan.music || "") : om === true ? "mia" : (om || "");
+  const used = om === "auto" ? ((j.result.plan || {}).music || "") : om === true ? "mia" : (om || "");
   if (used === "mia" && !$("#re-music option[value=mia]")) $("#re-music").insertAdjacentHTML("beforeend", `<option value="mia">Mi música</option>`);
   $("#re-music").value = used;
+  $("#re-letra").value = (j.options && j.options.letra) || "normal";
   const ol = j.options && j.options.look;
-  $("#re-look").value = (ol === "auto" || !ol ? j.result.plan.color : ol) || "natural";
+  $("#re-look").value = (ol === "auto" || !ol ? (j.result.plan || {}).color : ol) || "natural";
   markRecommended(j);
   $("#clips").hidden = true; $("#result-tools").hidden = false; $("#download").hidden = false; $("#download-wa-mp4").hidden = false;
+  if (state.postJob !== j.id) { state.post = null; $("#post-tabs").innerHTML = ""; $("#post-box").hidden = true; $("#guide-msg").hidden = true; }
+  state.postJob = j.id;
   renderChat(j);
   renderChatIdeas(j);
   $("#kit-box").hidden = true; $("#kit-btn").textContent = "✦ Hazme el carrusel y las historias";
@@ -979,8 +1049,9 @@ function showResult(j) {
   $("#stats").innerHTML = `
     <div><b>${fmt(r.duration_in)} → ${fmt(r.duration_out)}</b><span>duración</span></div>
     <div><b>${r.cuts}</b><span>cortes</span></div>
-    <div><b>${r.removed_words.length}</b><span>palabras quitadas</span></div>`;
+    <div><b>${r.removed_words.length}</b><span>palabras quitadas</span></div>${madeIn(j)}`;
   const p = r.plan;
+  renderFixes(r.fixes || []);
   $("#hook-box").innerHTML = (r.notices || []).map(n => `<div class="card warn"><p>${esc(n)}</p></div>`).join("")
     + (r.ai_warning ? `<div class="card warn"><p>${esc(r.ai_warning)}</p><p class="hint">El reel está cortado y con subtítulos, pero sin los efectos de la IA.</p></div>` : "")
     + (p.hook_title ? `<div class="card"><h4>${esc(p.hook_title)}</h4><p class="hint">Gancho en pantalla</p></div>` : "")
@@ -1018,6 +1089,7 @@ api("/api/music").then(list => {
 }).catch(() => {});
 $("#re-music").onchange = e => reedit({ music: e.target.value });
 $("#re-look").onchange = e => reedit({ look: e.target.value });
+$("#re-letra").onchange = e => reedit({ letra: e.target.value });
 $("#music-style").onchange = () => {
   const v = $("#music-style").value;
   $("#music-pick").hidden = v !== "mia";
@@ -1238,8 +1310,14 @@ $("#update-btn").onclick = async () => {
 };
 checkUpdate(); setInterval(checkUpdate, 6 * 3600 * 1000);
 
-loadOptions().then(() => api("/api/brand").then(renderBrand)); loadSettings();
-api("/api/reels").then(r => go(r.reels.length ? "home" : "upload"));
+function startupError(err) {
+  go("upload");
+  $("#drop-title").textContent = "No puedo hablar con Imán";
+  $("#drop-hint").textContent = `Cierra la app y vuelve a abrirla. (${err.message})`;
+}
+loadOptions().then(() => api("/api/brand").then(renderBrand)).catch(startupError);
+loadSettings().catch(() => {});
+api("/api/reels").then(r => go(r.reels.length ? "home" : "upload")).catch(startupError);
 
 // Herramientas de foto: quitar fondo, mejorar y reiluminar (en local).
 const photoFile = $("#photo-file");
@@ -1248,7 +1326,8 @@ photoFile.onchange = () => {
   const f = photoFile.files[0];
   if (!f) return;
   const img = $("#photo-before");
-  img.src = URL.createObjectURL(f);
+  if (state.photoUrl) URL.revokeObjectURL(state.photoUrl);
+  state.photoUrl = img.src = URL.createObjectURL(f);
   img.hidden = false;
   $("#photo-empty").hidden = true;
   $("#photo-result").hidden = true;
@@ -1306,7 +1385,8 @@ async function pollVersions() {
     : v.status === "error" ? v.error : v.status === "done" ? `Listas las ${v.total} versiones.` : "";
   $("#versions-list").innerHTML = v.files.map(f => `<a class="ghost small" href="/api/jobs/${id}/versiones/${f.name}" download>${esc(f.name)} · ${esc(f.hook)}${f.cta ? " · " + esc(f.cta) : ""}</a>`).join("")
     + (v.status === "done" ? `<a class="primary small" href="/api/jobs/${id}/versiones/versiones.zip" download>Descargar todas (.zip)</a>` : "");
-  if (v.status === "working") setTimeout(() => pollVersions(), 2000);
+  clearTimeout(state.versionsTimer);
+  if (v.status === "working") state.versionsTimer = setTimeout(() => pollVersions(), 2000);
 }
 
 // Método cascada: del vídeo largo, el resto de piezas en un clic.
@@ -1332,7 +1412,8 @@ async function pollCascade() {
       <a class="ghost small" href="${base}/newsletter.txt" target="_blank">Newsletter</a></div>
       ${(r.carousel || []).length ? `<div class="kit-strip">${r.carousel.map(n => `<img src="${base}/citas/${n}" alt="">`).join("")}</div>` : ""}`;
   }
-  if (c.status === "working") setTimeout(pollCascade, 2000);
+  clearTimeout(state.cascadeTimer);
+  if (c.status === "working") state.cascadeTimer = setTimeout(pollCascade, 2000);
 }
 
 // Reel desde un comentario: respuesta para el seguidor y un guion que le responde.
@@ -1359,11 +1440,11 @@ $("#comment-form").onsubmit = async e => {
 };
 document.addEventListener("click", async e => {
   if (e.target.id === "comment-copy") {
-    await navigator.clipboard.writeText($("#comment-reply").textContent).catch(() => {});
+    await copyText($("#comment-reply").textContent);
     e.target.textContent = "Copiada ✓";
   }
   if (e.target.id === "comment-use") {
-    $("#hook-title").value = e.target.dataset.hook;
+    showHook(e.target.dataset.hook);
     if (!$("#comment-bubble").checked) state.comment = null;
     go("upload");
   }
@@ -1378,14 +1459,15 @@ function phraseRow(p = {}) {
     <input class="ph-where" maxlength="200" placeholder="Dónde va (opcional)" value="${esc(p.where || "")}">
     <button type="button" class="link ph-del" aria-label="Quitar">✕</button></div>`;
 }
-function renderPhrases(list) { $("#phrases").innerHTML = list.map(phraseRow).join(""); }
+function showHook(text) { $("#hook-title").value = text; $("#fine-hook").open = !!text; }
+function renderPhrases(list) { $("#brand-phrases").innerHTML = list.map(phraseRow).join(""); }
 function readPhrases() {
-  return [...document.querySelectorAll("#phrases .phrase-row")].map(r => ({
+  return [...document.querySelectorAll("#brand-phrases .phrase-row")].map(r => ({
     kind: r.querySelector("select").value, text: r.querySelector(".ph-text").value.trim(), where: r.querySelector(".ph-where").value.trim(),
   })).filter(p => p.text);
 }
-$("#phrase-add").onclick = () => $("#phrases").insertAdjacentHTML("beforeend", phraseRow({ kind: readPhrases().length ? "otra" : "eslogan" }));
-$("#phrases").onclick = e => { if (e.target.closest(".ph-del")) e.target.closest(".phrase-row").remove(); };
+$("#phrase-add").onclick = () => $("#brand-phrases").insertAdjacentHTML("beforeend", phraseRow({ kind: readPhrases().length ? "otra" : "eslogan" }));
+$("#brand-phrases").onclick = e => { if (e.target.closest(".ph-del")) e.target.closest(".phrase-row").remove(); };
 
 // Qué hace cada opción: se ve al pasar el ratón (o con el teclado) y en el desplegable de color.
 const LOOK_HELP = {
@@ -1415,6 +1497,7 @@ const QUICK_HELP = {
   "style:bebas": "Letra alta y estrecha, muy de YouTube.",
   "style:comic": "Letra de cómic con borde: divertido y desenfadado.",
   "style:bloque": "Bloques de color detrás de cada línea.",
+  "style:cursiva": "Palabras sueltas en blanco y las clave en cursiva dorada: estilo de vida, belleza, hogar.",
   "background:desenfoque": "Te recorta y desenfoca lo de detrás: tú nítido delante.",
   "background:color": "Fondo oscuro con una luz de tu color de marca.",
   "background:marca_degradado": "Fondo con un degradado de tus colores.",
@@ -1460,7 +1543,7 @@ function setShare(which) {
 }
 $("#share-go").onclick = async () => {
   const which = state.postWhich || "instagram";
-  await navigator.clipboard.writeText($("#post-text").value).catch(() => {});
+  await copyText($("#post-text").value, $("#post-text"));
   if (which === "whatsapp") $("#download-wa-mp4").click(); else $("#download").click();
   window.open(SHARE[which].url, "_blank", "noopener");
 };
