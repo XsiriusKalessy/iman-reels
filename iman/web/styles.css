@@ -393,3 +393,10 @@ select option:checked { background-color: var(--accent); color: var(--accent-ink
 .view-tabs button { flex: 1; padding: 8px 6px; border: 0; border-radius: 9px; background: transparent; color: inherit; opacity: .7; font: inherit; font-size: 13px; cursor: pointer; }
 .view-tabs button.on { background: var(--accent); color: var(--accent-ink); opacity: 1; font-weight: 700; }
 .phone.raw video { object-fit: contain; background: #000; }
+
+/* Vista previa del estilo sobre un fotograma de tu vídeo, con su paleta */
+.sp.has-frame { background-size: cover; background-position: center top; }
+.sp.has-frame::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(0,0,0,.45)); }
+.sp.has-frame .sp-text { z-index: 1; }
+.choice .sp-dots { position: absolute; right: 6px; top: 6px; z-index: 1; display: flex; gap: 3px; padding: 0; border: 0; border-radius: 0; background: none; }
+.sp-dots i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(255,255,255,.6); }

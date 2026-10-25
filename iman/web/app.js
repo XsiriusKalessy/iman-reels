@@ -54,7 +54,13 @@ function stylePreview(s) {
   const txt = w => esc(L.upper ? w.toUpperCase() : w);
   const html = words.map(w => w === "cambia" || w === "CAMBIA"
     ? `<b style="color:${L.accent}${L.alt_font ? `;font-family:'Iman Elegante';font-size:1.5em` : ""}">${txt(w)}</b>` : txt(w)).join(" ");
-  return `<span class="sp"><i class="sp-face"></i><em class="sp-text e-${L.entry}" style="font-family:'${CSS_FONT[L.font] || "Iman Moderna"}';font-size:${px}px;color:${L.text};${stroke}${shadow}${box}">${html}</em></span>`;
+  // Con tu vídeo elegido, la tarjeta enseña un fotograma tuyo (cada estilo uno distinto) y su paleta.
+  const n = state.styleList ? state.styleList.indexOf(s) + 1 : 0;
+  const frame = state.frames?.length ? state.frames[n % state.frames.length] : "";
+  const bg = frame ? ` style="background-image:url(${frame})"` : "";
+  const dots = [L.text, L.accent, L.outline_w ? L.outline : "", L.box || ""].filter(Boolean)
+    .map(c => `<i style="background:${c}"></i>`).join("");
+  return `<span class="sp${frame ? " has-frame" : ""}"${bg}>${frame ? "" : '<i class="sp-face"></i>'}<span class="sp-dots">${dots}</span><em class="sp-text e-${L.entry}" style="font-family:'${CSS_FONT[L.font] || "Iman Moderna"}';font-size:${px}px;color:${L.text};${stroke}${shadow}${box}">${html}</em></span>`;
 }
 // Primera tarjeta: «Recomendado», marcado de serie. La IA elige el estilo para cada vídeo;
 // la vista previa enseña el del sector mientras tanto.
@@ -334,6 +340,28 @@ function setMode() {
   canGo();
 }
 $("#modes").onchange = setMode;
+// Tres fotogramas de tu vídeo (al 20, 50 y 80 %) para enseñarte los estilos sobre ti, no sobre un dibujo.
+async function grabFrames(file) {
+  const v = document.createElement("video");
+  v.muted = true; v.playsInline = true; v.preload = "auto";
+  v.src = URL.createObjectURL(file);
+  try {
+    await new Promise((ok, ko) => { v.onloadeddata = ok; v.onerror = ko; setTimeout(ko, 8000); });
+    const c = document.createElement("canvas");
+    c.width = 180; c.height = 260;
+    const g = c.getContext("2d");
+    const out = [];
+    for (const at of [0.2, 0.5, 0.8]) {
+      await new Promise(ok => { v.onseeked = ok; v.currentTime = Math.max(0.1, v.duration * at); setTimeout(ok, 3000); });
+      const k = Math.max(c.width / v.videoWidth, c.height / v.videoHeight);
+      const w = v.videoWidth * k, h = v.videoHeight * k;
+      g.drawImage(v, (c.width - w) / 2, (c.height - h) / 2 * 0.4, w, h);  // un poco hacia arriba: se ve la cara
+      out.push(c.toDataURL("image/jpeg", 0.72));
+    }
+    return out;
+  } catch { return []; }
+  finally { URL.revokeObjectURL(v.src); }
+}
 // En «cámara» se pueden elegir varias tomas: Imán las une en orden e iguala el color a la primera.
 function pick(files) {
   const ok = f => f && (f.type.startsWith("video") || (mode().startsWith("voz") && f.type.startsWith("audio")));
@@ -342,6 +370,10 @@ function pick(files) {
   if (!file) return;
   state.file = file;
   state.takes = mode() === "camara" ? list.slice(1, 10).filter(f => f.type.startsWith("video")) : [];
+  state.frames = [];
+  if (file.type.startsWith("video") && mode() === "camara") {
+    grabFrames(file).then(fr => { if (state.file === file) { state.frames = fr; if (state.styleList) renderStyles(state.styleList); } });
+  }
   const v = $("#preview");
   $(".drop-inner").hidden = true;
   if (file.type.startsWith("audio")) {
@@ -379,7 +411,7 @@ drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); pick(e.d
 $("#to-edit").onclick = () => go("edit");
 // Empezar de cero: olvida el vídeo elegido y el reel abierto (el anterior sigue en «Mis reels»).
 function clearUpload() {
-  state.file = null; state.takes = []; state.broll = []; renderBroll();
+  state.file = null; state.takes = []; state.frames = []; state.broll = []; renderBroll();
   const v = $("#preview"); v.pause(); v.removeAttribute("src"); v.hidden = true;
   $("#audio-picked").hidden = true; $(".drop-inner").hidden = false; $("#picked-row").hidden = true;
   $("#file").value = ""; $("#music-file").value = "";
