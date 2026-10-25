@@ -1096,3 +1096,20 @@ def test_chapter_screen_numbers_itself(sample, tmp_path):
     assert sorted((f["_n"], f["text"]) for f in res.plan.effects) == [(1, "Primera"), (2, "Segunda parte")]
     ass = (tmp_path / "w" / "subs.ass").read_text(encoding="utf-8")
     assert "SEGUNDA PARTE" in ass and "}01" in ass
+
+
+def test_ideas_come_with_an_open_loop(monkeypatch):
+    from iman import ai
+
+    item = ai.IDEA_SCHEMA["properties"]["ideas"]["items"]
+    assert "loop" in item["required"] and "BUCLE ABIERTO" in ai.IDEA_SYSTEM
+    seen = {}
+
+    def fake(cfg, system, user, schema):
+        seen["system"] = system
+        return {"ideas": [{"hook": "h", "script": "s", "why": "w",
+                           "loop": {"mystery": "m", "clues": ["c"], "payoff": "p"}}]}
+
+    monkeypatch.setattr(ai, "_ask_json", fake)
+    got = ai.generate_ideas(ai.AIConfig(provider="claude", anthropic_key="x"), "Japón")
+    assert got[0]["loop"]["payoff"] == "p" and "open loop" in seen["system"]

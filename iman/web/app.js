@@ -304,7 +304,9 @@ $("#idea-form").onsubmit = async e => {
     const body = Object.fromEntries(new FormData(e.target));
     const { ideas } = await api("/api/ideas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     $("#ideas").innerHTML = ideas.map(i => `
-      <div class="card"><h4>${esc(i.hook)}</h4><p>${esc(i.script)}</p><p class="hint">${esc(i.why)}</p>
+      <div class="card"><h4>${esc(i.hook)}</h4><p>${esc(i.script)}</p>${i.loop && i.loop.mystery ? `
+      <div class="open-loop"><b>Bucle abierto</b><span>🔒 Abres: ${esc(i.loop.mystery)}</span>${(i.loop.clues || []).map(c => `<span>👀 Pista: ${esc(c)}</span>`).join("")}<span>🔓 Lo resuelves: ${esc(i.loop.payoff)}</span></div>` : ""}
+      <p class="hint">${esc(i.why)}</p>
       <button class="ghost use-idea" data-hook="${esc(i.hook)}">Grabar esta →</button></div>`).join("");
   } catch (err) {
     $("#ideas").innerHTML = `<p class="error">${esc(err.message)}</p>`;

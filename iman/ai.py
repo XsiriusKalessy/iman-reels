@@ -517,8 +517,19 @@ IDEA_SCHEMA = {
                     "hook": {"type": "string"},
                     "script": {"type": "string"},
                     "why": {"type": "string"},
+                    "loop": {
+                        "type": "object",
+                        "description": "Bucle abierto: el misterio del principio, las pistas y dónde se resuelve.",
+                        "properties": {
+                            "mystery": {"type": "string"},
+                            "clues": {"type": "array", "items": {"type": "string"}},
+                            "payoff": {"type": "string"},
+                        },
+                        "required": ["mystery", "clues", "payoff"],
+                        "additionalProperties": False,
+                    },
                 },
-                "required": ["hook", "script", "why"],
+                "required": ["hook", "script", "why", "loop"],
                 "additionalProperties": False,
             },
         }
@@ -530,7 +541,15 @@ IDEA_SCHEMA = {
 IDEA_SYSTEM = """Eres el guionista de reels de un creador. Le das ideas listas para grabar en una sola toma
 de 30 a 60 segundos con el móvil. Para cada idea: un gancho que se dice en los 3 primeros segundos, un guion
 corto escrito como habla el creador (frases cortas, sin tecnicismos, con una llamada a la acción al final) y
-una línea explicando por qué puede funcionar. Si te pasa ejemplos de cómo habla, imita su estilo."""
+una línea explicando por qué puede funcionar. Si te pasa ejemplos de cómo habla, imita su estilo.
+
+Cada guion lleva un BUCLE ABIERTO (open loop) para que la gente se quede hasta el final:
+- mystery: en el gancho se abre una pregunta o un misterio que NO se resuelve enseguida ("hay un truco que casi
+  nadie usa…", "el tercer sitio es el que más me sorprendió").
+- clues: una o dos frases en mitad del guion que recuerdan que la respuesta viene ("y ahora verás por qué esto
+  importa", "pero espera, que lo mejor viene ahora").
+- payoff: la frase del final que lo resuelve, justo antes de la llamada a la acción.
+Las pistas y la solución tienen que estar dentro del script, con las palabras del creador."""
 
 
 def generate_ideas(cfg: AIConfig, topic: str, audience: str = "", voice_samples: str = "", n: int = 3) -> list[dict]:
