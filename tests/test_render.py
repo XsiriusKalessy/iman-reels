@@ -1315,7 +1315,7 @@ def test_copy_rules_humanize_and_owner_licence(tmp_path, monkeypatch):
     assert c.post("/api/settings", json={"ligero": "raro"}).status_code == 400
     assert c.post("/api/settings", json={"ligero": "si"}).json()["ligero"] == "si"
     # Soporte: versión, reels hechos y el último error; la licencia beta caducada avisa con cariño.
-    (tmp_path / "jobs" / "abc123" / "error.log").write_text("Traceback…\nNo se ha podido leer el vídeo\n")
+    (tmp_path / "jobs" / "abc123" / "error.log").write_text("Traceback…\nNo se ha podido leer el vídeo\n", encoding="utf-8")
     info = c.get("/api/soporte").json()
     assert info["reels"] == 1 and info["last_error"] == "No se ha podido leer el vídeo" and info["version"]
     with mock.patch.object(server.subprocess, "Popen") as popen:
