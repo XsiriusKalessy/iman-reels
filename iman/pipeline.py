@@ -13,10 +13,10 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable
 
-from . import ai, brand, captions, copystyle, effects, fondos, gestos, hands, jsonfile, limpiar, media, musica, packfx, packs, pexels, redes, segment, seguir, sfx
+from . import ai, brand, captions, copystyle, effects, fondos, ganchos, gestos, hands, jsonfile, limpiar, media, musica, packfx, packs, pexels, redes, segment, seguir, sfx
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
-from .models import EditPlan, Word
+from .models import EditPlan, Span, Word
 from .rhythm import RHYTHMS, detect_retakes, is_filler, keep_spans, phrases, remap_words
 
 log = logging.getLogger(__name__)
@@ -36,6 +36,8 @@ class EditOptions:
     hook: bool = True
     hook_title: str = ""  # si lo escribe el creador, manda sobre la IA
     hook_template: str = ""
+    # Gancho visual de los primeros 3 s (iman/ganchos.py): "auto" = el que recomienda la IA; o una clave.
+    gancho: str = "auto"
     instructions: str = ""
     captions: bool = True
     voice: bool = True  # limpiar y nivelar la voz
@@ -333,7 +335,7 @@ def _fixes(dur_in: float, dur_out: float, drops, beats, active: list[dict], cloc
     names = {"anillo": "Anillo", "lluvia": "Lluvia", "detras": "Detrás de ti", "fondo": "Fondo", "desenfoque": "Desenfoque",
              "bruto": "Toma en bruto", "pagina": "Página", "viaje": "Itinerario", "titular": "Titular", "cifra": "Cifra",
              "bocadillo": "Bocadillo", "hueca": "Palabra hueca", "marco": "Marco", "lista": "Lista", "paso": "Paso",
-             "progreso": "Barra de progreso"}
+             "progreso": "Barra de progreso", "congelado": "Congelado"}
     defaults = {**{k: v[0] for k, v in effects.SEG_KINDS.items()}, **{k: v[0] for k, v in effects.VIDEO_KINDS.items()}}
     for fx in active:
         start, nxt = clock.at(effects.word_of(fx)), fx.get("_next")
@@ -495,6 +497,17 @@ def run(
         plan = EditPlan()
     if opts.hook_title:
         plan.hook_title = opts.hook_title
+    if not plan.hook_title and words:
+        plan.hook_title = ai.fallback_hook(words)
+    # Gancho visual: el efecto de arranque, la entrada de cámara y si el título se pinta.
+    has_person = not voice_only and opts.mode == "camara" and not opts.ligero and segment.available()
+    if opts.hook and opts.effects:
+        key = opts.gancho if opts.gancho in ganchos.GANCHOS else (
+            plan.gancho or ganchos.pick(plan.hook_title, opts.pack, opts.comentario, has_person))
+        plan.gancho = ganchos.apply(plan, key, has_person, opts.comentario)
+        plan.gancho_options = ganchos.alternatives(plan.gancho, opts.pack, has_person)
+    else:
+        plan.gancho, plan.punch, plan.hook_shown, plan.gancho_options = "", "suave", True, []
     if opts.comentario and opts.effects and not any(fx.get("type") == "comentario" for fx in plan.effects):
         plan.effects.insert(0, {"type": "comentario", "word": 0, "text": opts.comentario[:140],
                                 "title": opts.comentario_de, "subtitle": "", "look": "", "until_word": None})
@@ -517,6 +530,10 @@ def run(
     progress("Cortando silencios y tomas falsas", 0.55)
     rhythm = RHYTHMS[opts.rhythm]
     spans, drops = keep_spans(words, info.duration, rhythm, plan.drop + plan.cut, plan.restore, plan.pauses)
+    if plan.gancho == "mano" and spans and not voice_only:  # la mano tapa el objetivo: fuera el tramo a oscuras
+        uncovered = media.dark_start(src)
+        if uncovered and spans[0].start < uncovered < spans[0].end - 0.3:
+            spans[0] = Span(uncovered, spans[0].end)
     zooms_wanted = plan.zooms if opts.effects else []
     spans = _snap(effects.split_spans(spans, words, zooms_wanted), info.fps)
     choice = opts.music
@@ -595,7 +612,7 @@ def run(
             )
         ass = build_ass(
             kept if opts.captions else [], style, total,
-            plan.hook_title if opts.hook else "", emphasis_out,
+            plan.hook_title if (opts.hook and plan.hook_shown) else "", emphasis_out,
             extra_events=fx_lines + end_lines + ([WATERMARK.format(end=_ts(total))] if opts.watermark else [])
             + (packfx.progress_bar_events(out_duration, style) if opts.barra else []),
             hide=fx_windows + ([end_window] if end_window else []),
@@ -638,7 +655,10 @@ def run(
             sound = sfx.bed(evs, total, workdir / "sfx.wav")
     # La música "explota" justo cuando se va el texto del gancho.
     music = _music(choice, workdir, total, min(drop_at, out_duration) if drop_at else None)
-    punch = opts.punch and not voice_only and out_duration > 1.0  # el zoom de entrada necesita medio segundo
+    # El zoom de entrada necesita medio segundo; el gancho decide si es suave, seco o ninguno.
+    punch: bool | str = opts.punch and not voice_only and out_duration > 1.0
+    if punch:
+        punch = (plan.punch if plan.gancho else "suave") or False
     look = opts.look
     if look == "auto":
         look = plan.color if plan.color in media.LOOKS else AUTO_LOOK.get(opts.pack, "natural")

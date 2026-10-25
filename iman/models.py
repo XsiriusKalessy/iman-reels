@@ -55,6 +55,12 @@ class EditPlan:
     color: str = ""
     # Estilo de subtítulos que la IA recomienda (ver captions.STYLES).
     caption_style: str = ""
+    # Gancho visual de los primeros 3 s (iman/ganchos.py): el que recomienda la IA, por qué, y alternativas.
+    gancho: str = ""
+    gancho_why: str = ""
+    gancho_options: list[str] = field(default_factory=list)
+    punch: str = "suave"  # entrada de cámara que pide el gancho: suave | seco | ""
+    hook_shown: bool = True  # el título grande se pinta (algunos ganchos lo sustituyen por su efecto)
     source: str = "heuristica"
 
     @classmethod
@@ -75,6 +81,11 @@ class EditPlan:
             music=str(d.get("music", "")),
             color=str(d.get("color", "")),
             caption_style=str(d.get("caption_style", "")),
+            gancho=str(d.get("gancho", "")),
+            gancho_why=str(d.get("gancho_why", "")),
+            gancho_options=[str(g) for g in d.get("gancho_options", [])][:4],
+            punch=str(d.get("punch", "suave")),
+            hook_shown=bool(d.get("hook_shown", True)),
             source=d.get("source", "heuristica"),
         )
 

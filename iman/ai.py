@@ -11,6 +11,9 @@ from dataclasses import dataclass
 
 from .models import EditPlan, Word
 
+GANCHO_KEYS = ("titulo", "zoom_seco", "congelado", "detras", "numero", "pov", "aviso", "color", "objeto", "entrada",
+               "mano", "comentario")
+
 CLAUDE_MODEL = "claude-opus-5-5"
 OPENAI_MODEL = "gpt-4o"
 
@@ -300,6 +303,16 @@ Tu trabajo:
    "marcador" (enseñar, datos, listas), "bebas" (deporte, motor, titulares), "comic" (humor, niños, juegos),
    "bloque" (avisos, polémicas, opiniones fuertes), "cursiva" (estilo de vida, belleza, hogar: palabras sueltas
    en blanco y las clave en cursiva dorada).
+12. gancho: el gancho VISUAL de los primeros 3 segundos (el texto es hook_title; esto es cómo entra). Elige el que
+   mejor casa con lo que dice y con cómo está grabado: "titulo" (título y zoom suave, vale siempre), "zoom_seco"
+   (entra de golpe a la cara: frases fuertes, polémicas), "congelado" (el primer fotograma se queda quieto con el
+   título: cuando hay un gesto o una cara expresiva al empezar), "detras" (la palabra clave gigante detrás de la
+   persona: viajes, estilo de vida, cuando hay aire sobre la cabeza), "numero" (cifra gigante: SOLO si el
+   hook_title empieza por una cifra), "pov" (si el gancho es una vivencia en primera persona), "aviso" (aviso de
+   «comenta X» cuando el creador pide comentar una palabra para enviar algo; escribe esa palabra en MAYÚSCULAS
+   en hook_title), "color" (golpe de color con la frase clave: energía, ofertas), "objeto" (cuando acerca algo a
+   la cámara), "entrada" (cuando entra en plano andando), "mano" (cuando empieza con la mano tapando el
+   objetivo), "comentario" (cuando responde a un comentario). gancho_why: por qué, en una frase.
 Respeta el idioma del vídeo. Sigue las instrucciones del creador si las hay."""
 
 REVISE_SYSTEM = EDIT_SYSTEM + """
@@ -496,6 +509,8 @@ def _plan_from(data: dict, n: int, source: str) -> EditPlan:
         music=data.get("music", "") if data.get("music", "") in MUSIC_STYLES else "",
         color=str(data.get("color", "")),
         caption_style=data.get("caption_style", "") if data.get("caption_style", "") in CAPTION_STYLES else "",
+        gancho=str(data.get("gancho", "")).strip() if str(data.get("gancho", "")).strip() in GANCHO_KEYS else "",
+        gancho_why=str(data.get("gancho_why", "")).strip()[:160],
         source=source,
     )
 
@@ -533,6 +548,8 @@ def _plan_to_prompt(plan: EditPlan) -> dict:
         "pauses": plan.pauses,
         "silence": plan.silence,
         "music": plan.music,
+        "gancho": plan.gancho,
+        "gancho_why": plan.gancho_why,
         "color": plan.color,
         "caption_style": plan.caption_style,
     }

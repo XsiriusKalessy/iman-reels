@@ -71,7 +71,27 @@ async function loadOptions() {
   $("#brand-sector").innerHTML = o.packs.map(p => `<option value="${p.key}">${esc(p.label)}</option>`).join("");
   $("#packs").onchange = () => applyPack(false);
   renderHooks(o.hook_templates);
+  renderGanchos(o.ganchos || []);
 }
+// Ganchos visuales: el desplegable del ajuste fino y la biblioteca con lo que conviene grabar al principio.
+function ganchoOf(key) { return (state.options?.ganchos || []).find(g => g.key === key); }
+function renderGanchos(list) {
+  $("#gancho").innerHTML = `<option value="auto">Que lo elija Imán</option>` + list.map(g => `<option value="${g.key}">${esc(g.label)}</option>`).join("");
+  $("#gancho-cards").innerHTML = list.map(g => `<div class="card gancho-card" data-gancho-pick="${g.key}"><h4>${esc(g.label)}</h4><p>${esc(g.description)}</p>${g.record ? `<p class="hint">🎥 ${esc(g.record)}</p>` : ""}</div>`).join("");
+  ganchoTip();
+}
+function ganchoTip() {
+  const g = ganchoOf($("#gancho").value);
+  $("#gancho-tip").textContent = g ? `${g.description}${g.record ? " 🎥 " + g.record : ""}` : "Imán mira lo que dices y cómo está grabado y elige el gancho; luego puedes probar otros con un clic.";
+}
+$("#gancho").onchange = ganchoTip;
+$("#gancho-cards").onclick = e => {
+  const c = e.target.closest("[data-gancho-pick]");
+  if (!c) return;
+  $("#gancho").value = c.dataset.ganchoPick;
+  ganchoTip();
+  $("#gancho-lib").open = false;
+};
 // Galería de estilos: cada tarjeta enseña el texto moviéndose como saldrá en el reel.
 const CSS_FONT = { "Montserrat Black": "Iman Impacto", "Anton": "Iman Condensada", "Playfair Display ExtraBold": "Iman Elegante",
   "Caveat": "Iman Manuscrita", "Figtree ExtraBold": "Iman Moderna", "Figtree SemiBold": "Iman Ligera",
@@ -494,6 +514,7 @@ function newReel() {
   for (const id of ["#working", "#result-tools", "#early", "#clips", "#download", "#download-wa-mp4"]) if ($(id)) $(id).hidden = true;
   if ($("#comment-bubble")) $("#comment-bubble").checked = false;
   for (const id of ["#hook-title", "#hook-template", "#instructions", "#chat-input"]) if ($(id)) $(id).value = "";
+  $("#gancho").value = "auto"; ganchoTip();
   $("#out").pause?.(); $("#out").removeAttribute("src");
   renderInstrIdeas();
   go("upload");
@@ -521,6 +542,7 @@ $("#go").onclick = async () => {
   fd.append("use_brand", $("#use-brand").checked && !$("#use-brand-row").hidden);
   fd.append("hook_title", $("#hook-title").value);
   fd.append("hook_template", $("#hook-template").value);
+  fd.append("gancho", $("#gancho").value || "auto");
   fd.append("instructions", $("#instructions").value);
   fd.append("remember", $("#remember").checked);
   fd.append("mode", mode() === "vozclips" ? "voz" : mode());
@@ -758,7 +780,7 @@ $("#chat-ideas").onclick = e => {
   const input = $("#chat-input");
   input.value = b.dataset.idea; input.focus(); input.setSelectionRange(input.value.length, input.value.length);
 };
-const FX_NAMES = { lista: "Lista", grafico: "Gráfico de barras", texto3d: "Texto 3D", etiqueta: "Etiqueta que te sigue", tarjetas: "Tarjetas con iconos", particulas: "Título con partículas", bloques: "Bloques que se resaltan", pexels: "Plano de Pexels", lluvia: "Lluvia de confeti o billetes", capitulo: "Pantalla de capítulo", palabra: "Palabra gigante", titular: "Titular", cifra: "Cifra", frase: "Frase", tecleo: "Texto que se escribe",
+const FX_NAMES = { congelado: "Congelado de arranque", lista: "Lista", grafico: "Gráfico de barras", texto3d: "Texto 3D", etiqueta: "Etiqueta que te sigue", tarjetas: "Tarjetas con iconos", particulas: "Título con partículas", bloques: "Bloques que se resaltan", pexels: "Plano de Pexels", lluvia: "Lluvia de confeti o billetes", capitulo: "Pantalla de capítulo", palabra: "Palabra gigante", titular: "Titular", cifra: "Cifra", frase: "Frase", tecleo: "Texto que se escribe",
   color: "Golpe de color", comentario: "Comentario", contador: "Contador", portada: "Portada de revista", cta: "Llamada a la acción",
   dato: "Dato", bruto: "Toma en bruto", fantasma: "Eco", pagina: "Página de revista", detras: "Texto detrás de ti",
   fondo: "Fondo de color", desenfoque: "Fondo desenfocado", ubicacion: "Ubicación", objeto: "Objeto", viaje: "Itinerario del viaje", oferta: "Oferta", ruta: "Ruta",
@@ -1055,6 +1077,7 @@ function showResult(j) {
   $("#hook-box").innerHTML = (r.notices || []).map(n => `<div class="card warn"><p>${esc(n)}</p></div>`).join("")
     + (r.ai_warning ? `<div class="card warn"><p>${esc(r.ai_warning)}</p><p class="hint">El reel está cortado y con subtítulos, pero sin los efectos de la IA.</p></div>` : "")
     + (p.hook_title ? `<div class="card"><h4>${esc(p.hook_title)}</h4><p class="hint">Gancho en pantalla</p></div>` : "")
+    + (p.gancho && ganchoOf(p.gancho) ? `<div class="card"><h4>Gancho visual: ${esc(ganchoOf(p.gancho).label)}</h4><p>${esc(p.gancho_why || ganchoOf(p.gancho).description)}</p>${(p.gancho_options || []).filter(ganchoOf).length ? `<p class="hint">Prueba otro arranque (se cambia en segundos):</p><div class="hook-try">${p.gancho_options.filter(ganchoOf).map(k => `<button type="button" class="ghost small" data-gancho-try="${k}" title="${esc(ganchoOf(k).description)}">${esc(ganchoOf(k).label)}</button>`).join("")}</div>` : ""}${ganchoOf(p.gancho).record ? `<p class="hint">🎥 La próxima vez: ${esc(ganchoOf(p.gancho).record)}</p>` : ""}</div>` : "")
     + ((p.hook_options || []).length ? `<div class="card"><p class="hint">Otros ganchos para probar (se cambia en segundos):</p><div class="hook-try">${p.hook_options.map(h => `<button type="button" class="ghost small" data-hook-try="${esc(h)}">${esc(h)}</button>`).join("")}</div></div>` : "")
     + (p.hook_line ? `<div class="card"><p>«${esc(p.hook_line)}»</p><p class="hint">Si quieres regrabar el arranque, prueba con esta frase.</p></div>` : "");
   $("#versions-hooks").value = [p.hook_title, ...(p.hook_options || [])].filter(Boolean).join("\n");
@@ -1363,6 +1386,8 @@ document.querySelectorAll("[data-tool]").forEach(btn => btn.onclick = async () =
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-hook-try]");
   if (b) reedit({ hook_title: b.dataset.hookTry });
+  const g = e.target.closest("[data-gancho-try]");
+  if (g) reedit({ gancho: g.dataset.ganchoTry });
 });
 
 // Versiones para anuncios: el mismo reel con otros ganchos y llamadas a la acción.

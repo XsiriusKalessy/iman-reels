@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ai, brand, config, copystyle, effects, equipo, jsonfile, license, media, musica, packs, pipeline, portable, redes, updates
+from . import ai, brand, config, copystyle, effects, equipo, ganchos, jsonfile, license, media, musica, packs, pipeline, portable, redes, updates
 from . import captions as captions_mod
 from .captions import STYLES
 from .models import EditPlan, Word
@@ -227,6 +227,7 @@ def options():
         "rhythms": [{"key": r.key, "label": r.label, "description": r.description} for r in RHYTHMS.values()],
         "styles": _styles(),
         "hook_templates": HOOK_TEMPLATES,
+        "ganchos": ganchos.catalogue(),
         "redes": [{"key": r.key, "label": r.label, "description": r.description} for r in redes.REDES.values()],
         "packs": [{"key": p.key, "label": p.label, "description": p.description, "style": p.style,
                    "hooks": list(p.hooks)} for p in packs.PACKS.values()],
@@ -708,6 +709,7 @@ async def create_job(
     hook: bool = Form(True),
     hook_title: str = Form(""),
     hook_template: str = Form(""),
+    gancho: str = Form("auto"),
     instructions: str = Form(""),
     voice: bool = Form(True),
     ruido: bool = Form(False),
@@ -771,7 +773,8 @@ async def create_job(
     light = equipo.ligero(config.load().get("ligero", "auto"))
     if light:
         size = "1080"  # en un ordenador sencillo, el 4K tarda demasiado
-    opts = pipeline.EditOptions(rhythm, style, size, fit, hook, hook_title, hook_template, instructions,
+    gancho = gancho if gancho in ganchos.GANCHOS else "auto"
+    opts = pipeline.EditOptions(rhythm, style, size, fit, hook, hook_title, hook_template, gancho, instructions,
                                 voice=voice, ruido=ruido, watermark=watermark, brand=use_brand, pack=pack,
                                 mode="voz" if mode == "voz" else "camara", background=background,
                                 sfx=sfx, music=music, punch=punch, barra=barra, transiciones=transiciones,

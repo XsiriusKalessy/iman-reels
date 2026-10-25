@@ -180,6 +180,12 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx
                 f"rotate=-0.07:c=none:ow=rotw(-0.07):oh=roth(-0.07)[ov{k}]"
             )
             parts.append(f"{cur}[ov{k}]overlay=x={int(600 * k_scale)}:y={int(330 * k_scale)}:{on}:eof_action=pass[o{k}]")
+        elif op.kind == "congelado":
+            # El primer fotograma del tramo se queda quieto (el título entra encima) y el vídeo arranca de golpe.
+            parts.append(f"{cur}split[m{k}][fz{k}]")
+            parts.append(f"[fz{k}]trim=start={a:.3f}:end={a + 0.05:.3f},setpts=PTS-STARTPTS,"
+                         f"loop=loop={int(round((b - a) * 30)) + 1}:size=1:start=0,setpts=N/30/TB+{a:.3f}/TB[fzl{k}]")
+            parts.append(f"[m{k}][fzl{k}]overlay=0:0:{on}:eof_action=pass[o{k}]")
         elif op.kind == "fantasma":
             lag = 0.45
             parts.append(f"{cur}split[m{k}][g{k}]")
@@ -320,7 +326,7 @@ def build_filtergraph(
     tail: float = 0.0,
     sfx_bed: Path | None = None,
     music: Path | None = None,
-    punch: bool = False,
+    punch: bool | str = False,
     hush: list[tuple[float, float]] | None = None,
     look: str = "",
     transitions: dict[int, str] | None = None,
@@ -330,7 +336,8 @@ def build_filtergraph(
     va centrado en ella y en todos los cortes queda en el mismo sitio (los saltos casan).
     `tail`: segundos extra al final (último fotograma congelado y silencio) para el cierre de marca.
     `sfx_bed`: pista con los efectos de sonido; `music`: tu música, que baja sola cuando hablas.
-    `punch`: zoom rápido de entrada en el primer medio segundo (que nada esté quieto al empezar)."""
+    `punch`: zoom rápido de entrada en el primer medio segundo (que nada esté quieto al empezar): True o
+    "suave", o "seco" (más cerca y más rápido, para el gancho «zoom seco»)."""
     W, H = SIZES[size]
     pad = float(tail)  # «tail» se reutiliza más abajo como trozo de filtergraph
     zooms = zooms or [False] * len(spans)
@@ -383,11 +390,14 @@ def build_filtergraph(
     else:
         vf = "[vf]"
     if punch:
-        # Entra un 20 % más cerca y se abre en 0,45 s, con un frenazo suave al final.
+        # Suave: entra un 20 % más cerca y se abre en 0,45 s, con un frenazo suave al final.
+        # Seco: un 35 % más cerca y se abre en 0,25 s casi de golpe (zoom seco de gancho).
+        seco = punch == "seco"
+        dur, frames, amount, power = (0.25, 7, 0.35, 1.6) if seco else (0.45, 13, 0.2, 3)
         parts.append(f"{vf}fps=30,setsar=1,split[pz0][pz1]")
-        parts.append(f"[pz0]trim=duration=0.45,setpts=PTS-STARTPTS,"
-                     f"zoompan=z='1+0.2*pow(1-on/13,3)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s={W}x{H}:fps=30[pz2]")
-        parts.append("[pz1]trim=start=0.45,setpts=PTS-STARTPTS[pz3]")
+        parts.append(f"[pz0]trim=duration={dur},setpts=PTS-STARTPTS,"
+                     f"zoompan=z='1+{amount}*pow(1-on/{frames},{power})':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s={W}x{H}:fps=30[pz2]")
+        parts.append(f"[pz1]trim=start={dur},setpts=PTS-STARTPTS[pz3]")
         parts.append("[pz2][pz3]concat=n=2:v=1:a=0,setsar=1[vx]")
     else:
         parts.append(f"{vf}fps=30,setsar=1[vx]")
@@ -440,7 +450,7 @@ def render(
     tail: float = 0.0,
     sfx_bed: Path | None = None,
     music: Path | None = None,
-    punch: bool = False,
+    punch: bool | str = False,
     hush: list[tuple[float, float]] | None = None,
     look: str = "",
     transitions: dict[int, str] | None = None,
@@ -727,3 +737,33 @@ def join_takes(srcs: list[Path], dst: Path) -> Path:
     if res.returncode != 0:
         raise RuntimeError(f"ffmpeg falló:\n{res.stderr[-2000:]}")
     return dst
+
+
+def dark_start(src: Path, limit: float = 3.0) -> float:
+    """Segundo en el que deja de estar tapado el objetivo al empezar (gancho «mano»): 0.0 si el vídeo no
+    empieza a oscuras. Mira el brillo medio de los primeros fotogramas, a 10 por segundo."""
+    cmd = [FFMPEG, "-v", "info", "-nostats", "-t", f"{limit}", "-i", str(src), "-vf",
+           "fps=10,scale=32:-2,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-", "-f", "null", "-"]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60).stdout
+    except (OSError, subprocess.SubprocessError):
+        return 0.0
+    frames: list[tuple[float, float]] = []
+    t = None
+    for line in out.splitlines():
+        if line.startswith("frame:"):
+            try:
+                t = float(line.split("pts_time:")[1].split()[0])
+            except (IndexError, ValueError):
+                t = None
+        elif "YAVG=" in line and t is not None:
+            try:
+                frames.append((t, float(line.split("YAVG=")[1])))
+            except ValueError:
+                pass
+    if not frames or frames[0][1] > 40:
+        return 0.0
+    for t, y in frames:
+        if y > 45:
+            return round(t + 0.05, 2)  # el primer fotograma ya claro, y un pelín más para que no asome la mano
+    return 0.0

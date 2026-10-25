@@ -854,7 +854,7 @@ def behind_events(effects: list[dict], clock: WordClock, style: Style, duration:
     return lines
 
 
-VIDEO_KINDS = {"viaje": (5.0, 3.0), "bruto": (3.0, 2.0), "fantasma": (1.6, 0.8), "pagina": (2.6, 1.6), "paso": (4.0, 2.0), "apoyo": (3.0, 1.5),
+VIDEO_KINDS = {"congelado": (0.6, 0.3), "viaje": (5.0, 3.0), "bruto": (3.0, 2.0), "fantasma": (1.6, 0.8), "pagina": (2.6, 1.6), "paso": (4.0, 2.0), "apoyo": (3.0, 1.5),
                "objeto": (2.2, 1.0), "captura": (2.6, 1.4), "collage": (2.8, 1.6),
                "tarjetas": (4.5, 2.5), "pexels": (1.8, 1.0)}
 PERSON_TYPES = (*SEG_KINDS, "apoyo")  # necesitan a alguien delante de la cámara

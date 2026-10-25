@@ -1381,3 +1381,74 @@ def test_audit_fixes_and_guinda_ideas(tmp_path, monkeypatch):
         assert c.get(f"/api/jobs/abc123/kit/{bad}").status_code == 404
     assert c.get("/api/jobs/abc123/cover.jpg?t=nan").status_code == 404
     assert c.get("/api/jobs/a%2F..%2Fb/reel.mp4").status_code == 404
+
+
+def test_visual_hooks_library(tmp_path, monkeypatch):
+    """Ganchos visuales: la IA (o la heurística) elige cómo entran los 3 primeros segundos, cada gancho deja
+    su efecto de arranque y su entrada de cámara, y se puede cambiar por otro con un clic."""
+    from fastapi.testclient import TestClient
+
+    from iman import config, effects, ganchos, media, server
+    from iman.media import MediaInfo
+    from iman.models import EditPlan, Span, Word
+
+    assert len(ganchos.GANCHOS) >= 12 and all(g.description for g in ganchos.GANCHOS.values())
+    # Sin IA: cifra delante → cifra gigante; comentario → respondiendo; viajes con persona → detrás de ti.
+    assert ganchos.pick("3 errores al ir a Japón", "viajes") == "numero"
+    assert ganchos.pick("Lo que nadie te cuenta", "viajes", comentario="hola") == "comentario"
+    assert ganchos.pick("Lo que nadie te cuenta", "viajes") == "detras"
+    assert ganchos.pick("Lo que nadie te cuenta", "viajes", has_person=False) == "titulo"
+    alts = ganchos.alternatives("numero", "cursos", has_person=False)
+    assert "numero" not in alts and "detras" not in alts and "objeto" not in alts and len(alts) == 3
+    # «numero»: la cifra sale gigante y el título grande se apaga.
+    plan = EditPlan(hook_title="3 errores al ir a Japón", effects=[{"type": "titular", "word": 0, "text": "x"}])
+    assert ganchos.apply(plan, "numero") == "numero"
+    fx = plan.effects[0]
+    assert fx["type"] == "cifra" and fx["text"] == "3" and "Japón" in fx["subtitle"] and fx["_gancho"]
+    assert not plan.hook_shown and len(plan.effects) == 1  # el titular de la IA en la palabra 0 se va
+    # «numero» sin cifra en el título → título normal. «detras» sin persona recortable → título normal.
+    plan = EditPlan(hook_title="Lo que nadie te cuenta")
+    assert ganchos.apply(plan, "numero") == "titulo" and plan.hook_shown
+    assert ganchos.apply(plan, "detras", has_person=False) == "titulo"
+    assert ganchos.apply(plan, "detras") == "detras" and plan.effects[0]["text"] == "cuenta" and plan.punch == ""
+    # «pov» antepone el prefijo una sola vez; al cambiar a otro gancho lo quita y borra su efecto.
+    assert ganchos.apply(plan, "pov") == "pov" and plan.hook_title == "POV: Lo que nadie te cuenta"
+    assert not any(fx.get("_gancho") for fx in plan.effects)
+    ganchos.apply(plan, "pov")
+    assert plan.hook_title.count("POV:") == 1
+    assert ganchos.apply(plan, "zoom_seco") == "zoom_seco" and plan.hook_title == "Lo que nadie te cuenta" and plan.punch == "seco"
+    plan = EditPlan(hook_title="Comenta GUÍA y te la mando")
+    assert ganchos.apply(plan, "aviso") == "aviso" and plan.effects[0]["type"] == "notificaciones"
+    assert plan.effects[0]["text"] == "Comenta GUÍA y te lo mando"
+    # «congelado»: efecto de vídeo que congela el primer fotograma; «zoom seco»: entrada más cerca y más rápida.
+    plan = EditPlan(hook_title="Esto cambia todo")
+    assert ganchos.apply(plan, "congelado") == "congelado"
+    words = [Word("esto", 0.0, 0.3), Word("cambia", 0.4, 0.8), Word("todo", 0.9, 1.3)]
+    ops = effects.video_ops(plan.effects, effects.WordClock(words, [0, 1, 2]), 5.0)
+    assert [op.kind for op in ops] == ["congelado"] and ops[0].end - ops[0].start <= 0.6
+    info = MediaInfo(width=1080, height=1920, duration=5, fps=30, has_audio=True, hdr=False)
+    graph = media.build_filtergraph([Span(0, 5)], info, None, overlays=ops, punch="seco")
+    assert "loop=loop=" in graph and "1+0.35*pow(1-on/7" in graph
+    assert "1+0.2*pow(1-on/13" in media.build_filtergraph([Span(0, 5)], info, None, punch=True)
+    # «mano»: el tramo a oscuras del principio se va.
+    import subprocess
+
+    dark = tmp_path / "dark.mp4"
+    subprocess.run([media.FFMPEG, "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=black:s=320x568:r=30:d=0.8",
+                    "-f", "lavfi", "-i", "color=c=orange:s=320x568:r=30:d=1.2", "-filter_complex",
+                    "[0][1]concat=n=2:v=1:a=0", str(dark)], check=True)
+    assert 0.75 <= media.dark_start(dark) <= 1.0
+    bright = tmp_path / "bright.mp4"
+    subprocess.run([media.FFMPEG, "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=orange:s=320x568:r=30:d=1",
+                    str(bright)], check=True)
+    assert media.dark_start(bright) == 0.0
+    # El catálogo llega a la app y el formulario acepta la clave (o «auto» si llega algo raro).
+    monkeypatch.setattr(config, "HOME", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    c = TestClient(server.app)
+    cat = c.get("/api/options").json()["ganchos"]
+    assert [g["key"] for g in cat][:3] == ["titulo", "zoom_seco", "congelado"] and all(g["label"] for g in cat)
+    assert server._edit_fields({"gancho": "detras"}) == {"gancho": "detras"}
+    d = EditPlan.from_dict({**plan.to_dict(), "gancho_options": ["detras", "numero"]})
+    assert d.gancho == "congelado" and d.gancho_options == ["detras", "numero"] and d.punch == ""

@@ -581,3 +581,9 @@ button.big { font-size: 18px; padding: 16px 28px; }
 .card.fixes li { margin: 4px 0; font-size: 14px; line-height: 1.4; }
 .chat-form .mic { flex: 0 0 auto; padding: 0 12px; font-size: 18px; }
 .chat-form .mic.on { background: var(--accent, #FF5547); color: #fff; border-color: transparent; }
+
+/* Ganchos visuales: biblioteca de tarjetas dentro del ajuste fino */
+.gancho-lib { margin-top: 10px; }
+.gancho-lib summary { cursor: pointer; font-weight: 600; }
+.gancho-card { cursor: pointer; }
+.gancho-card:hover { outline: 2px solid var(--accent, #F2C46D); }
