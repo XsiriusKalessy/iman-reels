@@ -281,6 +281,9 @@ def comentario_events(effect: dict, clock: WordClock, style: Style, duration: fl
         f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an7{mv(x + 30, y + 30)}\\1c&H00C8C8C8&\\p1}}{_rect(0, 0, 84, 84, 42)}",
         f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an7{mv(x + 136, y + 34)}\\fnFigtree ExtraBold\\fs42\\c&H00141518&}}"
         f"{_esc(user)} {{\\fnFigtree SemiBold\\c&H00888888&}}· 2 h",
+        # Cabecera "respondiendo a", como cuando contestas a un comentario con un vídeo.
+        f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an1{mv(x + 6, y - 14)}\\fnFigtree ExtraBold\\fs36\\c&H00FFFFFF&"
+        f"\\bord0\\shad2\\4a&H80&}}Respuesta al comentario de @{_esc(user)}",
     ]
     for k, r in enumerate(rows):
         lines.append(f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an7{mv(x + 136, y + 90 + k * fs * 1.2)}\\fnFigtree SemiBold"

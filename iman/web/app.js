@@ -464,6 +464,7 @@ $("#go").onclick = async () => {
   fd.append("transiciones", $("#transiciones").checked);
   fd.append("look", $("#look").value);
   fd.append("red", $("input[name=red]:checked")?.value || "instagram");
+  if (state.comment?.text) { fd.append("comentario", state.comment.text); fd.append("comentario_de", state.comment.author || ""); }
   const ms = $("#music-style").value;
   if (ms === "mia" && $("#music-file").files[0]) fd.append("music_file", $("#music-file").files[0]);
   else fd.append("music_style", ms === "mia" ? "" : ms);  // «Mi música» sin canción elegida: sin música
@@ -671,16 +672,33 @@ $("#fx-apply").onclick = async () => {
   catch (err) { showError(err.message); }
 };
 $("#safe-toggle").onchange = e => $("#phone").classList.toggle("show-safe", e.target.checked);
-$("#post-btn").onclick = async () => {
+const PLATFORM_NAMES = { instagram: "Instagram", tiktok: "TikTok", youtube: "YouTube", facebook: "Facebook", whatsapp: "WhatsApp" };
+const STAGES = { atraer: "atraer gente nueva", confiar: "que confíen en ti", vender: "vender" };
+function postText(p) {
+  const tags = (p.hashtags || []).map(h => "#" + h).join(" ");
+  return [p.title, p.text, tags].filter(Boolean).join("\n\n");
+}
+function showPost(p, which) {
+  const keys = Object.keys(p.platforms || {});
+  if (!keys.length) { $("#post-text").value = postText({ text: p.caption, hashtags: p.hashtags }); return; }
+  which = keys.includes(which) ? which : keys[0];
+  state.post = p;
+  $("#post-tabs").innerHTML = keys.map(k => `<button type="button" data-post="${k}" class="${k === which ? "on" : ""}">${PLATFORM_NAMES[k] || k}</button>`).join("");
+  $("#post-text").value = postText(p.platforms[which]);
+  $("#post-funnel").textContent = p.stage ? `Embudo: este reel sirve para ${STAGES[p.stage] || p.stage}. ${p.funnel || ""}` : "";
+}
+async function loadPost(again = false) {
   const btn = $("#post-btn");
   btn.disabled = true; btn.textContent = "Escribiendo…";
   try {
-    const p = await api(`/api/jobs/${state.job.id}/post`, { method: "POST" });
-    $("#post-text").value = `${p.caption}\n\n${p.hashtags.map(h => "#" + h).join(" ")}`;
+    showPost(await api(`/api/jobs/${state.job.id}/post${again ? "?nuevo=true" : ""}`, { method: "POST" }));
     $("#post-box").hidden = false;
   } catch (err) { $("#post-text").value = err.message; $("#post-box").hidden = false; }
-  finally { btn.disabled = false; btn.textContent = "✦ Escríbeme el texto y los hashtags"; }
-};
+  finally { btn.disabled = false; btn.textContent = "✦ Escríbeme los textos para cada red"; }
+}
+$("#post-btn").onclick = () => loadPost();
+$("#post-again").onclick = () => loadPost(true);
+$("#post-tabs").onclick = e => { const b = e.target.closest("[data-post]"); if (b) showPost(state.post, b.dataset.post); };
 $("#post-copy").onclick = async () => {
   await navigator.clipboard.writeText($("#post-text").value).catch(() => $("#post-text").select());
   $("#post-copy").textContent = "Copiado ✓";
@@ -805,7 +823,7 @@ loadMemory();
 
 function showClips(j) {
   // Vídeo largo → varios reels: los enseñamos todos y cada uno se abre como un reel normal.
-  $("#working").hidden = true; $("#download").hidden = true;
+  $("#working").hidden = true; $("#download").hidden = true; $("#download-wa-mp4").hidden = true;
   $("#clips").hidden = false; $("#result-tools").hidden = true;
   const first = j.result.clips[0];
   if (first) { $("#out").src = `/api/jobs/${first.id}/reel.mp4`; $("#out").hidden = false; }
@@ -873,7 +891,7 @@ function showResult(j) {
   const ol = j.options && j.options.look;
   $("#re-look").value = (ol === "auto" || !ol ? j.result.plan.color : ol) || "natural";
   markRecommended(j);
-  $("#clips").hidden = true; $("#result-tools").hidden = false; $("#download").hidden = false;
+  $("#clips").hidden = true; $("#result-tools").hidden = false; $("#download").hidden = false; $("#download-wa-mp4").hidden = false;
   renderChat(j);
   renderChatIdeas(j);
   $("#kit-box").hidden = true; $("#kit-btn").textContent = "✦ Hazme el carrusel y las historias";
@@ -892,6 +910,7 @@ function showResult(j) {
   $("#download").href = `/api/jobs/${j.id}/reel.mp4`;
   $("#download-wa").href = `/api/jobs/${j.id}/whatsapp.zip`;
   $("#download-wa").hidden = !(j.result && j.result.duration_out > 60);
+  $("#download-wa-mp4").href = `/api/jobs/${j.id}/whatsapp.mp4`;
   $("#stats").innerHTML = `
     <div><b>${fmt(r.duration_in)} → ${fmt(r.duration_out)}</b><span>duración</span></div>
     <div><b>${r.cuts}</b><span>cortes</span></div>
@@ -983,7 +1002,7 @@ function renderBrand(b) {
   renderToday();
   renderInstrIdeas();
   const f = brandForm;
-  for (const k of ["name", "cta", "contact", "handle"]) f[k].value = b[k] || "";
+  for (const k of ["name", "cta", "contact", "handle", "description"]) f[k].value = b[k] || "";
   f.primary.value = b.primary || "#FF5547"; f.secondary.value = b.secondary || "#141518";
   f.logo_corner.checked = b.logo_corner; f.end_card.checked = b.end_card;
   f.sector.value = b.sector || "general";
@@ -1094,7 +1113,7 @@ $("#font-file").onchange = async e => {
 $("#font-remove").onclick = async () => renderBrand(await api("/api/brand/font", { method: "DELETE" }));
 function brandBody() {
   const f = brandForm;
-  return { name: f.name.value, cta: f.cta.value, contact: f.contact.value, handle: f.handle.value,
+  return { name: f.name.value, description: f.description.value.trim(), cta: f.cta.value, contact: f.contact.value, handle: f.handle.value,
     primary: f.primary.value.toUpperCase(), secondary: f.secondary.value.toUpperCase(),
     font: f.querySelector("input[name=font]:checked")?.value || "", sector: f.sector.value === "general" ? "" : f.sector.value,
     logo_corner: f.logo_corner.checked, end_card: f.end_card.checked };
@@ -1247,3 +1266,37 @@ async function pollCascade() {
   }
   if (c.status === "working") setTimeout(pollCascade, 2000);
 }
+
+// Reel desde un comentario: respuesta para el seguidor y un guion que le responde.
+$("#comment-form").captura.onchange = e => { $("#comment-file").textContent = e.target.files[0]?.name || ""; };
+$("#comment-form").onsubmit = async e => {
+  e.preventDefault();
+  const f = e.target, btn = f.querySelector("button[type=submit]"), out = $("#comment-out");
+  btn.disabled = true; btn.textContent = "Leyendo el comentario…";
+  try {
+    const fd = new FormData(f);
+    if (!f.captura.files[0]) fd.delete("captura");
+    const r = await api("/api/comentario", { method: "POST", body: fd });
+    state.comment = { text: r.comment, author: r.author };
+    out.innerHTML = `
+      <div class="card"><p class="hint">Respuesta para el comentario</p><p id="comment-reply">${esc(r.reply)}</p>
+        <button class="ghost small" type="button" id="comment-copy">Copiar respuesta</button></div>
+      <div class="card"><h4>${esc(r.hook)}</h4><p class="script">${esc(r.script).replace(/\n/g, "<br>")}</p>
+        <p class="hint">${esc(r.why)}${r.ai ? "" : " (Sin IA conectada: guion hecho con las frases del comentario.)"}</p>
+        <label class="check"><input type="checkbox" id="comment-bubble" checked> Poner su comentario en pantalla al principio</label>
+        <button class="primary" type="button" id="comment-use" data-hook="${esc(r.hook)}">Grabar este →</button></div>`;
+  } catch (err) {
+    out.innerHTML = `<p class="error">${esc(err.message)}</p>`;
+  } finally { btn.disabled = false; btn.textContent = "Hazme la respuesta y el reel"; }
+};
+document.addEventListener("click", async e => {
+  if (e.target.id === "comment-copy") {
+    await navigator.clipboard.writeText($("#comment-reply").textContent).catch(() => {});
+    e.target.textContent = "Copiada ✓";
+  }
+  if (e.target.id === "comment-use") {
+    $("#hook-title").value = e.target.dataset.hook;
+    if (!$("#comment-bubble").checked) state.comment = null;
+    go("upload");
+  }
+});

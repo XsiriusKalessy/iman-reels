@@ -601,44 +601,91 @@ def brand_copy(cfg: AIConfig, description: str) -> dict:
 
 # --- Texto para publicar ------------------------------------------------------------
 
+PLATFORMS = ("instagram", "tiktok", "youtube", "facebook", "whatsapp")
+_PLAIN = {"type": "object", "properties": {"text": {"type": "string"}, "hashtags": {"type": "array", "items": {"type": "string"}}},
+          "required": ["text", "hashtags"], "additionalProperties": False}
 POST_SCHEMA = {
     "type": "object",
     "properties": {
-        "caption": {"type": "string"},
-        "hashtags": {"type": "array", "items": {"type": "string"}},
+        "stage": {"type": "string", "enum": ["atraer", "confiar", "vender"],
+                  "description": "En qué paso del embudo de ventas encaja este vídeo."},
+        "funnel": {"type": "string", "description": "En una frase: a dónde lleva este reel al cliente y por qué."},
+        "instagram": _PLAIN,
+        "tiktok": _PLAIN,
+        "facebook": _PLAIN,
+        "whatsapp": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"],
+                     "additionalProperties": False},
+        "youtube": {"type": "object", "properties": {"title": {"type": "string"}, "text": {"type": "string"},
+                                                     "hashtags": {"type": "array", "items": {"type": "string"}}},
+                    "required": ["title", "text", "hashtags"], "additionalProperties": False},
     },
-    "required": ["caption", "hashtags"],
+    "required": ["stage", "funnel", *PLATFORMS],
     "additionalProperties": False,
 }
 
-POST_SYSTEM = """Escribes el texto que acompaña a un reel en Instagram y TikTok, con la voz del creador.
-Estructura: una primera línea que engancha (no repitas el título del vídeo tal cual), 2 a 4 frases cortas con
-el valor del vídeo, y una llamada a la acción al final (usa la del creador si te la pasa). Máximo 600
-caracteres, saltos de línea entre bloques, como mucho 2 emojis. Hashtags: de 5 a 8, en el idioma del vídeo,
-mezclando de nicho y generales, sin el símbolo # y sin espacios."""
+POST_SYSTEM = """Escribes los textos que acompañan a un reel en cada red, con la voz del creador, pensando en su
+negocio y en su embudo de ventas. Primero decide en qué paso del embudo encaja el vídeo:
+- atraer (consejos, curiosidades, destinos): la llamada a la acción busca seguidores y conversación, y una
+  palabra clave por mensaje privado ("escríbeme JAPÓN y te mando…") para captar contactos;
+- confiar (experiencias, opiniones, detrás de las cámaras, clientes): lleva a guardar, compartir y escribir;
+- vender (ofertas, plazas, precios, salidas): lleva directo al contacto o a la reserva (WhatsApp, web, teléfono).
+Usa el contacto y la llamada a la acción del creador si te los pasa; no inventes precios, fechas ni datos.
+
+Cada red con su forma:
+- instagram: primera línea que engancha (no repitas el título del vídeo), 2 a 4 frases cortas de valor y la
+  llamada a la acción; máx. 600 caracteres; como mucho 2 emojis; 5 a 8 hashtags de nicho y generales.
+- tiktok: muy corto (máx. 150 caracteres), tono directo, con una pregunta para comentarios; 3 a 5 hashtags.
+- youtube (Shorts): title de máx. 70 caracteres con la palabra clave al principio; text de 2 a 3 frases con el
+  enlace o contacto si lo hay; 3 hashtags.
+- facebook: algo más largo y cercano (máx. 800 caracteres), pensado para un público algo mayor, con el enlace o
+  teléfono; 2 a 3 hashtags.
+- whatsapp: texto para el estado o para enviar a la lista de difusión de clientes: 1 a 3 frases cercanas, como
+  a un conocido, que inviten a responder ("¿Te apetece? Respóndeme y te cuento"); sin hashtags.
+Hashtags sin el símbolo # y sin espacios, en el idioma del vídeo."""
 
 
-def post_copy(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "", cta: str = "", handle: str = "") -> dict:
+def _tags(raw) -> list[str]:
+    tags = []
+    for t in raw or []:
+        t = "".join(str(t).split()).lstrip("#")
+        if t and t.lower() not in (x.lower() for x in tags):
+            tags.append(t)
+    return tags[:10]
+
+
+def post_copy(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "", cta: str = "", handle: str = "",
+              business: str = "", contact: str = "", name: str = "") -> dict:
     if cfg.provider == "iman":
         from . import cloud
 
         data = cloud.call(cfg, "post", {"transcript": transcript[:6000], "hook": hook, "pack": pack,
-                                        "cta": cta, "handle": handle})
+                                        "cta": cta, "handle": handle, "business": business, "contact": contact,
+                                        "name": name})
     else:
         user = f"LO QUE DICE EL VÍDEO:\n{transcript[:6000]}\n\nTítulo en pantalla: {hook}"
+        if name or business:
+            user += f"\nNegocio: {name}{' — ' if name and business else ''}{business}"
         if pack and pack != "general":
             user += f"\nSector: {pack}"
         if cta:
             user += f"\nLlamada a la acción del creador: {cta}"
+        if contact:
+            user += f"\nContacto (web, WhatsApp o teléfono): {contact}"
         if handle:
             user += f"\nCuenta: {handle}"
         data = _ask_json(cfg, POST_SYSTEM, user, POST_SCHEMA)
-    tags = []
-    for t in data.get("hashtags", []):
-        t = "".join(str(t).split()).lstrip("#")
-        if t and t.lower() not in (x.lower() for x in tags):
-            tags.append(t)
-    return {"caption": str(data.get("caption", "")).strip()[:2000], "hashtags": tags[:10]}
+    if "caption" in data and "instagram" not in data:  # servidor antiguo: un solo texto
+        data = {"instagram": {"text": data["caption"], "hashtags": data.get("hashtags", [])}}
+    out = {"stage": str(data.get("stage", "")), "funnel": str(data.get("funnel", "")).strip(), "platforms": {}}
+    for p in PLATFORMS:
+        d = data.get(p) or {}
+        if not d.get("text"):
+            continue
+        out["platforms"][p] = {"text": str(d["text"]).strip()[:2000], "hashtags": _tags(d.get("hashtags")),
+                               "title": str(d.get("title", "")).strip()[:100]}
+    ig = out["platforms"].get("instagram", {"text": "", "hashtags": []})
+    out["caption"], out["hashtags"] = ig["text"], ig["hashtags"]  # como antes, para lo que lo lea así
+    return out
 
 
 # --- Copiar el estilo de un reel ------------------------------------------------------
@@ -949,3 +996,66 @@ def cascade_texts(cfg: AIConfig, words: list[Word]) -> dict:
 
         return cloud.call(cfg, "cascada", {"transcript": text})
     return _ask_json(cfg, CASCADE_SYSTEM, f"TRANSCRIPCIÓN:\n{text}", CASCADE_SCHEMA)
+
+
+# --- Reel desde un comentario: respuesta y guion a partir de lo que te escribe un seguidor ---------
+
+COMMENT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "comment": {"type": "string", "description": "El comentario tal cual (copiado de la captura si la hay)."},
+        "author": {"type": "string", "description": "El usuario que lo escribe, sin @ (vacío si no se ve)."},
+        "reply": {"type": "string", "description": "Respuesta corta y cercana para contestar al comentario."},
+        "hook": {"type": "string", "description": "Gancho del reel nuevo (máx. 9 palabras)."},
+        "script": {"type": "string", "description": "Guion del reel nuevo, como habla el creador."},
+        "why": {"type": "string"},
+    },
+    "required": ["comment", "author", "reply", "hook", "script", "why"],
+    "additionalProperties": False,
+}
+
+COMMENT_SYSTEM = """Eres el community manager y guionista de un creador. Un seguidor le ha dejado un comentario
+(te lo paso en texto o en una captura de pantalla). Haz tres cosas:
+- comment y author: el comentario literal y el usuario que lo escribe (si viene en captura, cópialo de ahí).
+- reply: una respuesta para el comentario, corta, cercana, agradecida y con una pregunta que alargue la
+  conversación. Con algún emoji, sin pasarse.
+- hook y script: un reel nuevo que responde al comentario (estilo "respondiendo a…"), de 30 a 50 segundos y de
+  una sola toma. Si el comentario trae consejos o preguntas, conviértelos en una lista con número en el gancho
+  ("4 cosas que nadie te cuenta antes de ir a Japón"). Empieza mencionando al seguidor por su nombre, cuenta
+  cada punto con una frase de experiencia propia y termina invitando a comentar. Incluye un bucle abierto: deja
+  el punto más sorprendente para el final y anúncialo al principio.
+- why: por qué este reel puede funcionar.
+Escribe en el idioma del comentario. No inventes datos que no estén en el comentario o que no sean de sentido común."""
+
+
+def comment_reel(cfg: AIConfig, comment: str, author: str = "", image: bytes | None = None,
+                 voice_samples: str = "") -> dict:
+    if cfg.provider == "iman":
+        import base64
+
+        from . import cloud
+
+        return cloud.call(cfg, "comentario", {"comment": comment[:3000], "author": author[:60],
+                                              "image": base64.b64encode(image).decode() if image else ""})
+    user = f"COMENTARIO: {comment or '(en la captura)'}"
+    if author:
+        user += f"\nUSUARIO: {author}"
+    if voice_samples:
+        user += f"\n\nASÍ HABLA EL CREADOR:\n{voice_samples[:4000]}"
+    return _ask_json(cfg, COMMENT_SYSTEM, user, COMMENT_SCHEMA, [image] if image else None)
+
+
+def comment_fallback(comment: str, author: str = "") -> dict:
+    """Sin IA: los consejos del comentario, uno por frase, en un guion de lista."""
+    import re
+
+    tips = [t.strip(" .,;") for t in re.split(r"[\n.!?]+", comment) if len(t.split()) >= 3][:5]
+    who = author.lstrip("@") or "un seguidor"
+    n = len(tips)
+    hook = f"{n} consejos que me ha dejado {who}" if n >= 2 else f"Respondiendo a {who}"
+    body = "\n".join(f"{k}. {t[0].upper() + t[1:]}." for k, t in enumerate(tips, 1)) or comment.strip()
+    return {"comment": comment.strip(), "author": author.lstrip("@"),
+            "reply": f"¡Gracias {who}! Consejazos 🙌 Los comparto en un reel. ¿Tienes alguno más?",
+            "hook": hook,
+            "script": f"{who} me ha dejado este comentario y tiene toda la razón.\n{body}\n¿Cuál añadirías tú? Te leo en comentarios.",
+            "why": "Responder a un comentario real da confianza y te da contenido sin inventarlo."}

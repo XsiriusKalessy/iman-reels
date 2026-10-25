@@ -81,6 +81,7 @@ def remove_font() -> None:
 @dataclass
 class Brand:
     name: str = ""
+    description: str = ""  # el negocio en una frase: para que los textos de publicación vendan lo tuyo
     primary: str = ""  # '#RRGGBB'
     secondary: str = ""
     font: str = ""  # una clave de FONTS, o vacío para la del estilo

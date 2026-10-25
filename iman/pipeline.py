@@ -56,6 +56,9 @@ class EditOptions:
     punch: bool = True  # zoom rápido de entrada en el primer medio segundo
     barra: bool = False  # barra de progreso arriba que se llena hasta el final (retención)
     transiciones: bool = True  # whip y glitch en uno de cada dos cortes
+    # Reel que responde a un comentario: la burbuja con el comentario sale al principio (estilo "respondiendo a").
+    comentario: str = ""
+    comentario_de: str = ""
     red: str = "instagram"  # para qué red es (iman/redes.py): instagram, tiktok, youtube, anuncio
     look: str = "auto"  # "auto" = el que recomienda la IA; o color y textura de un clic (media.LOOKS): "calido", "teal", "cine", "grano", "retro", "bn"…
 
@@ -439,6 +442,9 @@ def run(
         plan = EditPlan()
     if opts.hook_title:
         plan.hook_title = opts.hook_title
+    if opts.comentario and opts.effects and not any(fx.get("type") == "comentario" for fx in plan.effects):
+        plan.effects.insert(0, {"type": "comentario", "word": 0, "text": opts.comentario[:140],
+                                "title": opts.comentario_de, "subtitle": "", "look": "", "until_word": None})
     chapters = sorted((fx for fx in plan.effects if fx.get("type") == "capitulo"), key=lambda fx: int(fx.get("word", 0)))
     for k, fx in enumerate(chapters, 1):  # capítulos numerados en orden
         fx["_n"] = k

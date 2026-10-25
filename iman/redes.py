@@ -43,6 +43,11 @@ pocos efectos llamativos (nada de 3D, anillos ni partículas), subtítulos limpi
 "titular" o "frase" (el problema, la promesa y la prueba), usa "captura" si enseña resultados y termina siempre
 con "cta" (text: la acción concreta, "Reserva tu plaza", "Escríbeme por WhatsApp"). Propón en "hook_options"
 tres ganchos distintos para probar el anuncio (dolor, resultado y curiosidad).""", caption_y=1300),
+    Red("whatsapp", "WhatsApp", "Estados y lista de difusión: corto, cercano y que te respondan",
+        """PERFIL WHATSAPP (estados y lista de difusión de clientes). Lo ven personas que ya te conocen: tono
+cercano, como hablando a un amigo, y directo al grano. Si dura más de 60 segundos se parte en varios estados,
+así que mejor que cada idea se entienda sola. Termina invitando a responder al estado o a escribir
+("Respóndeme a este estado y te paso la info"), nunca "link en la bio".""", caption_y=1300),
 ]}
 
 # Efectos que no pegan en un anuncio con estilo casero.

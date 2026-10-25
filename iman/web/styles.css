@@ -433,3 +433,8 @@ select option:checked { background-color: var(--accent); color: var(--accent-ink
 .open-loop { display: grid; gap: 4px; font-size: 13px; margin: 8px 0; padding: 10px 12px; border-left: 3px solid var(--accent, #FF5547); background: rgba(255,255,255,.04); border-radius: 8px; }
 .cascade { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); }
 .cascade-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.from-comment { margin: 18px 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; }
+.from-comment summary { cursor: pointer; font-weight: 700; }
+.from-comment textarea { width: 100%; }
+.file-pick { cursor: pointer; align-self: end; }
+#comment-out .script { white-space: normal; }

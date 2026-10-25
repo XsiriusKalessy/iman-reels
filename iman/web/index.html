@@ -65,6 +65,21 @@
       </div>
       <div id="ideas" class="cards"></div>
 
+      <details class="from-comment" id="from-comment">
+        <summary>💬 Reel desde un comentario</summary>
+        <p class="hint">Pega lo que te ha escrito un seguidor (o sube la captura). Te doy la respuesta para el comentario y el guion de un reel nuevo que le responde, con su comentario en pantalla al principio.</p>
+        <form id="comment-form" class="stack">
+          <label>Comentario<textarea name="texto" rows="4" placeholder="Consejo: tirad la basura en los 7-Eleven…"></textarea></label>
+          <div class="row tight">
+            <label>Usuario<input name="autor" placeholder="@sheila" maxlength="40"></label>
+            <label class="ghost small file-pick">📷 Subir captura<input type="file" name="captura" accept="image/*" hidden></label>
+            <span class="hint" id="comment-file"></span>
+          </div>
+          <button class="primary" type="submit">Hazme la respuesta y el reel</button>
+        </form>
+        <div id="comment-out"></div>
+      </details>
+
       <div class="today">
         <div class="today-head"><h3>Qué grabar hoy</h3><button class="ghost small" id="today-more" type="button">Otras ideas ↻</button></div>
         <p class="hint" id="today-hint">Toca una y te relleno el tema. Luego pulsa «Dame 3 ideas».</p>
@@ -306,10 +321,15 @@
           </form>
           <h3>Publicar</h3>
           <div class="publish">
-            <button class="ghost" id="post-btn">✦ Escríbeme el texto y los hashtags</button>
+            <button class="ghost" id="post-btn">✦ Escríbeme los textos para cada red</button>
             <div id="post-box" hidden>
-              <textarea id="post-text" rows="7"></textarea>
-              <button class="ghost" id="post-copy">Copiar texto</button>
+              <p class="hint" id="post-funnel"></p>
+              <div class="view-tabs" id="post-tabs" role="tablist"></div>
+              <textarea id="post-text" rows="8"></textarea>
+              <div class="row tight">
+                <button class="ghost" id="post-copy">Copiar texto</button>
+                <button class="link" id="post-again" type="button">Escríbelos de nuevo</button>
+              </div>
             </div>
             <div class="cover">
               <img id="cover-img" alt="Portada">
@@ -349,6 +369,7 @@
           </div>
           <div class="row">
             <a class="primary" id="download" href="#" download>Descargar reel</a>
+            <a class="ghost" id="download-wa-mp4" href="#" download title="Más ligero, para enviarlo a un grupo o a tu lista de difusión">Para WhatsApp</a>
             <a class="ghost" id="download-wa" href="#" download hidden title="Los estados de WhatsApp cortan a los 60 segundos">Para estados de WhatsApp (trozos de 60 s)</a>
             <button class="ghost" data-goto="upload">Editar un nuevo reel</button>
           </div>

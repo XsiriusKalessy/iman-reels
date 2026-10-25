@@ -1133,3 +1133,77 @@ def test_ideas_come_with_an_open_loop(monkeypatch):
     monkeypatch.setattr(ai, "_ask_json", fake)
     got = ai.generate_ideas(ai.AIConfig(provider="claude", anthropic_key="x"), "Japón")
     assert got[0]["loop"]["payoff"] == "p" and "open loop" in seen["system"]
+
+
+def test_reel_from_a_comment(sample, tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from iman import config, server
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    c = TestClient(server.app)
+    c.post("/api/settings", json={"provider": "none"})
+    tips = ("Consejo, tirar la basura en los seven eleven que es donde encontrareis papeleras.\n"
+            "Casi todos los hoteles tienen para enchufar el cable usb, pero hay pocos enchufes.\n"
+            "Recomiendo q lleveis alguna app de traducion.\nEspero q la gente meta sus mejores calcetines jajaa")
+    r = c.post("/api/comentario", data={"texto": tips, "autor": "@sheilatatiana"})
+    assert r.status_code == 200, r.text
+    got = r.json()
+    assert got["hook"].startswith("4 consejos") and "sheilatatiana" in got["reply"] and not got["ai"]
+    # Solo la captura, sin IA: pide pegar el texto.
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (60, 120), "white").save(buf, "PNG")
+    r = c.post("/api/comentario", files={"captura": ("c.png", buf.getvalue(), "image/png")})
+    assert r.status_code == 400 and "pega" in r.json()["detail"].lower()
+    # El reel que responde lleva la burbuja al principio.
+    cfg = {"provider": "none", "anthropic_key": "", "openai_key": "", "claude_model": "", "openai_model": ""}
+    res = pipeline.run(sample, tmp_path / "w", pipeline.EditOptions(rhythm="sin_tocar", comentario="Pocos enchufes",
+                                                                    comentario_de="sheila"), cfg, words=TAKE)
+    assert res.plan.effects[0]["type"] == "comentario"
+    assert "Respuesta al comentario de @sheila" in (tmp_path / "w" / "subs.ass").read_text(encoding="utf-8")
+
+
+def test_texts_for_each_network_follow_the_funnel(sample, tmp_path, monkeypatch):
+    from iman import ai
+
+    def fake(cfg, system, user, schema):
+        assert "Xsirius Viajes" in user and "WhatsApp 600" in user and "embudo" in system
+        return {"stage": "vender", "funnel": "Lleva a WhatsApp.",
+                "instagram": {"text": "Japón en grupo", "hashtags": ["#japon", "japon", "viajes en grupo"]},
+                "tiktok": {"text": "¿Irías?", "hashtags": ["japon"]},
+                "youtube": {"title": "Japón en grupo", "text": "Info", "hashtags": []},
+                "facebook": {"text": "Plazas", "hashtags": []}, "whatsapp": {"text": "¿Te apetece? Respóndeme"}}
+
+    monkeypatch.setattr(ai, "_ask_json", fake)
+    out = ai.post_copy(ai.AIConfig(provider="claude", anthropic_key="x"), "texto", "hook", "viajes", "Reserva",
+                       "@x", "agencia de grandes viajes", "WhatsApp 600", "Xsirius Viajes")
+    assert set(out["platforms"]) == {"instagram", "tiktok", "youtube", "facebook", "whatsapp"}
+    assert out["hashtags"] == ["japon", "viajesengrupo"] and out["stage"] == "vender"
+    assert out["platforms"]["youtube"]["title"] == "Japón en grupo"
+    # Servidor antiguo (un solo texto): sigue funcionando.
+    monkeypatch.setattr(ai, "_ask_json", lambda *a: {"caption": "Hola", "hashtags": ["a"]})
+    assert ai.post_copy(ai.AIConfig(provider="claude", anthropic_key="x"), "t")["caption"] == "Hola"
+
+
+def test_whatsapp_light_video(sample, tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from iman import config, server
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    work = tmp_path / "jobs" / "abc123"
+    work.mkdir(parents=True)
+    shutil.copy(sample, work / "reel.mp4")
+    c = TestClient(server.app)
+    r = c.get("/api/jobs/abc123/whatsapp.mp4")
+    assert r.status_code == 200
+    p = tmp_path / "wa.mp4"
+    p.write_bytes(r.content)
+    assert media.probe(p).width == 720
+    assert c.get("/api/jobs/..%2F/whatsapp.mp4").status_code == 404

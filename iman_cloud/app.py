@@ -119,6 +119,21 @@ def cascada(request: Request, body: CascadeIn, x_iman_license: str = Header(""),
     return ai.cascade_texts(_cfg(), words)
 
 
+class CommentIn(BaseModel):
+    comment: str = Field("", max_length=3000)
+    author: str = Field("", max_length=60)
+    image: str = Field("", max_length=4_000_000)
+
+
+@app.post("/v1/comentario")
+def comentario(request: Request, body: CommentIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
+    import base64
+
+    _check(x_iman_license, x_iman_instance, request)
+    image = base64.b64decode(body.image) if body.image else None
+    return ai.comment_reel(_cfg(), body.comment, body.author, image)
+
+
 class BrandIn(BaseModel):
     description: str = Field(..., max_length=400)
 
@@ -135,12 +150,16 @@ class PostIn(BaseModel):
     pack: str = Field("", max_length=20)
     cta: str = Field("", max_length=60)
     handle: str = Field("", max_length=60)
+    business: str = Field("", max_length=300)
+    contact: str = Field("", max_length=60)
+    name: str = Field("", max_length=60)
 
 
 @app.post("/v1/post")
 def post(request: Request, body: PostIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
     _check(x_iman_license, x_iman_instance, request)
-    return ai.post_copy(_cfg(), body.transcript, body.hook, body.pack, body.cta, body.handle)
+    return ai.post_copy(_cfg(), body.transcript, body.hook, body.pack, body.cta, body.handle, body.business,
+                        body.contact, body.name)
 
 
 class KitIn(BaseModel):

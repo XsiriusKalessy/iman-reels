@@ -6,6 +6,7 @@ import io
 import json
 import logging
 import shutil
+import subprocess
 import threading
 import time
 import uuid
@@ -353,6 +354,7 @@ def get_brand():
 
 class BrandIn(BaseModel):
     name: str | None = None
+    description: str | None = Field(None, max_length=300)
     primary: str | None = None
     secondary: str | None = None
     font: str | None = None
@@ -475,6 +477,37 @@ def ideas(body: IdeasIn):
     return {"ideas": ai.generate_ideas(cfg, body.topic, body.audience, _voice_samples(), body.n)}
 
 
+@app.post("/api/comentario")
+def comment_to_reel(texto: str = Form(""), autor: str = Form(""), captura: UploadFile | None = File(None)):
+    """Reel desde un comentario: respuesta para el seguidor y guion de un reel nuevo que le responde."""
+    image = None
+    if captura is not None and captura.filename:
+        from PIL import Image, ImageOps
+
+        try:
+            with Image.open(captura.file) as im:
+                im = ImageOps.exif_transpose(im).convert("RGB")
+                im.thumbnail((1400, 1400))
+                buf = io.BytesIO()
+                im.save(buf, "JPEG", quality=88)
+                image = buf.getvalue()
+        except Exception:  # noqa: BLE001
+            raise HTTPException(400, "No puedo abrir esa captura. Prueba con una imagen JPG o PNG.") from None
+    texto, autor = texto.strip()[:3000], autor.strip().lstrip("@")[:60]
+    if not texto and image is None:
+        raise HTTPException(400, "Pega el comentario o sube una captura")
+    cfg = config.ai_config(config.load())
+    if cfg.enabled:
+        try:
+            return {**ai.comment_reel(cfg, texto, autor, image, _voice_samples()), "ai": True}
+        except Exception as e:  # noqa: BLE001
+            if not texto:
+                raise HTTPException(502, f"La IA no ha podido leer la captura: {ai.error_message(e)}") from None
+    elif not texto:
+        raise HTTPException(400, "Para leer la captura necesito tu IA conectada en Ajustes. Mientras, pega el texto.")
+    return {**ai.comment_fallback(texto, autor), "ai": False}
+
+
 def _voice_samples() -> str:
     """Transcripciones de reels anteriores, para que las ideas suenen a ti."""
     texts = []
@@ -561,6 +594,8 @@ async def create_job(
     transiciones: bool = Form(True),
     look: str = Form("auto"),
     red: str = Form("instagram"),
+    comentario: str = Form(""),
+    comentario_de: str = Form(""),
 ):
     if (pack and pack not in packs.PACKS) or mode not in ("camara", "voz", "largo") \
             or background not in pipeline.BACKGROUNDS:
@@ -601,7 +636,9 @@ async def create_job(
                                 mode="voz" if mode == "voz" else "camara", background=background,
                                 sfx=sfx, music=music, punch=punch, barra=barra, transiciones=transiciones,
                                 look=look if look in media.LOOKS or look == "auto" else "",
-                                red=red if red in redes.REDES else "instagram")
+                                red=red if red in redes.REDES else "instagram",
+                                comentario=" ".join(comentario.split())[:140],
+                                comentario_de=comentario_de.strip().lstrip("@")[:40])
     JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0, "mode": mode,
                     "options": asdict(opts), "created": time.time(), "trial": watermark and mode != "largo"}
     target = _work_long if mode == "largo" else _work
@@ -835,14 +872,14 @@ def edit_plan(job_id: str, body: PlanEditIn):
 
 
 @app.post("/api/jobs/{job_id}/post")
-def post_copy(job_id: str):
+def post_copy(job_id: str, nuevo: bool = False):
     """Texto de la publicación y hashtags, escritos por la IA con lo que dices en el vídeo."""
     job = _job(job_id)
     if not job or job["status"] != "done":
         raise HTTPException(404, "No encuentro ese reel")
     workdir = JOBS_DIR / job_id
-    cached = workdir / "post.json"
-    if cached.exists():
+    cached = workdir / "post-redes.json"
+    if cached.exists() and not nuevo:
         return json.loads(cached.read_text(encoding="utf-8"))
     aicfg = config.ai_config(config.load())
     if not aicfg.enabled:
@@ -851,7 +888,8 @@ def post_copy(job_id: str):
     b = brand.load()
     try:
         data = ai.post_copy(aicfg, " ".join(w.text for w in words), job["result"]["plan"].get("hook_title", ""),
-                            job["options"].get("pack", ""), b.cta, b.handle)
+                            job["options"].get("pack", "") or b.sector, b.cta, b.handle, b.description, b.contact,
+                            b.name)
     except Exception as e:
         raise HTTPException(502, f"La IA no ha podido escribir el texto: {e}")
     cached.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
@@ -1215,6 +1253,24 @@ def cascade_file(job_id: str, name: str):
              ".txt": "text/plain; charset=utf-8"}
     return FileResponse(p, media_type=kinds.get(p.suffix, "application/octet-stream"),
                         filename=f"{job_id}-{p.name}" if p.suffix != ".png" else None)
+
+
+@app.get("/api/jobs/{job_id}/whatsapp.mp4")
+def get_whatsapp_video(job_id: str):
+    """El reel ligero para enviarlo por WhatsApp (a un grupo o a la lista de difusión) sin que lo destroce."""
+    workdir = JOBS_DIR / job_id
+    p = workdir / "reel.mp4"
+    if not job_id.isalnum() or not p.exists():
+        raise HTTPException(404)
+    out = workdir / "whatsapp.mp4"
+    if not out.exists() or out.stat().st_mtime < p.stat().st_mtime:
+        tmp = workdir / "whatsapp.tmp.mp4"
+        subprocess.run([media.FFMPEG, "-v", "error", "-y", "-i", str(p), "-vf", "scale=720:-2", "-c:v", "libx264",
+                        "-preset", "veryfast", "-crf", "24", "-maxrate", "2500k", "-bufsize", "5000k",
+                        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(tmp)],
+                       check=True)
+        tmp.replace(out)
+    return FileResponse(out, media_type="video/mp4", filename=f"reel-{job_id}-whatsapp.mp4")
 
 
 @app.get("/api/jobs/{job_id}/whatsapp.zip")
