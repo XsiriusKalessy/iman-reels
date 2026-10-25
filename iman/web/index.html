@@ -39,6 +39,7 @@
         <div><h1>Mis reels</h1><p class="lead">Todo lo que has editado con Imán, listo para volver a tocar o publicar.</p></div>
         <button class="primary" data-goto="upload">+ Nuevo reel</button>
       </div>
+      <p class="hint" id="lib-filter-row" hidden><label>Cliente <select id="lib-client"><option value="*">Todos</option><option value="">Mi marca</option></select></label></p>
       <div id="streak" class="card streak" hidden></div>
       <div id="learned" class="card learned" hidden></div>
       <div id="library" class="library"></div>
@@ -66,6 +67,17 @@
         </div>
       </div>
       <div id="ideas" class="cards"></div>
+
+      <details class="from-comment" id="inspo-box">
+        <summary>🔍 Inspiración: ¿por qué funciona ese reel?</summary>
+        <p class="hint">Sube un reel de otra persona que te haya llamado la atención. Imán mide su ritmo y explica su gancho, su estructura y sus trucos de retención, y te dice qué parte de la <b>forma</b> puedes llevarte. Nunca su guion ni sus frases: eso es suyo.</p>
+        <div class="row tight wrap">
+          <label class="file-btn ghost">📥 Analizar un reel<input type="file" id="inspo-file" accept="video/*" hidden></label>
+          <span class="hint" id="inspo-status"></span>
+        </div>
+        <div id="inspo-out" class="cards" hidden></div>
+        <div id="inspo-list" class="inspo-list"></div>
+      </details>
 
       <details class="from-comment" id="trends-box">
         <summary>🔥 Ideas en tendencia hoy</summary>
@@ -186,6 +198,7 @@
         <label class="choice"><input type="radio" name="mode" value="vozclips"><span>🎞 Mi voz sobre mis vídeos<small>Tus clips con tu voz encima</small></span></label>
         <label class="choice"><input type="radio" name="mode" value="largo"><span>✂️ Vídeo largo → varios reels<small>Un directo, una clase, un podcast</small></span></label>
       </div>
+      <label class="check" id="directo-row" hidden><input type="checkbox" id="directo"> Es un directo o una charla con público: busca también los momentos con más energía (risas, subidas de voz, reacciones)</label>
       </details>
       <p class="hint plantilla-row" id="plantilla-row" hidden>
         <label>Plantilla <select id="plantilla"><option value="">Imán decide (sin plantilla)</option></select></label>
@@ -629,6 +642,12 @@
     <form method="dialog" id="brand-form">
       <h2>Mi marca</h2>
       <p class="hint">Se configura una vez y se aplica sola en todos tus reels.</p>
+      <div class="row tight wrap clients" id="clients-row" hidden>
+        <label>Cliente <select id="client-select"><option value="">Mi marca (la propia)</option></select></label>
+        <button class="ghost small" type="button" id="client-add">+ Añadir cliente</button>
+        <button class="ghost small" type="button" id="client-del" hidden>Borrar cliente</button>
+        <span class="hint" id="client-hint">Cada cliente tiene su propia marca; lo que edites abajo es la del cliente elegido.</span>
+      </div>
       <div class="brand-grid">
         <div class="stack">
           <label title="Qué vendes, a quién y qué te hace distinto. La IA lo usa en los textos de cada red.">Cuéntame tu negocio en una frase

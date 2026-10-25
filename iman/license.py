@@ -28,8 +28,8 @@ OFFLINE_GRACE = 14 * 24 * 3600
 
 # Planes: "normal" (la licencia de siempre), "pro" y "dueno" (el dueño de Imán: todo, sin límites).
 PLAN_LABELS = {"normal": "Licencia", "pro": "Licencia Pro", "dueno": "Licencia de dueño"}
-# Funciones que en el futuro serán solo de Pro (multimarca, varios clientes…). De momento todas son para todos.
-PRO_FEATURES: set[str] = set()
+# Funciones solo de Pro (y del dueño): varios clientes con su marca cada uno. El resto es para todos.
+PRO_FEATURES: set[str] = {"clientes"}
 
 
 def plan(cfg: dict) -> str:

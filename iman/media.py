@@ -156,7 +156,7 @@ def _filter_path(p: Path) -> str:
 
 
 def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx]", src: str = "[0:v]",
-                    images: dict | None = None) -> str:
+                    images: dict | None = None, hdr: bool = False) -> str:
     """Efectos que mezclan vídeo sobre el reel ya montado (tiempos del reel, en segundos).
 
     - bruto: tarjeta inclinada con la toma original sin cortar, arriba a la derecha.
@@ -175,6 +175,7 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx
             brd = int(12 * k_scale)
             parts.append(
                 f"{src}trim=start={op.src_start:.3f}:duration={b - a:.3f},setpts=PTS-STARTPTS+{a:.3f}/TB,fps=30,"
+                f"{TONEMAP if hdr else ''}"
                 f"scale={cw}:{ch}:force_original_aspect_ratio=increase,crop={cw}:{ch},setsar=1,"
                 f"pad={cw + 2 * brd}:{ch + 2 * brd}:{brd}:{brd}:white,format=rgba,"
                 f"rotate=-0.07:c=none:ow=rotw(-0.07):oh=roth(-0.07)[ov{k}]"
@@ -429,7 +430,7 @@ def build_filtergraph(
     else:
         parts.append(f"{vf}fps=30,setsar=1[vx]")
     _, images = _image_inputs(overlays, 1)
-    cur = _video_overlays(parts, overlays or [], W, H, images=images)
+    cur = _video_overlays(parts, overlays or [], W, H, images=images, hdr=info.hdr)
     tail = f"{cur}null"
     if ass_path is not None:
         tail += f",ass=filename='{_filter_path(ass_path)}':fontsdir='{_filter_path(fonts_dir())}'"
@@ -623,12 +624,13 @@ def duration_of(path: Path) -> float:
         return 0.0
 
 
-def voice_canvas(audio: Path, dst: Path, cuts: list[float], clips: list[Path], color: str = "#141518") -> Path:
+def voice_canvas(audio: Path, dst: Path, cuts: list[float], clips: list[Path], color: str = "#141518",
+                 size: str = "1080") -> Path:
     """Para reels sin cámara: tu voz sobre tus vídeos y fotos, cambiando de plano en `cuts` (segundos).
 
     Sin vídeos, un fondo liso con un brillo suave; los subtítulos grandes hacen el resto.
     """
-    W, H = SIZES["1080"]
+    W, H = SIZES.get(size, SIZES["1080"])
     total = duration_of(audio)
     bounds = [0.0, *[c for c in cuts if 0 < c < total], total]
     parts, inputs = [], ["-i", str(audio)]

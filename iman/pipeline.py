@@ -66,6 +66,7 @@ class EditOptions:
     letra: str = "normal"  # tamaño de los subtítulos: normal, grande o enorme (captions.SIZES)
     idioma: str = ""  # subtítulos y textos en otro idioma ("en", "fr"…): la voz se queda, los textos se traducen
     look: str = "auto"  # "auto" = el que recomienda la IA; o color y textura de un clic (media.LOOKS): "calido", "teal", "cine", "grano", "retro", "bn"…
+    directo: bool = False  # vídeo largo que es un directo: los momentos se eligen también por la energía del audio
 
 
 @dataclass
@@ -196,18 +197,25 @@ def _transcribe(src: Path, workdir: Path, cfg: dict, progress: Progress) -> list
 
 
 def long_video_clips(src: Path, workdir: Path, cfg: dict, progress: Progress = lambda m, p: None,
-                     n: int = 4) -> tuple[list[Word], list[dict]]:
-    """Vídeo largo → los mejores momentos para reels (la IA los elige; sin IA, trozos de ~40 s)."""
+                     n: int = 4, directo: bool = False) -> tuple[list[Word], list[dict]]:
+    """Vídeo largo → los mejores momentos para reels (la IA los elige; sin IA, trozos de ~40 s).
+    Con `directo`, también se mide la energía del audio (risas, subidas de voz) y se le pasa a la IA."""
     workdir.mkdir(parents=True, exist_ok=True)
     words = _transcribe(src, workdir, cfg, progress)
     if jsonfile.load(workdir / "transcript.json") is None:  # para el método cascada, más tarde
         jsonfile.save(workdir / "transcript.json", [w.__dict__ for w in words], indent=1)
+    hints = ""
+    if directo:
+        progress("Buscando los momentos con más energía", 0.45)
+        from . import energia
+
+        hints = energia.hint(src)
     progress("Buscando los mejores momentos", 0.5)
     picks: list[dict] = []
     aicfg = ai_config(cfg)
     if aicfg.enabled and words:
         try:
-            picks = ai.pick_clips(aicfg, words, n)
+            picks = ai.pick_clips(aicfg, words, n, hints)
         except Exception:  # la IA es un extra: si falla, cortamos por frases
             picks = []
     return words, picks or ai.fallback_clips(words, n)
@@ -482,7 +490,7 @@ def run(
             progress("Montando tus vídeos con tu voz", 0.25)
             kit0 = brand.load() if opts.brand else None
             bg = kit0.primary if kit0 is not None and kit0.active and brand.is_hex(kit0.primary or "") else "#141518"
-            media.voice_canvas(src, canvas, visual_cuts(words), clips, bg)
+            media.voice_canvas(src, canvas, visual_cuts(words), clips, bg, size=opts.size)
         src = canvas
     info = media.probe(src)
     if not info.has_audio:

@@ -1710,3 +1710,75 @@ def test_trends_promo_team_and_achievements(tmp_path, monkeypatch):
     assert logros.compute([], today)["total"] == 0
     assert c.get("/api/logros").json()["total"] == 1
     server.JOBS.clear()
+
+
+def test_inspiration_live_energy_and_clients(tmp_path, monkeypatch):
+    """Zona Inspiración, momentos con energía de un directo, multi-cliente Pro y arreglos de la auditoría."""
+    import subprocess
+    from fastapi.testclient import TestClient
+    from iman import ai, brand, clientes, config, energia, inspiracion, license, media, plantillas, server
+    from iman.ai import AIConfig
+    from iman.models import Span, Word
+    monkeypatch.setattr(config, "HOME", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    server.JOBS.clear()
+    # Energía: una subida de volumen entre los 20 y los 28 s.
+    wav = tmp_path / "e.wav"
+    subprocess.run([media.FFMPEG, "-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=60", "-af",
+                    "volume='if(between(t,20,28),4,0.3)':eval=frame", str(wav)], check=True)
+    assert energia.peaks(energia.levels(wav)) == [(20, 28)] and "00:20-00:28" in energia.hint(wav)
+    assert energia.peaks([-30.0] * 5) == []
+    calls = []
+    monkeypatch.setattr(ai, "_ask_json", lambda cfg, system, user, schema, images=None: calls.append(user) or {"clips": []})
+    ai.pick_clips_raw(AIConfig(provider="claude", anthropic_key="k"), "x", 2, "PISTA")
+    assert "PISTA" in calls[-1]
+    # Inspiración: medidas sin IA, limpieza de la respuesta, y la forma como plantilla.
+    vid = tmp_path / "ajeno.mp4"
+    subprocess.run([media.FFMPEG, "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=360x640:rate=30", "-f", "lavfi",
+                    "-i", "sine=frequency=440", "-t", "6", "-pix_fmt", "yuv420p", str(vid)], check=True)
+    words = [Word("hola", 0.4, 0.6), Word("mundo", 0.7, 1.0)]
+    m = inspiracion.metrics(vid, words)
+    assert m["duration"] == 6.0 and m["first_word_s"] == 0.4 and m["vertical"] and m["rhythm"] in ("rapido", "dinamico", "natural")
+    raw = {"title": "Tres errores", "hook": "Cifra", "gancho": "numero", "structure": "gancho → 3 puntos", "why": ["a", "", "b"],
+           "copy_form": ["ritmo"], "avoid": [], "my_version": "Mi idea.", "score": 140}
+    a = inspiracion.clean(raw)
+    assert a["score"] == 100 and a["why"] == ["a", "b"] and a["gancho"] == "numero"
+    assert inspiracion.clean({"gancho": "nada"})["gancho"] == "titulo"
+    monkeypatch.setattr(ai, "_ask_json", lambda cfg, system, user, schema, images=None: raw)
+    assert inspiracion.analyze(AIConfig(provider="claude", anthropic_key="k"), [b"x"], words, m, "viajes")["title"] == "Tres errores"
+    item = inspiracion.save({"title": "Tres errores", "metrics": m, "analysis": a,
+                             "style": {"name": "Suyo", "font": "Anton", "uppercase": True, "words_per_line": 2, "position": "centro",
+                                       "size": "grande", "text_color": "#FFFFFF", "highlight_color": "#FFD60A", "outline": True,
+                                       "box": False, "box_color": "", "pop": True, "notes": ""}})
+    assert inspiracion.get(item["id"])["title"] == "Tres errores" and len(inspiracion.listar()) == 1
+    t = inspiracion.as_template(item, "Como ese")
+    assert t["options"]["gancho"] == "numero" and t["options"]["style"].startswith("mio-") and plantillas.listar()[0]["name"] == "Como ese"
+    assert inspiracion.borrar(item["id"]) and inspiracion.get(item["id"]) is None and inspiracion.borrar("../x") is False
+    c = TestClient(server.app)
+    assert c.get("/api/inspiracion").json()["items"] == []
+    assert c.post("/api/inspiracion/zzzz/plantilla", json={"name": "x"}).status_code == 404
+    # Multi-cliente: Pro; la marca cambia de carpeta con el cliente activo.
+    monkeypatch.setattr(license, "has", lambda cfg, feature: False)
+    assert c.post("/api/clientes", json={"name": "Hotel"}).status_code == 402
+    monkeypatch.setattr(license, "has", lambda cfg, feature: True)
+    r = c.post("/api/clientes", json={"name": "Hotel Mar Azul"}).json()
+    cid = r["cliente"]["id"]
+    assert r["activo"] == cid and clientes.activo() == cid and (clientes.dir_for(cid) / "marca").is_dir()
+    assert str(clientes.dir_for(cid) / "marca").endswith(f"clientes/{cid}/marca")  # brand.brand_dir() lo usa con cliente activo
+    assert c.post("/api/clientes", json={"name": "hotel mar azul"}).status_code == 400
+    assert c.post("/api/clientes/activo", json={"id": ""}).json()["activo"] == "" and clientes.activo() == ""
+    assert c.post("/api/clientes/activo", json={"id": "nope"}).status_code == 404
+    c.post("/api/clientes/activo", json={"id": cid})
+    assert server._edit_fields({"directo": True}) == {"directo": True}
+    assert c.delete(f"/api/clientes/{cid}").json()["clientes"] == [] and clientes.activo() == "" and not clientes.dir_for(cid).exists()
+    # Auditoría: beat_spans nunca deja tramos de dos fotogramas; voice_canvas respeta 4K; paralaje a medios segundos.
+    from iman import effects
+    ws = [Word(f"w{i}", i * 0.5, i * 0.5 + 0.3) for i in range(40)]
+    out, _ = effects.beat_spans([Span(0.0, 20.0)], ws, grid=[0.0, 2.55, 2.6, 5.2, 7.8, 10.4, 13.0, 15.6, 18.2])
+    assert all(sp.duration >= 0.3 for sp in out)
+    import inspect
+    assert "size" in inspect.signature(media.voice_canvas).parameters
+    from iman import paralaje
+    assert "canon" in inspect.getsource(paralaje.cached)
+    server.JOBS.clear()

@@ -1174,6 +1174,8 @@ def beat_spans(spans: list[Span], words: list[Word], every: float = 2.6, run: in
             cut = min(near, key=lambda g: abs(g - target) * 0.15 + off_beat(g, sp.start))
             if grid and off_beat(cut, sp.start) == 0.0:
                 cut = round(cut + nearest(cut, sp.start), 3)  # el corte justo en el golpe
+            if cut - start < 0.3 or sp.end - cut < 0.3:  # un tramo de dos fotogramas sería un flash
+                break
             out.append(Span(start, cut))
             beats.add(cut)
             streak += 1

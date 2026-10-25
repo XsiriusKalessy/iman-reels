@@ -37,6 +37,9 @@ DEFAULTS = {
     "memory": [],
     # Modo equipo: nombres de quienes revisan y aprueban reels (iman/aprobacion.py).
     "equipo": [],
+    # Multi-cliente (Pro): lista de clientes [{id, name, created}] y el activo (iman/clientes.py).
+    "clientes": [],
+    "cliente": "",
 }
 
 MEMORY_MAX = 20

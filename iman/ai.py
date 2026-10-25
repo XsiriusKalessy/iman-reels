@@ -983,18 +983,19 @@ def transcript_with_times(words: list[Word]) -> str:
     return " ".join(out)
 
 
-def pick_clips(cfg: AIConfig, words: list[Word], n: int = 4) -> list[dict]:
+def pick_clips(cfg: AIConfig, words: list[Word], n: int = 4, hints: str = "") -> list[dict]:
+    """`hints`: pistas extra (los momentos con más energía de un directo, iman/energia.py)."""
     if cfg.provider == "iman":
         from . import cloud
 
-        data = cloud.call(cfg, "clips", {"transcript": transcript_with_times(words)[:120000], "n": n})
+        data = cloud.call(cfg, "clips", {"transcript": transcript_with_times(words)[:120000], "n": n, "hints": hints[:2000]})
     else:
-        data = pick_clips_raw(cfg, transcript_with_times(words), n)
+        data = pick_clips_raw(cfg, transcript_with_times(words), n, hints)
     return clean_clips(data, words, n)
 
 
-def pick_clips_raw(cfg: AIConfig, transcript: str, n: int = 4) -> dict:
-    user = f"TRANSCRIPCIÓN:\n{transcript}\n\nSaca como mucho {n} reels."
+def pick_clips_raw(cfg: AIConfig, transcript: str, n: int = 4, hints: str = "") -> dict:
+    user = f"TRANSCRIPCIÓN:\n{transcript}\n\n" + (f"{hints}\n\n" if hints else "") + f"Saca como mucho {n} reels."
     return _ask_json(cfg, CLIPS_SYSTEM, user, CLIPS_SCHEMA)
 
 

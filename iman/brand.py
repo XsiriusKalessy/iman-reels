@@ -139,7 +139,11 @@ class Brand:
 
 
 def brand_dir() -> Path:
-    return config.HOME / "marca"
+    """La marca propia («marca») o, con un cliente activo (multi-cliente Pro), la de ese cliente."""
+    from . import clientes
+
+    cid = clientes.activo()
+    return clientes.dir_for(cid) / "marca" if cid else config.HOME / "marca"
 
 
 def load() -> Brand:

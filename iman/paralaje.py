@@ -155,10 +155,13 @@ def cached(photo: str | Path, duration: float) -> Path:
 
     p = Path(photo)
     st = p.stat()
-    key = hashlib.sha1(json.dumps([str(p), st.st_size, st.st_mtime, round(duration, 2), 1]).encode()).hexdigest()[:16]
+    # A medios segundos: un corte que se mueve 10 ms en una reedición no vuelve a renderizar la foto
+    # (el montaje ya recorta el clip a la duración exacta con trim).
+    canon = math.ceil(max(0.5, duration) * 2) / 2
+    key = hashlib.sha1(json.dumps([str(p), st.st_size, st.st_mtime, canon, 2]).encode()).hexdigest()[:16]
     out = config.HOME / "cache" / "paralaje" / f"{key}.mp4"
     if not out.exists():
         tmp = out.with_suffix(".tmp.mp4")
-        render(p, duration, tmp)
+        render(p, canon, tmp)
         tmp.replace(out)
     return out

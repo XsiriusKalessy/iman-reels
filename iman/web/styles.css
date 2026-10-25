@@ -645,3 +645,13 @@ table.calendar th, table.calendar td { text-align: left; padding: 8px 6px; borde
 .badge { font-size: .78rem; padding: .2rem .55rem; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
 .badge.on { border-color: var(--accent); color: var(--text); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .trend-topic { font-size: .8rem; color: var(--muted); }
+
+/* Inspiración, directo, clientes */
+.file-btn { display: inline-block; cursor: pointer; }
+.inspo-list { display: grid; gap: .4rem; margin-top: .8rem; }
+.inspo-item { display: flex; gap: .6rem; align-items: center; font-size: .9rem; }
+.inspo-item .score { font-weight: 800; min-width: 2.6rem; }
+.inspo-item button { margin-left: auto; }
+.card .why li { margin: .15rem 0; }
+.clients { margin-bottom: .8rem; }
+.reel-card .cli { position: absolute; right: .4rem; bottom: 4.6rem; font-size: .72rem; background: rgba(0,0,0,.6); color: #fff; padding: .15rem .45rem; border-radius: 999px; }

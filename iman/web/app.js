@@ -5,6 +5,7 @@ const state = { file: null, takes: [], job: null, settings: null, poll: null };
 function go(step) {
   if (step === "home") loadLibrary();
   if (step === "upload") loadTemplates();
+  if (step === "idea") loadInspiration();
   const swap = () => {
     $$(".panel").forEach(p => p.classList.toggle("show", p.dataset.panel === step));
     $$("#steps button").forEach(b => b.classList.toggle("active", b.dataset.step === step));
@@ -499,6 +500,7 @@ const MODES = {
   largo: { title: "Arrastra tu vídeo largo aquí", hint: "un directo, una clase o un podcast · Imán saca los mejores momentos", accept: "video/*" },
 };
 const mode = () => $("input[name=mode]:checked").value;
+document.querySelectorAll("input[name=mode]").forEach(r => r.addEventListener("change", () => { $("#directo-row").hidden = mode() !== "largo"; }));
 function canGo() {
   $("#to-edit").disabled = $("#go-quick").disabled = !state.file || (mode() === "vozclips" && !state.broll.length);
 }
@@ -631,6 +633,7 @@ $("#go").onclick = async () => {
   fd.append("instructions", $("#instructions").value);
   fd.append("remember", $("#remember").checked);
   if ($("#plantilla").value) fd.append("plantilla", $("#plantilla").value);
+  if (mode() === "largo") fd.append("directo", $("#directo").checked);
   fd.append("mode", mode() === "vozclips" ? "voz" : mode());
   const bg = mode() === "camara" ? $("input[name=background]:checked").value : "";
   fd.append("background", bg === "foto" && !$("#bg-photo").files[0] ? "" : bg);
@@ -969,18 +972,124 @@ let coverTimer;
 $("#cover-t").oninput = e => { clearTimeout(coverTimer); coverTimer = setTimeout(() => setCover(e.target.value), 150); };
 
 async function loadLibrary() {
-  const { reels } = await api("/api/reels");
+  let { reels } = await api("/api/reels");
+  let cl = { clientes: [], activo: "" };
+  try { cl = await api("/api/clientes"); } catch { /* sin clientes */ }
+  const names = Object.fromEntries(cl.clientes.map(c => [c.id, c.name]));
+  const sel = $("#lib-client");
+  const cur = sel.value || "*";
+  sel.innerHTML = `<option value="*">Todos</option><option value="">Mi marca</option>` + cl.clientes.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : "*";
+  $("#lib-filter-row").hidden = !cl.clientes.length;
+  if (sel.value !== "*") reels = reels.filter(r => (r.cliente || "") === sel.value);
   $("#library").innerHTML = reels.map(r => `
     <div class="reel-card" data-open="${r.id}" role="button" tabindex="0">
       <img src="/api/jobs/${r.id}/reel.jpg" alt="" loading="lazy">
       ${r.resultados?.views ? `<span class="res" title="Resultados anotados">👁 ${Number(r.resultados.views).toLocaleString("es-ES")}</span>` : ""}
       ${r.revision ? `<span class="rev">${esc(r.revision)}</span>` : ""}
+      ${r.cliente && names[r.cliente] ? `<span class="cli">${esc(names[r.cliente])}</span>` : ""}
       <button class="del" data-del="${r.id}" title="Borrar">✕</button>
       <div><strong>${esc(r.title || "Sin título")}</strong><span>${fmt(r.duration)} · ${new Date(r.created * 1000).toLocaleDateString("es-ES")}</span></div>
     </div>`).join("");
   api("/api/resultados").then(renderLearned).catch(() => {});
   api("/api/logros").then(renderStreak).catch(() => {});
 }
+$("#lib-client").onchange = loadLibrary;
+// Multi-cliente (Pro): una marca por cliente, en «Mi marca».
+async function loadClients() {
+  let cl;
+  try { cl = await api("/api/clientes"); } catch { return; }
+  state.clients = cl;
+  const sel = $("#client-select");
+  sel.innerHTML = `<option value="">Mi marca (la propia)</option>` + cl.clientes.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+  sel.value = cl.activo || "";
+  $("#clients-row").hidden = !cl.pro && !cl.clientes.length;
+  $("#client-del").hidden = !cl.activo;
+  $("#client-hint").textContent = cl.pro ? "Cada cliente tiene su propia marca; lo que edites abajo es la del cliente elegido." : "Varios clientes con su marca es una función de la licencia Pro.";
+}
+$("#client-select").onchange = async () => {
+  try {
+    const r = await postJSON("/api/clientes/activo", { id: $("#client-select").value });
+    renderBrand(r.brand);
+    loadClients();
+  } catch (err) { $("#client-hint").textContent = err.message; }
+};
+$("#client-add").onclick = async () => {
+  const name = prompt("Nombre del cliente (por ejemplo «Hotel Mar Azul»):", "");
+  if (!name) return;
+  try {
+    await postJSON("/api/clientes", { name });
+    renderBrand(await api("/api/brand"));
+    loadClients();
+  } catch (err) { $("#client-hint").textContent = err.message; }
+};
+$("#client-del").onclick = async () => {
+  const cur = state.clients?.clientes.find(c => c.id === $("#client-select").value);
+  if (!cur || !confirm(`¿Borrar el cliente «${cur.name}» y su marca? Sus reels se quedan en la biblioteca.`)) return;
+  try {
+    await api(`/api/clientes/${cur.id}`, { method: "DELETE" });
+    renderBrand(await api("/api/brand"));
+    loadClients();
+  } catch (err) { $("#client-hint").textContent = err.message; }
+};
+// Zona Inspiración: por qué funciona un reel ajeno (forma, nunca contenido).
+function inspoCard(it, full = true) {
+  const a = it.analysis || {}, m = it.metrics || {};
+  const li = xs => (xs || []).map(x => `<li>${esc(x)}</li>`).join("");
+  const gan = (state.options?.ganchos || []).find(g => g.key === a.gancho);
+  return `<div class="card inspo" data-inspo="${it.id}">
+    <h4>${esc(it.title || "Reel analizado")} <span class="meter">· nota ${a.score ?? "-"}/100</span></h4>
+    <p class="hint">${m.duration} s · ${m.cuts} cambios de plano (${m.cuts_per_s}/s, ritmo ${esc(m.rhythm || "")})${m.first_word_s != null ? ` · habla a los ${m.first_word_s} s · ${m.wpm} palabras/min` : " · sin voz"}</p>
+    <p><b>Gancho:</b> ${esc(a.hook)}${gan ? ` <span class="hint">(en Imán: «${esc(gan.label)}»)</span>` : ""}</p>
+    <p><b>Estructura:</b> ${esc(a.structure)}</p>
+    ${full ? `<p><b>Por qué funciona</b></p><ul class="why">${li(a.why)}</ul>
+    <p><b>Llévate la forma</b></p><ul class="why">${li(a.copy_form)}</ul>
+    ${(a.avoid || []).length ? `<p><b>Mejor no copies</b></p><ul class="why">${li(a.avoid)}</ul>` : ""}
+    ${a.my_version ? `<p><b>Tu versión:</b> ${esc(a.my_version)}</p>` : ""}` : ""}
+    <div class="row tight wrap">
+      <button class="ghost" type="button" data-inspo-template="${it.id}">💾 Guardar su forma como plantilla</button>
+      ${a.my_version ? `<button class="ghost use-idea" data-hook="${esc(a.my_version.split(/[.:]/)[0].slice(0, 80))}">Grabar mi versión →</button>` : ""}
+      <button class="ghost" type="button" data-inspo-del="${it.id}">Borrar</button>
+    </div></div>`;
+}
+async function loadInspiration() {
+  try {
+    const { items } = await api("/api/inspiracion");
+    $("#inspo-list").innerHTML = items.map(it => `<div class="inspo-item"><span class="score">${it.analysis?.score ?? "-"}</span><span>${esc(it.title)}</span><span class="hint">${new Date(it.created * 1000).toLocaleDateString("es-ES")}</span><button class="ghost small" type="button" data-inspo-open="${it.id}">Ver</button></div>`).join("");
+    state.inspo = items;
+  } catch { /* sin IA aún */ }
+}
+$("#inspo-file").onchange = async () => {
+  const f = $("#inspo-file").files[0];
+  if (!f) return;
+  const st = $("#inspo-status"), out = $("#inspo-out");
+  st.textContent = "Mirando el reel (unos segundos, más si tiene voz)…";
+  const fd = new FormData(); fd.append("file", f);
+  fd.append("pack", $("input[name=pack]:checked")?.value === "general" ? "" : $("input[name=pack]:checked")?.value || "");
+  try {
+    const it = await api("/api/inspiracion", { method: "POST", body: fd });
+    out.hidden = false; out.innerHTML = inspoCard(it);
+    st.textContent = "";
+    loadInspiration();
+  } catch (err) { st.textContent = err.message; }
+  finally { $("#inspo-file").value = ""; }
+};
+document.addEventListener("click", async e => {
+  const open = e.target.closest("[data-inspo-open]");
+  if (open) { const it = (state.inspo || []).find(x => x.id === open.dataset.inspoOpen); if (it) { $("#inspo-out").hidden = false; $("#inspo-out").innerHTML = inspoCard(it); } return; }
+  const tpl = e.target.closest("[data-inspo-template]");
+  if (tpl) {
+    const name = prompt("Nombre de la plantilla:", "Inspiración");
+    if (name === null) return;
+    try { const r = await postJSON(`/api/inspiracion/${tpl.dataset.inspoTemplate}/plantilla`, { name }); $("#inspo-status").textContent = `Plantilla «${r.plantilla.name}» guardada: la tienes al subir el próximo vídeo.`; }
+    catch (err) { $("#inspo-status").textContent = err.message; }
+    return;
+  }
+  const del = e.target.closest("[data-inspo-del]");
+  if (del && confirm("¿Borrar este análisis?")) {
+    try { await api(`/api/inspiracion/${del.dataset.inspoDel}`, { method: "DELETE" }); $("#inspo-out").hidden = true; loadInspiration(); } catch (err) { $("#inspo-status").textContent = err.message; }
+  }
+});
 // Logros y racha: todo sale de tu biblioteca.
 function renderStreak(s) {
   const box = $("#streak");
@@ -1555,7 +1664,7 @@ $("#brand-save").onclick = async e => {
   try { renderBrand(await postJSON("/api/brand", brandBody())); $("#brand").close(); }
   catch (err) { brandError(err.message); }
 };
-$("#open-brand").onclick = () => { brandError(""); $("#brand").showModal(); };
+$("#open-brand").onclick = () => { brandError(""); loadClients(); $("#brand").showModal(); };
 $("#brand-edit-link").onclick = e => { e.preventDefault(); $("#brand").showModal(); };
 // Versión nueva: aviso arriba y actualización con un clic.
 async function checkUpdate() {

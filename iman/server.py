@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ai, aprobacion, brand, config, copystyle, effects, equipo, ganchos, jsonfile, license, logros, media, musica, packs, pipeline, plantillas, portable, promo, redes, resultados, tendencias, updates
+from . import ai, aprobacion, brand, clientes, config, copystyle, effects, equipo, ganchos, inspiracion, jsonfile, license, logros, media, musica, packs, pipeline, plantillas, portable, promo, redes, resultados, tendencias, updates
 from . import captions as captions_mod
 from .captions import STYLES
 from .models import EditPlan, Word
@@ -204,7 +204,7 @@ def reels():
         out.append({"id": job["id"], "created": job.get("created", 0), "title": (r.get("plan") or {}).get("hook_title", ""),
                     "duration": r.get("duration_out", 0), "pack": (job.get("options") or {}).get("pack", ""),
                     "resultados": job.get("resultados") or {}, "revision": aprobacion.badge(job),
-                    "revision_estado": (job.get("revision") or {}).get("estado", "")})
+                    "revision_estado": (job.get("revision") or {}).get("estado", ""), "cliente": job.get("cliente", "")})
     return {"reels": sorted(out, key=lambda r: -r["created"])}
 
 
@@ -582,6 +582,116 @@ def get_achievements():
     return logros.compute(jobs)
 
 
+# --- Multi-cliente (Pro): una marca por cliente ---
+@app.get("/api/clientes")
+def list_clients():
+    cfg = config.load()
+    return {"clientes": clientes.listar(), "activo": clientes.activo(), "pro": license.has(cfg, "clientes")}
+
+
+class ClientIn(BaseModel):
+    name: str = Field("", max_length=40)
+    id: str = Field("", max_length=20)
+
+
+@app.post("/api/clientes")
+def create_client(body: ClientIn):
+    if not license.has(config.load(), "clientes"):
+        raise HTTPException(402, "Varios clientes con su marca es una función de la licencia Pro")
+    try:
+        item = clientes.crear(body.name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    clientes.activar(item["id"])
+    return {"cliente": item, **list_clients()}
+
+
+@app.post("/api/clientes/activo")
+def activate_client(body: ClientIn):
+    try:
+        clientes.activar(body.id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return {**list_clients(), "brand": _brand_out(brand.load())}
+
+
+@app.delete("/api/clientes/{cid}")
+def delete_client(cid: str):
+    if not cid.isalnum() or not clientes.borrar(cid):
+        raise HTTPException(404, "No encuentro ese cliente")
+    return list_clients()
+
+
+# --- Zona Inspiración: analizar un reel de otra persona (forma, nunca contenido) ---
+@app.get("/api/inspiracion")
+def list_inspiration():
+    return {"items": [{k: v for k, v in it.items() if k != "style"} for it in inspiracion.listar()]}
+
+
+@app.post("/api/inspiracion")
+async def analyze_reel(file: UploadFile = File(...), pack: str = Form("")):
+    aicfg = config.ai_config(config.load())
+    if not aicfg.enabled:
+        raise HTTPException(400, "Activa la IA en Ajustes para analizar un reel")
+    suffix = Path(file.filename or "reel.mp4").suffix.lower() or ".mp4"
+    if suffix not in VIDEO_TYPES:
+        raise HTTPException(400, "Sube el reel en vídeo (MP4, MOV)")
+    iid = uuid.uuid4().hex[:8]
+    work = config.HOME / "tmp" / f"inspiracion-{iid}"
+    work.mkdir(parents=True, exist_ok=True)
+    src = work / f"reel{suffix}"
+    try:
+        with src.open("wb") as f:
+            shutil.copyfileobj(file.file, f)
+        try:
+            shots = copystyle.frames(src, 8)
+        except Exception:
+            raise HTTPException(400, "No he podido leer ese archivo. Prueba con el vídeo del reel en MP4.")
+        words = []
+        try:
+            if media.probe(src).has_audio:
+                words = pipeline._transcribe(src, work, config.load(), lambda m, p: None)
+        except Exception:  # noqa: BLE001 - sin voz se analiza con los fotogramas
+            log.exception("No se pudo transcribir el reel ajeno")
+        m = inspiracion.metrics(src, words)
+        sector = packs.PACKS[pack].label if pack in packs.PACKS else ""
+        try:
+            analysis = inspiracion.analyze(aicfg, shots, words, m, sector)
+        except Exception as e:
+            raise HTTPException(502, f"La IA no ha podido analizar el reel. {ai.error_message(e)}")
+        style = None
+        try:
+            style = ai.style_from_frames(aicfg, shots)
+        except Exception:  # noqa: BLE001 - el estilo de letra es un extra
+            log.exception("No se pudo leer el estilo del reel ajeno")
+        item = inspiracion.save({"title": analysis.get("title") or Path(file.filename or "reel").stem[:60],
+                                 "file": Path(file.filename or "reel").name[:80], "metrics": m, "analysis": analysis,
+                                 "style": style, "has_voice": bool(words)})
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    return {k: v for k, v in item.items() if k != "style"}
+
+
+class InspirationIn(BaseModel):
+    name: str = Field("", max_length=40)
+
+
+@app.post("/api/inspiracion/{iid}/plantilla")
+def inspiration_template(iid: str, body: InspirationIn):
+    item = inspiracion.get(iid)
+    if not item:
+        raise HTTPException(404, "No encuentro ese análisis")
+    t = inspiracion.as_template(item, body.name or item.get("title") or "Inspiración")
+    return {"plantilla": t}
+
+
+@app.delete("/api/inspiracion/{iid}")
+def delete_inspiration(iid: str):
+    if not inspiracion.borrar(iid):
+        raise HTTPException(404, "No encuentro ese análisis")
+    return list_inspiration()
+
+
 def _learned_prompt() -> str:
     try:
         return resultados.prompt(resultados.insights(_reels_with_results()))
@@ -932,6 +1042,7 @@ async def create_job(
     comentario: str = Form(""),
     comentario_de: str = Form(""),
     plantilla: str = Form(""),
+    directo: bool = Form(False),
 ):
     if (pack and pack not in packs.PACKS) or mode not in ("camara", "voz", "largo") \
             or background not in pipeline.BACKGROUNDS:
@@ -998,12 +1109,12 @@ async def create_job(
                                 red=red if red in redes.REDES else "instagram",
                                 comentario=" ".join(comentario.split())[:140],
                                 comentario_de=comentario_de.strip().lstrip("@")[:40], ligero=light,
-                                gestures=not light)
+                                gestures=not light, directo=bool(directo) and mode == "largo")
     if watermark:  # el reel de prueba se cuenta al crearlo (si falla, se devuelve)
         _count_trial(+1)
     with _lock:
         JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0, "mode": mode,
-                        "options": asdict(opts), "created": time.time(), "trial": watermark}
+                        "options": asdict(opts), "created": time.time(), "trial": watermark, "cliente": clientes.activo()}
     target = _work_long if mode == "largo" else _work
     if len(takes) > 1:
         threading.Thread(target=_join_then, args=(target, takes, job_id, src, workdir, opts), daemon=True).start()
@@ -1036,7 +1147,8 @@ def _work_long(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions
     try:
         cfg = config.load()
         words, picks = pipeline.long_video_clips(src, workdir, cfg,
-                                                 lambda msg, pct: _set(job_id, step=msg, progress=pct * 0.3))
+                                                 lambda msg, pct: _set(job_id, step=msg, progress=pct * 0.3),
+                                                 directo=opts.directo)
         if not picks:
             raise ValueError("No he encontrado momentos de al menos 12 segundos en los que hables")
         made = []
@@ -1050,7 +1162,7 @@ def _work_long(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions
             copts = replace(opts, hook_title=opts.hook_title or pick["title"])
             with _lock:
                 JOBS[cid] = {"id": cid, "status": "working", "step": "En cola", "progress": 0.0, "from_long": job_id,
-                             "options": asdict(copts), "created": time.time()}
+                             "options": asdict(copts), "created": time.time(), "cliente": JOBS[job_id].get("cliente", "")}
             _work(cid, csrc, cdir, copts)
             if JOBS[cid]["status"] == "done":
                 r = JOBS[cid]["result"]

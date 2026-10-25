@@ -96,8 +96,14 @@ def clean_source(src: Path, workdir: Path) -> Path:
         return dst
     audio = denoise(read_audio(src))
     tmp = workdir / "voz-limpia.tmp.mp4"
+    # Sin -shortest: el audio crudo acaba unos ms antes que el vídeo y se perderían los últimos fotogramas;
+    # se rellena con silencio y se corta justo a la duración del original.
+    from .media import duration_of
+
+    total = duration_of(src)
     cmd = [FFMPEG, "-y", "-v", "error", "-i", str(src), "-f", "f32le", "-ar", str(SR), "-ac", "1", "-i", "-",
-           "-map", "0:v:0", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", str(tmp)]
+           "-map", "0:v:0", "-map", "1:a", "-c:v", "copy", "-af", "apad", "-c:a", "aac", "-b:a", "192k",
+           *(["-t", f"{total:.3f}"] if total > 0 else ["-shortest"]), str(tmp)]
     res = subprocess.run(cmd, input=audio.astype(np.float32).tobytes(), capture_output=True)
     if res.returncode != 0:
         raise RuntimeError(f"ffmpeg falló:\n{res.stderr.decode('utf-8', 'replace')[-2000:]}")

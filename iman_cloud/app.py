@@ -288,12 +288,13 @@ def health():
 class ClipsIn(BaseModel):
     transcript: str = Field(..., max_length=120000)
     n: int = Field(4, ge=1, le=8)
+    hints: str = Field("", max_length=2000)
 
 
 @app.post("/v1/clips")
 def clips(request: Request, body: ClipsIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
     _check(x_iman_license, x_iman_instance, request)
-    return ai.pick_clips_raw(_cfg(), body.transcript, body.n)
+    return ai.pick_clips_raw(_cfg(), body.transcript, body.n, body.hints)
 
 
 class TrendsIn(BaseModel):
@@ -310,3 +311,21 @@ def tendencias_ideas(request: Request, body: TrendsIn, x_iman_license: str = Hea
     found = [{"topic": str(t.get("topic", ""))[:80], "traffic": str(t.get("traffic", ""))[:20],
               "news": [str(n)[:120] for n in (t.get("news") or [])][:2]} for t in body.topics if isinstance(t, dict)]
     return {"ideas": tendencias.ideas_raw(_cfg(), found, body.sector or "creador de contenido")}
+
+
+class AnalyzeIn(BaseModel):
+    frames: list[str] = Field(default_factory=list, max_length=8)
+    transcript: str = Field("", max_length=4000)
+    metrics: str = Field("", max_length=400)
+    sector: str = Field("", max_length=80)
+
+
+@app.post("/v1/analizar")
+def analizar_reel(request: Request, body: AnalyzeIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
+    _check(x_iman_license, x_iman_instance, request)
+    import base64
+
+    from iman import inspiracion
+
+    frames = [base64.b64decode(f) for f in body.frames if len(f) < 600_000]
+    return inspiracion.analyze_raw(_cfg(), frames, body.transcript, body.metrics, body.sector)
