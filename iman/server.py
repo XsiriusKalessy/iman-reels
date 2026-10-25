@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ai, aprobacion, brand, clientes, config, copystyle, effects, equipo, ganchos, inspiracion, jsonfile, license, logros, media, musica, packs, pipeline, plantillas, portable, promo, redes, resultados, tendencias, updates
+from . import ai, aprobacion, brand, clientes, config, copystyle, diagnostico, effects, equipo, ganchos, inspiracion, jsonfile, license, logros, media, musica, packs, pipeline, plantillas, portable, promo, redes, resultados, tendencias, updates
 from . import captions as captions_mod
 from .captions import STYLES
 from .models import EditPlan, Word
@@ -159,9 +159,33 @@ def _claim(job_id: str, **kw) -> None:
         job.update(status="working", **kw)
 
 
+FRIENDLY = [
+    (("No space left", "ENOSPC", "WinError 112", "disk full"),
+     "No queda sitio en el disco. Libera espacio (cada reel necesita unos cientos de MB mientras se monta) y vuelve a intentarlo."),
+    (("MemoryError", "Cannot allocate memory", "std::bad_alloc", "out of memory", "OOM"),
+     "El ordenador se ha quedado sin memoria. Cierra otros programas o activa el modo ligero en Ajustes y vuelve a intentarlo."),
+    (("huggingface", "HTTPSConnectionPool", "Max retries", "ConnectionError", "getaddrinfo", "Name or service not known",
+      "TLS", "SSL"),
+     "No he podido descargar lo que falta (el modelo que te escucha). Comprueba la conexión a internet y vuelve a intentarlo; "
+     "solo hace falta la primera vez."),
+    (("WinError 32", "being used by another process", "Permission denied", "WinError 5", "PermissionError"),
+     "Otro programa tiene abierto un archivo de este reel (el vídeo, o la carpeta en un reproductor). Ciérralo y vuelve a intentarlo."),
+    (("CUDA", "cublas", "cudnn", "GPU"),
+     "La tarjeta gráfica ha fallado. En Ajustes, pon la transcripción en CPU o activa el modo ligero y vuelve a intentarlo."),
+    (("No such file", "FileNotFoundError", "WinError 2", "WinError 3"),
+     "Falta un archivo de este reel (puede que se haya movido o borrado la carpeta). Vuelve a subir el vídeo."),
+    (("Timeout", "timed out"),
+     "Ha tardado demasiado y se ha cortado. Vuelve a intentarlo; si el vídeo es muy largo, prueba con «Vídeo largo → varios reels»."),
+]
+
+
 def _friendly(e: Exception) -> str:
     """El error en palabras para el creador (el detalle técnico va al registro)."""
     msg = str(e)
+    probe = f"{type(e).__name__}: {msg}"
+    for needles, text in FRIENDLY:
+        if any(n.lower() in probe.lower() for n in needles):
+            return text
     if "ffmpeg" in msg.lower() or "Invalid" in msg or "NAL" in msg:
         return ("No he podido montar el vídeo. Vuelve a intentarlo; si se repite, sube otra vez el vídeo original "
                 "(puede que el archivo se haya copiado mal).")
@@ -1195,12 +1219,27 @@ def _save_broll(workdir: Path, files: list[UploadFile]) -> list[str]:
     return names
 
 
+def _timed_progress(job_id: str):
+    """Avanza el reel y apunta cuánto dura cada paso (job["timings"]), para el diagnóstico."""
+    marks = {"t": time.time(), "step": "Preparando"}
+    timings: dict[str, float] = {}
+
+    def progress(msg: str, pct: float) -> None:
+        now = time.time()
+        timings[marks["step"]] = round(timings.get(marks["step"], 0.0) + now - marks["t"], 1)
+        marks["t"], marks["step"] = now, msg
+        _set(job_id, step=msg, progress=pct, timings=dict(timings))
+
+    return progress
+
+
 def _work(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions, plan=None) -> None:
     try:
-        res = pipeline.run(src, workdir, opts, config.load(),
-                           progress=lambda msg, pct: _set(job_id, step=msg, progress=pct), plan=plan)
+        started = time.time()
+        res = pipeline.run(src, workdir, opts, config.load(), progress=_timed_progress(job_id), plan=plan)
         JOBS[job_id].pop("trial", None)
-        _set(job_id, status="done", result=res.summary())
+        timings = {**(JOBS[job_id].get("timings") or {}), "total": round(time.time() - started, 1)}
+        _set(job_id, status="done", result=res.summary(), timings=timings)
     except Exception as e:
         log.exception("Falla la edición de %s", job_id)
         try:
@@ -1837,6 +1876,13 @@ def support_info():
     return {"version": __version__, "system": f"{platform.system()} {platform.release()} ({platform.machine()})",
             "reels": reels, "last_error": last, "feedback_url": cfg.get("feedback_url", ""),
             "plan": license.status(cfg).get("plan_label", "") or "Prueba"}
+
+
+@app.get("/api/diagnostico")
+def diagnostics():
+    """Qué está bien y qué falta en este ordenador, con qué hacer en cada caso (sin claves)."""
+    d = diagnostico.run(config.load())
+    return {**d, "text": diagnostico.as_text(d)}
 
 
 @app.post("/api/soporte/registros")

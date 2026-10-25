@@ -562,9 +562,14 @@
       <p class="hint">¿Algo falla o se te ocurre una mejora? Cuéntanoslo: copiamos tu versión y el último error para que no tengas que explicarlo.</p>
       <div class="row">
         <button class="ghost" id="feedback-btn" type="button">Enviar opinión / Algo falla</button>
+        <button class="ghost" id="diag-btn" type="button" title="Comprueba ffmpeg, el modelo que te escucha, el disco, la memoria, la IA y la licencia">🩺 Diagnóstico</button>
         <button class="ghost" id="logs-btn" type="button">Abrir carpeta de registros</button>
       </div>
       <p class="hint" id="feedback-msg" hidden></p>
+      <div id="diag-box" class="diag" hidden>
+        <ul id="diag-list"></ul>
+        <div class="row tight"><button class="ghost small" id="diag-copy" type="button">Copiar diagnóstico</button><span class="hint" id="diag-msg"></span></div>
+      </div>
       <h3>Tu ordenador</h3>
       <label>Modo ligero
         <select name="ligero">

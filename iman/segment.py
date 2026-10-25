@@ -47,8 +47,11 @@ def available() -> bool:
     return MODEL.exists()
 
 
-def person_masks(video: Path, out: Path, windows: list[tuple[float, float]], fps: int = 30) -> Path:
-    """Escribe en `out` un vídeo en grises: blanco donde está la persona."""
+def person_masks(video: Path, out: Path, windows: list[tuple[float, float]], fps: int = 30, step: int = 2) -> Path:
+    """Escribe en `out` un vídeo en grises: blanco donde está la persona.
+
+    `step`: se segmenta uno de cada `step` fotogramas y se reutiliza la máscara en los demás (a 30 fps, segmentar
+    a 15 fps cuesta la mitad y el suavizado temporal esconde el salto)."""
     import mediapipe as mp
     from mediapipe.tasks.python import BaseOptions, vision
 
@@ -74,6 +77,7 @@ def person_masks(video: Path, out: Path, windows: list[tuple[float, float]], fps
     )
     blank = np.zeros((fh, fw), np.uint8)
     prev = None
+    last: bytes | None = None
     i = 0
     try:
         while True:
@@ -82,6 +86,10 @@ def person_masks(video: Path, out: Path, windows: list[tuple[float, float]], fps
                 break
             t = i / fps
             if any(a - 0.2 <= t <= b + 0.2 for a, b in windows):
+                if last is not None and step > 1 and i % step:
+                    writer.stdin.write(last)  # el fotograma intermedio reutiliza la máscara anterior
+                    i += 1
+                    continue
                 frame = np.frombuffer(buf, np.uint8).reshape(fh, fw, 3)
                 small = cv2.resize(frame, (MASK_W, MASK_H), interpolation=cv2.INTER_AREA) if cv2 else frame
                 res = seg.segment_for_video(mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(small)),
@@ -93,9 +101,11 @@ def person_masks(video: Path, out: Path, windows: list[tuple[float, float]], fps
                 prev = conf if prev is None else 0.6 * conf + 0.4 * prev
                 # Contraste: borde nítido pero sin dientes de sierra.
                 mask = np.clip((prev - 0.35) / 0.3, 0, 1)
-                writer.stdin.write((mask * 255).astype(np.uint8).tobytes())
+                last = (mask * 255).astype(np.uint8).tobytes()
+                writer.stdin.write(last)
             else:
                 prev = None
+                last = None
                 writer.stdin.write(blank.tobytes())
             i += 1
     finally:

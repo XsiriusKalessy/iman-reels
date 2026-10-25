@@ -703,6 +703,8 @@ def run(
         look = plan.color if plan.color in media.LOOKS else AUTO_LOOK.get(opts.pack, "natural")
         plan.color = look
     av = dict(sfx_bed=sound, music=music, punch=punch, hush=hush, look=look, transitions=trans, framing=frames)
+    # En un ordenador sencillo, x264 «faster» tarda la mitad que «medium» y la diferencia no se ve en el móvil.
+    final_preset = "faster" if opts.ligero else "medium"
     warnings = notices
     done = False
     if segs and segment.available():
@@ -718,7 +720,7 @@ def run(
                                         extra_events=effects.behind_events(active, clock, style,
                                                                            out_duration)), encoding="utf-8")
             progress("Montando tu reel", 0.90)
-            media.composite(base, mask, src, out, behind, ass_path, segs, overlays, opts.size)
+            media.composite(base, mask, src, out, behind, ass_path, segs, overlays, opts.size, preset=final_preset)
             done = True
         except Exception as e:  # noqa: BLE001 - sin los efectos de detrás, el reel sale igual
             log.warning("Falla la pasada con la persona recortada: %s", e)
@@ -732,14 +734,14 @@ def run(
     if not done:
         try:
             media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice, zoom, overlays=overlays,
-                         tail=tail, **av)
+                         preset=final_preset, tail=tail, **av)
         except Exception as e:  # noqa: BLE001 - se reintenta sin los efectos de vídeo, que son lo más delicado
             if not (overlays or trans):
                 raise
             log.warning("Falla el montaje con efectos de vídeo: %s", e)
             warnings.append("Un efecto de vídeo ha fallado y lo he quitado para que tu reel salga.")
             media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice, zoom, overlays=[],
-                         tail=tail, **{**av, "transitions": None})
+                         preset=final_preset, tail=tail, **{**av, "transitions": None})
     if red.loop:
         try:
             looped = redes.loop(out, out.with_name(f"bucle-{out.name}"))

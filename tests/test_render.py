@@ -1783,3 +1783,42 @@ def test_inspiration_live_energy_and_clients(tmp_path, monkeypatch):
     from iman import paralaje
     assert "canon" in inspect.getsource(paralaje.cached)
     server.JOBS.clear()
+
+
+def test_diagnostics_friendly_errors_and_timings(tmp_path, monkeypatch):
+    """Beta: diagnóstico del ordenador, errores en palabras claras y tiempos por paso en cada reel."""
+    from fastapi.testclient import TestClient
+    from iman import config, diagnostico, server
+    monkeypatch.setattr(config, "HOME", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    server.JOBS.clear()
+    d = diagnostico.run({**config.load(), "provider": "none", "transcriber": "local", "whisper_model": "zz"})
+    keys = [i["key"] for i in d["items"]]
+    assert keys == ["ffmpeg", "equipo", "disco", "modelo", "ia", "licencia", "recorte", "manos", "errores"]
+    by = {i["key"]: i for i in d["items"]}
+    assert by["ffmpeg"]["ok"] and by["modelo"]["ok"] is False and by["modelo"]["tip"] and by["ia"]["ok"] is False
+    assert by["errores"]["ok"] and "AVISO" in diagnostico.as_text(d) and "OK ffmpeg" in diagnostico.as_text(d)
+    assert "sk-" not in diagnostico.as_text(d)
+    (tmp_path / "jobs" / "j1").mkdir(parents=True)
+    (tmp_path / "jobs" / "j1" / "error.log").write_text("ffmpeg falló: Invalid data\n", encoding="utf-8")
+    assert diagnostico.run()["items"][-1]["ok"] is False
+    c = TestClient(server.app)
+    r = c.get("/api/diagnostico").json()
+    assert r["items"] and r["text"].startswith("Diagnóstico de Imán")
+    # Errores en palabras.
+    assert "sitio en el disco" in server._friendly(OSError(28, "No space left on device"))
+    assert "memoria" in server._friendly(MemoryError())
+    assert "internet" in server._friendly(ConnectionError("HTTPSConnectionPool(host='huggingface.co')"))
+    assert "Otro programa" in server._friendly(PermissionError(32, "being used by another process"))
+    assert "tarjeta gráfica" in server._friendly(RuntimeError("CUDA failed to load cublas64_12.dll"))
+    assert server._friendly(ValueError("No he encontrado momentos")) == "No he encontrado momentos"
+    # Tiempos por paso.
+    with server._lock:
+        server.JOBS["t1"] = {"id": "t1", "status": "working"}
+    p = server._timed_progress("t1")
+    p("Escuchando", 0.1)
+    p("Montando", 0.6)
+    t = server.JOBS["t1"]["timings"]
+    assert set(t) == {"Preparando", "Escuchando"} and all(v >= 0 for v in t.values())
+    server.JOBS.clear()

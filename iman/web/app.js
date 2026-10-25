@@ -254,8 +254,9 @@ $("#feedback-btn").onclick = async () => {
   const msg = $("#feedback-msg");
   try {
     const i = await api("/api/soporte");
+    const tm = state.job?.timings ? `\nTiempos del último reel: ${Object.entries(state.job.timings).map(([k, v]) => `${k} ${v} s`).join(", ")}` : "";
     const text = `Imán ${i.version} · ${i.system} · ${i.plan} · ${i.reels} reels hechos` +
-      (i.last_error ? `\nÚltimo error: ${i.last_error}` : "") + "\n\nQué ha pasado o qué mejorarías:\n";
+      (i.last_error ? `\nÚltimo error: ${i.last_error}` : "") + tm + "\n\nQué ha pasado o qué mejorarías:\n";
     let copied = true;
     copied = await copyText(text);
     if (i.feedback_url) window.open(i.feedback_url, "_blank", "noopener");
@@ -264,6 +265,17 @@ $("#feedback-btn").onclick = async () => {
   } catch (err) { msg.textContent = err.message; }
   msg.hidden = false;
 };
+$("#diag-btn").onclick = async () => {
+  const box = $("#diag-box"), list = $("#diag-list");
+  box.hidden = false; list.innerHTML = "<li>…</li>";
+  try {
+    const d = await api("/api/diagnostico");
+    state.diag = d.text;
+    list.innerHTML = d.items.map(i => `<li class="${i.ok ? "ok" : "warn"}"><span>${i.ok ? "✅" : "⚠️"}</span><span><b>${esc(i.label)}</b><small>${esc(i.detail)}</small>${i.tip ? `<small class="tip">${esc(i.tip)}</small>` : ""}</span></li>`).join("");
+    $("#diag-msg").textContent = d.ok ? "Todo lo necesario está en su sitio." : "Hay algo que revisar (en amarillo).";
+  } catch (err) { list.innerHTML = `<li class="warn"><span>⚠️</span><span>${esc(err.message)}</span></li>`; }
+};
+$("#diag-copy").onclick = async () => { $("#diag-msg").textContent = (await copyText(state.diag || "")) ? "Copiado: pégalo en el mensaje de soporte." : "No he podido copiarlo."; };
 $("#logs-btn").onclick = async () => {
   try { await api("/api/soporte/registros", { method: "POST" }); }
   catch (err) { $("#feedback-msg").textContent = err.message; $("#feedback-msg").hidden = false; }

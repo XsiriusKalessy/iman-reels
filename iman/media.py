@@ -509,7 +509,7 @@ def render(
 
 def composite(
     base: Path, mask: Path, raw: Path, dst: Path, behind_ass: Path | None, ass_path: Path | None,
-    seg_ops: list, overlays: list | None = None, size: str = "1080",
+    seg_ops: list, overlays: list | None = None, size: str = "1080", preset: str = "medium",
 ) -> Path:
     """Segunda pasada para los efectos que van detrás de la persona.
 
@@ -593,7 +593,7 @@ def composite(
     cmd = [
         FFMPEG, "-y", "-v", "error", "-i", str(base), "-i", str(mask), "-i", str(raw), *extra,
         *filter_script_args(script), "-map", "[vout]", "-map", "0:a",
-        "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-profile:v", "high",
+        "-c:v", "libx264", "-preset", preset, "-crf", "18", "-profile:v", "high",
         "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
         "-c:a", "copy", "-movflags", "+faststart", str(dst),
     ]
