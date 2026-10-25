@@ -188,6 +188,8 @@ def long_video_clips(src: Path, workdir: Path, cfg: dict, progress: Progress = l
     """Vídeo largo → los mejores momentos para reels (la IA los elige; sin IA, trozos de ~40 s)."""
     workdir.mkdir(parents=True, exist_ok=True)
     words = _transcribe(src, workdir, cfg, progress)
+    if jsonfile.load(workdir / "transcript.json") is None:  # para el método cascada, más tarde
+        jsonfile.save(workdir / "transcript.json", [w.__dict__ for w in words], indent=1)
     progress("Buscando los mejores momentos", 0.5)
     picks: list[dict] = []
     aicfg = ai_config(cfg)

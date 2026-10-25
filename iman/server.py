@@ -1167,6 +1167,56 @@ def version_file(job_id: str, name: str):
     return FileResponse(p, media_type=media_type, filename=f"reel-{job_id}-{name}")
 
 
+CASCADES: dict[str, dict] = {}
+
+
+def _make_cascade(job_id: str) -> None:
+    from . import cascada
+
+    workdir = JOBS_DIR / job_id
+    state = CASCADES[job_id]
+    try:
+        src = next(p for p in workdir.glob("original.*"))
+        res = cascada.render(src, _saved_words(workdir), workdir / "cascada", config.load(),
+                             lambda msg, pct: state.update(step=msg, progress=pct))
+        state.update(status="done", progress=1.0, result=res)
+    except Exception as e:  # noqa: BLE001
+        log.exception("Falla la cascada de %s", job_id)
+        state.update(status="error", error=_friendly(e))
+
+
+@app.post("/api/jobs/{job_id}/cascada")
+def make_cascade(job_id: str):
+    """Método cascada: del vídeo largo, el vídeo limpio, el podcast, el carrusel de citas y la newsletter."""
+    job = _job(job_id)
+    if not job or job["status"] != "done" or not (JOBS_DIR / job_id / "transcript.json").exists():
+        raise HTTPException(404, "No encuentro ese vídeo")
+    if CASCADES.get(job_id, {}).get("status") == "working":
+        raise HTTPException(409, "Ya lo estoy preparando")
+    CASCADES[job_id] = {"status": "working", "step": "Empezando", "progress": 0.0, "result": None, "error": None}
+    threading.Thread(target=_make_cascade, args=(job_id,), daemon=True).start()
+    return CASCADES[job_id]
+
+
+@app.get("/api/jobs/{job_id}/cascada")
+def cascade_state(job_id: str):
+    if job_id not in CASCADES and (JOBS_DIR / job_id / "cascada" / "cascada.zip").exists():
+        return {"status": "done", "step": "", "progress": 1.0, "result": None, "error": None}
+    return CASCADES.get(job_id) or {"status": "none", "step": "", "progress": 0.0, "result": None, "error": None}
+
+
+@app.get("/api/jobs/{job_id}/cascada/{name:path}")
+def cascade_file(job_id: str, name: str):
+    base = JOBS_DIR / job_id / "cascada"
+    p = base / name
+    if not job_id.isalnum() or ".." in name or name.startswith("/") or not p.is_file():
+        raise HTTPException(404)
+    kinds = {".zip": "application/zip", ".mp4": "video/mp4", ".mp3": "audio/mpeg", ".png": "image/png",
+             ".txt": "text/plain; charset=utf-8"}
+    return FileResponse(p, media_type=kinds.get(p.suffix, "application/octet-stream"),
+                        filename=f"{job_id}-{p.name}" if p.suffix != ".png" else None)
+
+
 @app.get("/api/jobs/{job_id}/whatsapp.zip")
 def get_whatsapp(job_id: str):
     """El reel en trozos de menos de 60 s (los estados de WhatsApp cortan ahí), partido entre frases."""

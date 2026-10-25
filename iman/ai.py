@@ -914,3 +914,38 @@ def test_key(provider: str, key: str) -> str:
             model="gpt-4o-mini", max_tokens=1, messages=[{"role": "user", "content": "hola"}])
         return "ChatGPT"
     raise ValueError("Elige Claude o ChatGPT")
+
+
+# --- Método cascada: de una grabación larga, citas para un carrusel y una newsletter -------------
+
+CASCADE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "quotes": {"type": "array", "items": {"type": "string"},
+                   "description": "De 4 a 6 frases literales del creador que funcionan solas (máx. 25 palabras)."},
+        "title": {"type": "string", "description": "Título del carrusel de citas (máx. 7 palabras)."},
+        "subject": {"type": "string", "description": "Asunto de la newsletter."},
+        "newsletter": {"type": "string", "description": "La newsletter en texto con párrafos cortos (250-450 palabras)."},
+        "podcast": {"type": "string", "description": "Título y descripción del episodio de podcast (3-4 frases)."},
+    },
+    "required": ["quotes", "title", "subject", "newsletter", "podcast"],
+    "additionalProperties": False,
+}
+
+CASCADE_SYSTEM = """Eres el editor de contenidos de un creador. De la transcripción de una grabación larga sacas:
+- quotes: de 4 a 6 frases LITERALES suyas (puedes quitar muletillas) que se entienden solas y dan ganas de
+  guardar o compartir: un consejo, una cifra, una verdad incómoda. Nada de frases de relleno.
+- title: el título del carrusel de citas.
+- subject y newsletter: una newsletter escrita como habla el creador, en primera persona, con párrafos cortos,
+  las 3 ideas clave del vídeo y una llamada a la acción al final. Sin inventar datos que no diga.
+- podcast: título del episodio en la primera línea y una descripción corta debajo.
+Responde en el idioma de la transcripción."""
+
+
+def cascade_texts(cfg: AIConfig, words: list[Word]) -> dict:
+    text = " ".join(w.text for w in words)[:60000]
+    if cfg.provider == "iman":
+        from . import cloud
+
+        return cloud.call(cfg, "cascada", {"transcript": text})
+    return _ask_json(cfg, CASCADE_SYSTEM, f"TRANSCRIPCIÓN:\n{text}", CASCADE_SCHEMA)

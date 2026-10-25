@@ -371,6 +371,26 @@ def test_long_video_to_several_reels(tmp_path, monkeypatch):
         assert media.probe(tmp_path / "jobs" / cl["id"] / "reel.mp4").duration > 10
     lib = c.get("/api/reels").json()["reels"]
     assert {r["id"] for r in lib} == {cl["id"] for cl in clips}
+    # Método cascada: el resto de piezas de la misma grabación.
+    import zipfile
+
+    assert c.post(f"/api/jobs/{job['id']}/cascada").status_code == 200
+    for _ in range(600):
+        st = c.get(f"/api/jobs/{job['id']}/cascada").json()
+        if st["status"] != "working":
+            break
+        time.sleep(0.25)
+    assert st["status"] == "done", st
+    res = st["result"]
+    assert 40 < res["duration"] < 95 and len(res["carousel"]) >= 3  # sin los silencios del principio y entre frases
+    z = c.get(f"/api/jobs/{job['id']}/cascada/cascada.zip")
+    p = tmp_path / "cascada.zip"
+    p.write_bytes(z.content)
+    names = zipfile.ZipFile(p).namelist()
+    assert {"video-largo.mp4", "podcast.mp3", "newsletter.txt", "podcast.txt"} <= set(names)
+    assert any(n.startswith("carrusel-citas/") for n in names)
+    assert c.get(f"/api/jobs/{job['id']}/cascada/citas/{res['carousel'][0]}").status_code == 200
+    assert c.get(f"/api/jobs/{job['id']}/cascada/../config.json").status_code == 404
 
 
 def test_object_stickers_over_a_list(sample, tmp_path, monkeypatch):

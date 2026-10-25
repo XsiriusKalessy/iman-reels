@@ -431,3 +431,5 @@ select option:checked { background-color: var(--accent); color: var(--accent-ink
 .versions textarea { width: 100%; }
 .versions-list { display: grid; gap: 6px; margin-top: 8px; }
 .open-loop { display: grid; gap: 4px; font-size: 13px; margin: 8px 0; padding: 10px 12px; border-left: 3px solid var(--accent, #FF5547); background: rgba(255,255,255,.04); border-radius: 8px; }
+.cascade { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); }
+.cascade-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }

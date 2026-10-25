@@ -108,6 +108,17 @@ def ideas(request: Request, body: IdeasIn, x_iman_license: str = Header(""), x_i
     return {"ideas": ai.generate_ideas(_cfg(), body.topic, body.audience, body.voice_samples, body.n)}
 
 
+class CascadeIn(BaseModel):
+    transcript: str = Field(..., max_length=60000)
+
+
+@app.post("/v1/cascada")
+def cascada(request: Request, body: CascadeIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
+    _check(x_iman_license, x_iman_instance, request)
+    words = [Word(t, 0.0, 0.0) for t in body.transcript.split()]
+    return ai.cascade_texts(_cfg(), words)
+
+
 class BrandIn(BaseModel):
     description: str = Field(..., max_length=400)
 

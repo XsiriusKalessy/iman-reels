@@ -813,7 +813,13 @@ function showClips(j) {
     <div class="reel-card" data-open-clip="${c.id}" role="button" tabindex="0">
       <img src="/api/jobs/${c.id}/reel.jpg" alt="" loading="lazy">
       <div><strong>${esc(c.title || "Sin título")}</strong><span>${fmt(c.duration)}${c.why ? " · " + esc(c.why) : ""}</span></div>
-    </div>`).join("") + `</div><p class="hint">Están también en tu biblioteca. Abre uno para cambiarlo, hacer su carrusel o descargarlo.</p>`;
+    </div>`).join("") + `</div><p class="hint">Están también en tu biblioteca. Abre uno para cambiarlo, hacer su carrusel o descargarlo.</p>
+    <div class="cascade"><h3>Y todo lo demás, de la misma grabación</h3>
+      <p class="hint">El vídeo largo sin silencios (para YouTube), el audio para tu podcast, un carrusel de citas con tu marca y la newsletter.</p>
+      <button class="primary" id="cascade-btn" type="button">✦ Sácamelo todo</button>
+      <p class="hint" id="cascade-status" role="status"></p><div id="cascade-out"></div></div>`;
+  state.longId = j.id;
+  pollCascade();
   loadLibrary();
 }
 $("#clips").onclick = async e => {
@@ -1214,4 +1220,30 @@ async function pollVersions() {
   $("#versions-list").innerHTML = v.files.map(f => `<a class="ghost small" href="/api/jobs/${id}/versiones/${f.name}" download>${esc(f.name)} · ${esc(f.hook)}${f.cta ? " · " + esc(f.cta) : ""}</a>`).join("")
     + (v.status === "done" ? `<a class="primary small" href="/api/jobs/${id}/versiones/versiones.zip" download>Descargar todas (.zip)</a>` : "");
   if (v.status === "working") setTimeout(() => pollVersions(), 2000);
+}
+
+// Método cascada: del vídeo largo, el resto de piezas en un clic.
+document.addEventListener("click", async e => {
+  if (e.target.id !== "cascade-btn") return;
+  try { await api(`/api/jobs/${state.longId}/cascada`, { method: "POST" }); pollCascade(); }
+  catch (err) { $("#cascade-status").textContent = err.message; }
+});
+async function pollCascade() {
+  const id = state.longId;
+  const c = await api(`/api/jobs/${id}/cascada`).catch(() => null);
+  if (!c || state.longId !== id || !$("#cascade-btn")) return;
+  $("#cascade-btn").disabled = c.status === "working";
+  $("#cascade-status").textContent = c.status === "working" ? `${c.step}… ${Math.round(c.progress * 100)} %`
+    : c.status === "error" ? c.error : "";
+  if (c.status === "done") {
+    const base = `/api/jobs/${id}/cascada`;
+    const r = c.result || {};
+    $("#cascade-out").innerHTML = `<div class="cascade-links">
+      <a class="primary small" href="${base}/cascada.zip" download>Descargar todo (.zip)</a>
+      <a class="ghost small" href="${base}/video-largo.mp4" download>Vídeo largo${r.duration ? " · " + fmt(r.duration) : ""}</a>
+      <a class="ghost small" href="${base}/podcast.mp3" download>Audio del podcast</a>
+      <a class="ghost small" href="${base}/newsletter.txt" target="_blank">Newsletter</a></div>
+      ${(r.carousel || []).length ? `<div class="kit-strip">${r.carousel.map(n => `<img src="${base}/citas/${n}" alt="">`).join("")}</div>` : ""}`;
+  }
+  if (c.status === "working") setTimeout(pollCascade, 2000);
 }
