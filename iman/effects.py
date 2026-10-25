@@ -41,6 +41,7 @@ class VideoOp:
     src_start: float = 0.0
     path: str = ""  # imagen que se superpone (logo)
     color: str = ""  # fondo liso (cierre de marca)
+    ramp: bool = True  # rampa de velocidad en los vídeos de apoyo (el mapa va a su ritmo)
 
 
 @dataclass
@@ -796,7 +797,7 @@ def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=Non
                                        mapa.ass_hex(accent)))
             except Exception:  # noqa: BLE001 - sin mapa, el reel sigue con el itinerario dibujado
                 continue
-            ops.append(VideoOp("apoyo", span[0], span[1], path=path))
+            ops.append(VideoOp("apoyo", span[0], span[1], path=path, ramp=False))
             continue
         if kind == "objeto":
             from . import stickers

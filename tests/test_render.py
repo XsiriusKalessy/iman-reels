@@ -587,3 +587,61 @@ def test_bar_chart_effect():
     lines, win = packfx.grafico_events(fx, clock, STYLES["impacto"], 10.0)
     assert win and sum("\\fscy0" in ln for ln in lines) == 2 and any("450 €" in ln for ln in lines)
     assert packfx.grafico_events({**fx, "text": "sin cifras"}, clock, STYLES["impacto"], 10.0) == ([], None)
+
+
+def test_takes_are_joined_with_matching_colour(tmp_path):
+    a, b = tmp_path / "a.mp4", tmp_path / "b.mov"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=720x1280:rate=30:duration=2",
+                    "-f", "lavfi", "-i", "sine=frequency=300:duration=2", "-pix_fmt", "yuv420p", "-shortest", str(a)],
+                   check=True)
+    # Segunda toma: otra resolución, sin audio, más oscura y más azul.
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=1080x1920:rate=25:duration=2",
+                    "-vf", "eq=brightness=-0.15,colorbalance=bm=0.3", "-pix_fmt", "yuv420p", str(b)], check=True)
+    before = media.color_stats(b)
+    target = media.color_stats(a)
+    out = media.join_takes([a, b], tmp_path / "original.mp4")
+    info = media.probe(out)
+    assert (info.width, info.height) == (720, 1280) and info.has_audio
+    assert abs(info.duration - 4) < 0.3
+    assert not list(tmp_path.glob("original.*.txt"))
+    second = tmp_path / "second.mp4"
+    media.cut(out, second, 2.2, 3.8)
+    after = media.color_stats(second)
+    gap = lambda s: sum(abs(x - y) for x, y in zip(s[0], target[0]))  # noqa: E731
+    assert gap(after) < gap(before) * 0.5
+
+
+def test_broll_speed_ramp_fills_the_slot():
+    assert media.ramp_pts(1.0) == "" and media.ramp_need(1.0) == 1.0
+    assert media.ramp_pts(3.0, on=False) == ""
+    d = 3.0
+    need = media.ramp_need(d)
+    # El tiempo de salida del último fotograma de entrada cae justo al final del hueco.
+    out_end = media.RAMP_FAST_IN / media.RAMP_FAST + (need - media.RAMP_FAST_IN) / media.RAMP_SLOW
+    assert abs(out_end - d) < 1e-6
+
+
+def test_api_accepts_several_takes(sample, tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from iman import config, server
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    real_run = pipeline.run
+    monkeypatch.setattr(pipeline, "run", lambda *a, **k: real_run(*a, **{**k, "words": TAKE}))
+    c = TestClient(server.app)
+    c.post("/api/settings", json={"provider": "none"})
+    with sample.open("rb") as v, sample.open("rb") as w:
+        job = c.post("/api/jobs", data={"rhythm": "natural"}, files=[
+            ("video", ("toma1.mp4", v, "video/mp4")), ("video", ("toma2.mp4", w, "video/mp4"))]).json()
+    for _ in range(240):
+        job = c.get(f"/api/jobs/{job['id']}").json()
+        if job["status"] != "working":
+            break
+        time.sleep(0.25)
+    assert job["status"] == "done", job.get("error")
+    work = tmp_path / "jobs" / job["id"]
+    assert [p.name for p in work.glob("original.*")] == ["original.mp4"]
+    assert abs(media.probe(work / "original.mp4").duration - 24) < 0.5
+    assert not list(work.glob("toma-*"))

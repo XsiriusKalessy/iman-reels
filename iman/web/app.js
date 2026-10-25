@@ -1,6 +1,6 @@
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
-const state = { file: null, job: null, settings: null, poll: null };
+const state = { file: null, takes: [], job: null, settings: null, poll: null };
 
 function go(step) {
   if (step === "home") loadLibrary();
@@ -311,7 +311,7 @@ document.addEventListener("click", e => {
 const drop = $("#drop");
 state.broll = [];
 const MODES = {
-  camara: { title: "Arrastra tu vídeo aquí", hint: "o pulsa para elegirlo · MP4, MOV", accept: "video/*",
+  camara: { title: "Arrastra tu vídeo aquí", hint: "o pulsa para elegirlo · MP4, MOV · puedes elegir varias tomas y Imán las une con el mismo color", accept: "video/*",
     broll: "＋ Vídeos o fotos de apoyo", brollHint: "Opcional. Imán los pone a pantalla completa en el momento justo, con tu cara en un círculo." },
   voz: { title: "Arrastra tu audio aquí", hint: "una nota de voz o un vídeo del que solo quieres la voz · M4A, MP3, WAV, MP4", accept: "audio/*,video/*",
     broll: "＋ Fotos o vídeos para acompañar (opcional)", brollHint: "Sin ellos, tu voz va sobre un fondo con tus colores y subtítulos grandes." },
@@ -327,15 +327,21 @@ function setMode() {
   const m = MODES[mode()];
   $("#drop-title").textContent = m.title; $("#drop-hint").textContent = m.hint;
   $("#file").accept = m.accept;
+  $("#file").multiple = mode() === "camara";
   $("#broll-box").hidden = !m.broll;
   $("#bg-box").hidden = mode() !== "camara";
   if (m.broll) { $("#broll-title").textContent = m.broll; $("#broll-hint").textContent = m.brollHint; }
   canGo();
 }
 $("#modes").onchange = setMode;
-function pick(file) {
-  if (!file || !(file.type.startsWith("video") || (mode().startsWith("voz") && file.type.startsWith("audio")))) return;
+// En «cámara» se pueden elegir varias tomas: Imán las une en orden e iguala el color a la primera.
+function pick(files) {
+  const ok = f => f && (f.type.startsWith("video") || (mode().startsWith("voz") && f.type.startsWith("audio")));
+  const list = [...(files || [])].filter(ok);
+  const file = list[0];
+  if (!file) return;
   state.file = file;
+  state.takes = mode() === "camara" ? list.slice(1, 10).filter(f => f.type.startsWith("video")) : [];
   const v = $("#preview");
   $(".drop-inner").hidden = true;
   if (file.type.startsWith("audio")) {
@@ -345,7 +351,10 @@ function pick(file) {
     $("#audio-picked").hidden = true;
     v.src = URL.createObjectURL(file); v.hidden = false; v.play();
   }
-  $("#picked-name").textContent = file.name; $("#picked-row").hidden = false;
+  $("#picked-name").textContent = state.takes.length
+    ? `${file.name} + ${state.takes.length} toma${state.takes.length > 1 ? "s" : ""} más (se unen en orden con el mismo color)`
+    : file.name;
+  $("#picked-row").hidden = false;
   canGo();
 }
 function renderBroll() {
@@ -363,14 +372,14 @@ $("#broll-list").onclick = e => {
   if (b) { state.broll.splice(+b.dataset.unbroll, 1); renderBroll(); }
 };
 setMode();
-$("#file").onchange = e => pick(e.target.files[0]);
+$("#file").onchange = e => pick(e.target.files);
 drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
-drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); pick(e.dataTransfer.files[0]); };
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); pick(e.dataTransfer.files); };
 $("#to-edit").onclick = () => go("edit");
 // Empezar de cero: olvida el vídeo elegido y el reel abierto (el anterior sigue en «Mis reels»).
 function clearUpload() {
-  state.file = null; state.broll = []; renderBroll();
+  state.file = null; state.takes = []; state.broll = []; renderBroll();
   const v = $("#preview"); v.pause(); v.removeAttribute("src"); v.hidden = true;
   $("#audio-picked").hidden = true; $(".drop-inner").hidden = false; $("#picked-row").hidden = true;
   $("#file").value = ""; $("#music-file").value = "";
@@ -393,6 +402,7 @@ $("#go").onclick = async () => {
   if (!state.file) return go("upload");
   const fd = new FormData();
   fd.append("video", state.file);
+  if (mode() === "camara") for (const t of state.takes || []) fd.append("video", t);
   fd.append("rhythm", $("input[name=rhythm]:checked").value);
   fd.append("style", $("input[name=style]:checked").value);
   fd.append("fit", $("input[name=fit]:checked").value);

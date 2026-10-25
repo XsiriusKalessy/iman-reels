@@ -533,7 +533,7 @@ def music_preview(key: str):
 
 @app.post("/api/jobs")
 async def create_job(
-    video: UploadFile = File(...),
+    video: list[UploadFile] = File(...),
     rhythm: str = Form("rapido"),
     style: str = Form("auto"),
     size: str = Form("1080"),
@@ -576,10 +576,14 @@ async def create_job(
     job_id = uuid.uuid4().hex[:10]
     workdir = JOBS_DIR / job_id
     workdir.mkdir(parents=True, exist_ok=True)
-    suffix = Path(video.filename or "video.mp4").suffix or ".mp4"
-    src = workdir / f"original{suffix}"
-    with src.open("wb") as f:
-        shutil.copyfileobj(video.file, f)
+    takes = []
+    for k, up in enumerate(video[:MAX_TAKES]):
+        suffix = Path(up.filename or "video.mp4").suffix or ".mp4"
+        take = workdir / (f"original{suffix}" if len(video) == 1 else f"toma-{k + 1:02d}{suffix}")
+        with take.open("wb") as f:
+            shutil.copyfileobj(up.file, f)
+        takes.append(take)
+    src = takes[0] if len(takes) == 1 else workdir / "original.mp4"
     names = _save_broll(workdir, broll or [])
     if background == "foto":
         if not background_photo or not _save_background(workdir, await background_photo.read()):
@@ -596,8 +600,30 @@ async def create_job(
     JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0, "mode": mode,
                     "options": asdict(opts), "created": time.time(), "trial": watermark and mode != "largo"}
     target = _work_long if mode == "largo" else _work
-    threading.Thread(target=target, args=(job_id, src, workdir, opts), daemon=True).start()
+    if len(takes) > 1:
+        threading.Thread(target=_join_then, args=(target, takes, job_id, src, workdir, opts), daemon=True).start()
+    else:
+        threading.Thread(target=target, args=(job_id, src, workdir, opts), daemon=True).start()
     return JOBS[job_id]
+
+
+MAX_TAKES = 10
+
+
+def _join_then(target, takes: list[Path], job_id: str, src: Path, workdir: Path, opts) -> None:
+    """Varias tomas: se unen en orden con el color igualado a la primera y luego se edita como un vídeo."""
+    try:
+        _set(job_id, step=f"Uniendo tus {len(takes)} tomas e igualando el color", progress=0.02)
+        media.join_takes(takes, src)
+        for t in takes:
+            t.unlink(missing_ok=True)
+    except Exception as e:  # noqa: BLE001
+        log.exception("No se pudieron unir las tomas")
+        (workdir / "error.log").write_text(str(e), encoding="utf-8")
+        _set(job_id, status="error", error="No he podido unir tus tomas. Prueba con vídeos en mp4 o mov "
+                                           "grabados con el móvil, o súbelos de uno en uno.")
+        return
+    target(job_id, src, workdir, opts)
 
 
 def _work_long(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions) -> None:

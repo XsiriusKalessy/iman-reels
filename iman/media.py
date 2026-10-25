@@ -202,9 +202,10 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx
             # Vídeo de apoyo a pantalla completa y el creador, que sigue hablando, en un círculo arriba (los subtítulos van abajo).
             d = b - a
             still = Path(op.path).suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")
+            ramp = getattr(op, "ramp", True)
             feed = (f"loop=-1:1,fps=30,trim=duration={d:.3f},setpts=PTS-STARTPTS+{a:.3f}/TB" if still else
-                    f"trim=duration={d:.3f},setpts=PTS-STARTPTS,fps=30,tpad=stop_mode=clone:stop_duration={d:.3f},"
-                    f"trim=duration={d:.3f},setpts=PTS+{a:.3f}/TB")
+                    f"trim=duration={ramp_need(d, ramp):.3f},setpts=PTS-STARTPTS,{ramp_pts(d, ramp)}fps=30,"
+                    f"tpad=stop_mode=clone:stop_duration={d:.3f},trim=duration={d:.3f},setpts=PTS+{a:.3f}/TB")
             # Un toque de zoom lento para que las fotos no se vean quietas.
             zoom = (f",scale={int(W * 1.08)}:{int(H * 1.08)},crop={W}:{H}:'(iw-ow)/2*(1-(t-{a:.3f})/{d:.3f})':"
                     f"'(ih-oh)/2'") if still else ""
@@ -251,6 +252,25 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx
             continue
         cur = f"[o{k}]"
     return cur
+
+
+# Rampa de velocidad en los vídeos de apoyo: entra rápido (x2,5) y frena a cámara un poco lenta (x0,8).
+RAMP_FAST, RAMP_FAST_IN, RAMP_SLOW = 2.5, 0.6, 0.8
+
+
+def ramp_need(d: float, on: bool = True) -> float:
+    """Segundos del vídeo de apoyo que hacen falta para llenar d segundos con la rampa."""
+    if not on or d < 1.2:
+        return d
+    return RAMP_FAST_IN + RAMP_SLOW * (d - RAMP_FAST_IN / RAMP_FAST)
+
+
+def ramp_pts(d: float, on: bool = True) -> str:
+    """setpts de la rampa (T = tiempo del vídeo original), vacío en planos cortos que no la necesitan."""
+    if not on or d < 1.2:
+        return ""
+    f, r, sl = RAMP_FAST, RAMP_FAST_IN, RAMP_SLOW
+    return f"setpts='if(lt(T,{r}),T/{f},{r / f:.4f}+(T-{r})/{sl})/TB',"
 
 
 def _image_inputs(ops: list, first_index: int) -> tuple[list[str], dict]:
@@ -319,10 +339,7 @@ def build_filtergraph(
     chain = "[vc]"
     if info.hdr:
         # Mapeo de tonos HDR (iPhone) -> SDR BT.709.
-        chain += (
-            "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,"
-            "tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,"
-        )
+        chain += TONEMAP
     if fit == "fondo":
         parts.append(f"{chain}split[bg0][fg0]")
         parts.append(
@@ -585,6 +602,71 @@ def cut(src: Path, dst: Path, start: float, end: float) -> Path:
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "17", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
            str(dst)]
     res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if res.returncode != 0:
+        raise RuntimeError(f"ffmpeg falló:\n{res.stderr[-2000:]}")
+    return dst
+
+
+TONEMAP = ("zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,"
+           "tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,")
+
+
+def color_stats(src: Path, hdr: bool = False, samples: int = 6) -> tuple[list[float], list[float]]:
+    """Media y desviación de R, G y B en unos fotogramas pequeños repartidos por el vídeo."""
+    import numpy as np
+
+    dur = max(duration_of(src), 0.1)
+    frames = []
+    for i in range(samples):
+        t = dur * (i + 0.5) / samples
+        cmd = [FFMPEG, "-v", "error", "-ss", f"{t:.3f}", "-i", str(src), "-frames:v", "1",
+               "-vf", f"{TONEMAP if hdr else ''}scale=64:64,format=rgb24", "-f", "rawvideo", "-"]
+        raw = subprocess.run(cmd, capture_output=True).stdout
+        if len(raw) == 64 * 64 * 3:
+            frames.append(np.frombuffer(raw, np.uint8).reshape(-1, 3).astype(float))
+    if not frames:
+        return [128.0] * 3, [50.0] * 3
+    px = np.concatenate(frames)
+    return px.mean(0).tolist(), np.maximum(px.std(0), 1.0).tolist()
+
+
+def match_filter(stats: tuple[list[float], list[float]], target: tuple[list[float], list[float]]) -> str:
+    """lutrgb que lleva el color de una toma al de la primera (media y contraste por canal, con límites
+    para que una toma muy distinta no se pase de vueltas)."""
+    exprs = []
+    for c, (m, s, mt, st) in enumerate(zip(*stats, *target)):
+        g = min(max(st / s, 0.8), 1.25)
+        off = min(max(mt - m * g, -40.0), 40.0)
+        exprs.append(f"{'rgb'[c]}='clip(val*{g:.4f}+{off:.2f},0,255)'")
+    return "lutrgb=" + ":".join(exprs)
+
+
+def join_takes(srcs: list[Path], dst: Path) -> Path:
+    """Varias tomas grabadas por separado → un solo vídeo, con el tamaño de la primera y su mismo color
+    (si una toma salió más oscura o más fría, se iguala a la primera antes de editar)."""
+    infos = [probe(p) for p in srcs]
+    W = infos[0].width // 2 * 2
+    H = infos[0].height // 2 * 2
+    stats = [color_stats(p, i.hdr) for p, i in zip(srcs, infos)]
+    inputs, parts, labels = [], [], []
+    for k, (p, info) in enumerate(zip(srcs, infos)):
+        inputs += ["-i", str(p)]
+        fix = "" if k == 0 else match_filter(stats[k], stats[0]) + ","
+        parts.append(f"[{k}:v]{TONEMAP if info.hdr else ''}scale={W}:{H}:force_original_aspect_ratio=increase,"
+                     f"crop={W}:{H},fps=30,format=rgb24,{fix}format=yuv420p,setsar=1[v{k}]")
+        if info.has_audio:
+            parts.append(f"[{k}:a]aresample=48000,aformat=channel_layouts=stereo[a{k}]")
+        else:
+            parts.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={info.duration:.3f}[a{k}]")
+        labels.append(f"[v{k}][a{k}]")
+    parts.append(f"{''.join(labels)}concat=n={len(srcs)}:v=1:a=1[v][a]")
+    script = dst.parent / "tomas.join.txt"  # no "original.*": el servidor busca el vídeo con ese nombre
+    script.write_text(";\n".join(parts), encoding="utf-8")
+    cmd = [FFMPEG, "-y", "-v", "error", *inputs, *filter_script_args(script), "-map", "[v]", "-map", "[a]",
+           "-c:v", "libx264", "-preset", "veryfast", "-crf", "17", "-pix_fmt", "yuv420p",
+           "-c:a", "aac", "-b:a", "192k", str(dst)]
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    script.unlink(missing_ok=True)
     if res.returncode != 0:
         raise RuntimeError(f"ffmpeg falló:\n{res.stderr[-2000:]}")
     return dst
