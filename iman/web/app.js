@@ -544,7 +544,7 @@ $("#chat-ideas").onclick = e => {
   const input = $("#chat-input");
   input.value = b.dataset.idea; input.focus(); input.setSelectionRange(input.value.length, input.value.length);
 };
-const FX_NAMES = { lista: "Lista", grafico: "Gráfico de barras", palabra: "Palabra gigante", titular: "Titular", cifra: "Cifra", frase: "Frase", tecleo: "Texto que se escribe",
+const FX_NAMES = { lista: "Lista", grafico: "Gráfico de barras", texto3d: "Texto 3D", palabra: "Palabra gigante", titular: "Titular", cifra: "Cifra", frase: "Frase", tecleo: "Texto que se escribe",
   color: "Golpe de color", comentario: "Comentario", contador: "Contador", portada: "Portada de revista", cta: "Llamada a la acción",
   dato: "Dato", bruto: "Toma en bruto", fantasma: "Eco", pagina: "Página de revista", detras: "Texto detrás de ti",
   fondo: "Fondo de color", desenfoque: "Fondo desenfocado", ubicacion: "Ubicación", objeto: "Objeto", viaje: "Itinerario del viaje", oferta: "Oferta", ruta: "Ruta",

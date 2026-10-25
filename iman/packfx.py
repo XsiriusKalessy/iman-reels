@@ -612,7 +612,51 @@ def grafico_events(effect: dict, clock: WordClock, style: Style, duration: float
     return lines, Window(start, end)
 
 
+def _shade(ass_color: str, k: float) -> str:
+    """El mismo color más oscuro (k < 1): la cara lateral de las letras 3D."""
+    h = ass_color.replace("&H", "").replace("&", "")[-6:].rjust(6, "0")
+    b, g, r = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return f"&H00{int(b * k):02X}{int(g * k):02X}{int(r * k):02X}"
+
+
+def texto3d_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Una o dos palabras gigantes en 3D: letras con volumen (extrusión) que entran girando en perspectiva
+    y se quedan flotando, con sombra en el suelo. Para el momento más fuerte ("JAPÓN", "GRATIS", "2026")."""
+    text = " ".join(str(effect.get("text", "")).split()[:2]).upper()[:14]
+    if not text:
+        return [], None
+    span = _span(effect, clock, duration, 2.2, 1.2)
+    if not span:
+        return [], None
+    start, end = span
+    acc = _accent(style)
+    font = "Anton"
+    size = textfit.fit(text, font, 380, 900, 140)
+    cx, cy = W / 2, 470  # arriba, sobre la cabeza: la cara y los subtítulos quedan libres
+    depth = 22  # capas de la extrusión
+    t = f"{_ts(start)},{_ts(end)}"
+    # Gira en el eje Y de -70° a -14° con frenazo y luego deriva despacio: se nota que tiene volumen.
+    turn = f"\\frx14\\fry-70\\t(0,520,0.45,\\fry-14\\frx8)\\t(520,{int((end - start) * 1000)},\\fry-6\\frx5)"
+    org = f"\\org({cx:.0f},{cy:.0f})"
+    common = f"\\an5\\fn{font}\\fs{size:.0f}{org}{turn}\\fad(120,180)"
+    lines = [_dim(start, end, "60"),
+             f"Dialogue: 5,{t},Sub,,0,0,0,,{{{common}\\pos({cx + 26:.0f},{cy + 40:.0f})\\bord0\\shad0"
+             f"\\blur14\\1c&H000000&\\alpha&H70&}}{_esc(text)}"]
+    side = _shade(acc, 0.42)
+    for k in range(depth, 0, -1):
+        lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{{common}\\pos({cx + k * 1.3:.1f},{cy + k * 1.9:.1f})"
+                     f"\\bord0\\shad0\\1c{_shade(acc, 0.42 + 0.18 * (depth - k) / depth)}&}}{_esc(text)}")
+    face = INK if _light(acc) else CREAM
+    lines.append(f"Dialogue: 7,{t},Sub,,0,0,0,,{{{common}\\pos({cx:.0f},{cy:.0f})\\bord3\\shad0"
+                 f"\\1c{acc}&\\3c{side}&}}{_esc(text)}")
+    # Destello en la cara justo cuando termina de girar.
+    lines.append(f"Dialogue: 8,{t},Sub,,0,0,0,,{{{common}\\pos({cx:.0f},{cy:.0f})\\bord0\\shad0"
+                 f"\\1c{face}&\\alpha&HFF&\\t(480,600,\\alpha&HB0&)\\t(600,900,\\alpha&HFF&)}}{_esc(text)}")
+    return lines, Window(start, end)
+
+
 PACK_BUILDERS = {
+    "texto3d": texto3d_events,
     "ubicacion": ubicacion_events,
     "oferta": oferta_events,
     "ruta": ruta_events,

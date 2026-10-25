@@ -17,11 +17,11 @@ OPENAI_MODEL = "gpt-4o"
 EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "color", "comentario",
                 "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                 "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque", "aparece",
-                "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico"]
+                "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d"]
 FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
                    "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                    "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque",
-                   "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico")
+                   "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d")
 LISTA_LOOKS = ("checklist", "capitulos", "itinerario")
 TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
@@ -217,6 +217,9 @@ Tu trabajo:
      text: de 2 a 4 pares "etiqueta: valor" separados por "|", en el orden en que los dice y con la cifra que
      quiere destacar al final, p. ej. "Enero: 900 €|Marzo: 650 €|Junio: 450 €"; title: qué se compara en
      pocas palabras ("Vuelo a Tokio"). Solo con cifras que dice el creador, nunca inventadas.
+   - "texto3d": UNA o DOS palabras gigantes en 3D, con volumen, que entran girando (text: la palabra o la cifra,
+     p. ej. "JAPÓN", "GRATIS", "30 PLAZAS"). Para el momento más fuerte del vídeo, como mucho una vez por reel y
+     nunca en los 3 primeros segundos (ahí va el gancho).
    - "objeto": pegatina con el dibujo de una cosa concreta que el creador nombra (text: UN emoji que la dibuje,
      p. ej. 🔌 adaptador, 🧦 calcetines, 💊 medicinas, 📱 móvil, 💶 dinero, ✈️ vuelo, 🍣 comida, 🏨 hotel;
      subtitle: el nombre en 1 a 3 palabras). Dura unos 2 segundos. Úsalo cada vez que nombre objetos, sobre todo

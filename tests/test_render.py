@@ -671,3 +671,19 @@ def test_strong_noise_removal(tmp_path):
     info = media.probe(out)
     assert info.has_audio and abs(info.duration - 3) < 0.2
     assert limpiar.clean_source(src, tmp_path) == out  # la segunda vez no se repite
+
+
+def test_3d_text_effect():
+    from iman import packfx
+    from iman.captions import STYLES
+    from iman.effects import WordClock
+    from iman.models import Word
+
+    words = [Word(f"w{i}", i * 0.4, i * 0.4 + 0.3) for i in range(20)]
+    clock = WordClock(words, list(range(20)))
+    lines, win = packfx.texto3d_events({"type": "texto3d", "word": 8, "text": "Japón en grupo"}, clock,
+                                       STYLES["impacto"], 10.0)
+    assert win and abs(win.start - 3.2) < 0.01
+    faces = [ln for ln in lines if "JAPÓN EN" in ln]
+    assert len(faces) > 20 and all("\\fry-70" in ln for ln in faces)  # extrusión + cara, todas girando juntas
+    assert packfx.texto3d_events({"type": "texto3d", "word": 8, "text": " "}, clock, STYLES["impacto"], 10.0) == ([], None)
