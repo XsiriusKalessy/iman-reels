@@ -9,11 +9,11 @@ import os
 import shutil
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable
 
-from . import ai, brand, copystyle, effects, fondos, gestos, hands, jsonfile, limpiar, media, musica, packfx, packs, pexels, segment, seguir, sfx
+from . import ai, brand, copystyle, effects, fondos, gestos, hands, jsonfile, limpiar, media, musica, packfx, packs, pexels, redes, segment, seguir, sfx
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Word
@@ -56,6 +56,7 @@ class EditOptions:
     punch: bool = True  # zoom rápido de entrada en el primer medio segundo
     barra: bool = False  # barra de progreso arriba que se llena hasta el final (retención)
     transiciones: bool = True  # whip y glitch en uno de cada dos cortes
+    red: str = "instagram"  # para qué red es (iman/redes.py): instagram, tiktok, youtube, anuncio
     look: str = "auto"  # "auto" = el que recomienda la IA; o color y textura de un clic (media.LOOKS): "calido", "teal", "cine", "grano", "retro", "bn"…
 
 
@@ -427,6 +428,8 @@ def run(
             wants = opts.instructions
             if cfg.get("pexels_key") and not voice_only:
                 wants = f"{wants}\n\n{PEXELS_NOTE}".strip()
+            if redes.get(opts.red).note:
+                wants = f"{wants}\n\n{redes.get(opts.red).note}".strip()
             plan = ai.plan_edit(aicfg, words, wants, opts.hook_template, opts.pack)
         except Exception as e:  # la IA es un extra: si falla, seguimos y lo avisamos
             ai_warning = ai.error_message(e)
@@ -434,6 +437,8 @@ def run(
         plan = EditPlan()
     if opts.hook_title:
         plan.hook_title = opts.hook_title
+    if opts.red == "anuncio":  # estilo casero: fuera los efectos más llamativos
+        plan.effects = [fx for fx in plan.effects if fx.get("type") not in redes.ANUNCIO_FUERA]
 
     progress("Cortando silencios y tomas falsas", 0.55)
     rhythm = RHYTHMS[opts.rhythm]
@@ -492,6 +497,9 @@ def run(
     kit = brand.load() if opts.brand else None
     style_key = opts.style if opts.style in STYLES else plan.caption_style
     style = brand.apply(STYLES[style_key], kit) if kit else STYLES[style_key]
+    red = redes.get(opts.red)
+    if red.caption_y and style.y > red.caption_y:  # la zona de abajo la tapa el texto de la red
+        style = replace(style, y=red.caption_y)
     # El cierre de marca va DESPUÉS de lo que dices, para no taparte la llamada a la acción.
     tail = effects.END_CARD if kit is not None and kit.active and kit.end_card and out_duration > 1 else 0.0
     total = out_duration + tail
@@ -585,6 +593,14 @@ def run(
             warnings.append("Un efecto de vídeo ha fallado y lo he quitado para que tu reel salga.")
             media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice, zoom, overlays=[],
                          tail=tail, **{**av, "transitions": None})
+    if red.loop:
+        try:
+            looped = redes.loop(out, out.with_name(f"bucle-{out.name}"))
+            if looped != out:
+                out.unlink(missing_ok=True)
+                out = looped
+        except Exception as e:  # noqa: BLE001 - sin bucle, el reel sale igual
+            log.warning("No sale el bucle: %s", e)
     out = _publish(out, final)
     media.thumbnail(out, workdir / "reel.jpg", min(0.6, out_duration / 2))
     progress("Listo", 1.0)

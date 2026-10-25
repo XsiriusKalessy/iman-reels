@@ -32,6 +32,8 @@ class Span:
 class EditPlan:
     hook_title: str = ""
     hook_line: str = ""
+    # Otros ganchos en pantalla para probar (perfil YouTube y anuncios: A/B).
+    hook_options: list[str] = field(default_factory=list)
     # Rangos de índices de palabras [desde, hasta] (ambos incluidos) que se eliminan.
     drop: list[tuple[int, int]] = field(default_factory=list)
     drop_reasons: list[str] = field(default_factory=list)
@@ -60,6 +62,7 @@ class EditPlan:
         return cls(
             hook_title=d.get("hook_title", ""),
             hook_line=d.get("hook_line", ""),
+            hook_options=[str(h) for h in d.get("hook_options", [])][:3],
             drop=[tuple(x) for x in d.get("drop", [])],
             drop_reasons=list(d.get("drop_reasons", [])),
             emphasis=list(d.get("emphasis", [])),

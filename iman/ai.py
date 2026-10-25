@@ -36,6 +36,8 @@ EDIT_SCHEMA = {
     "properties": {
         "hook_title": {"type": "string", "description": "Título corto en pantalla para los primeros segundos (máx. 7 palabras)."},
         "hook_line": {"type": "string", "description": "Una frase de gancho alternativa que el creador podría grabar."},
+        "hook_options": {"type": "array", "items": {"type": "string"},
+                         "description": "Tres ganchos en pantalla distintos de hook_title para probar (cifra, problema, curiosidad)."},
         "drop": {
             "type": "array",
             "items": {
@@ -107,7 +109,7 @@ EDIT_SCHEMA = {
             "items": {"type": "integer"},
         },
     },
-    "required": ["hook_title", "hook_line", "drop", "emphasis", "effects", "zooms", "pauses", "silence", "music", "color",
+    "required": ["hook_title", "hook_line", "hook_options", "drop", "emphasis", "effects", "zooms", "pauses", "silence", "music", "color",
                  "caption_style"],
     "additionalProperties": False,
 }
@@ -125,6 +127,7 @@ Tu trabajo:
    la que mejor encaje con lo que dice: una cifra concreta ("3 errores que…"), un problema que duele ("Si te pasa
    esto…"), romper una creencia ("Nadie te dice que…") o una promesa clara ("Así ahorras…"). Nada genérico.
 3. hook_line: una frase de gancho alternativa por si el creador quiere regrabar el arranque.
+   hook_options: tres ganchos en pantalla más, distintos del hook_title y entre sí, con las mismas reglas.
 4. emphasis: índices de 3 a 8 palabras clave que conviene resaltar en los subtítulos (cifras, conceptos clave).
 5. effects: el reel tiene que entrar por los ojos, como los de los creadores que más enganchan. Pon un efecto
    cada 5 a 8 segundos (en un reel de 60 s, de 7 a 11), repartidos de principio a fin y MUY variados: mezcla
@@ -420,6 +423,7 @@ def _plan_from(data: dict, n: int, source: str) -> EditPlan:
     return EditPlan(
         hook_title=data.get("hook_title", "").strip(),
         hook_line=data.get("hook_line", "").strip(),
+        hook_options=[str(h).strip()[:80] for h in data.get("hook_options", []) if str(h).strip()][:3],
         drop=drops,
         drop_reasons=reasons,
         emphasis=[i for i in data.get("emphasis", []) if 0 <= int(i) < n],
@@ -458,6 +462,7 @@ def _plan_to_prompt(plan: EditPlan) -> dict:
     return {
         "hook_title": plan.hook_title,
         "hook_line": plan.hook_line,
+        "hook_options": plan.hook_options,
         "drop": [{"from": a, "to": b, "reason": r} for (a, b), r in
                  zip(plan.drop, plan.drop_reasons + [""] * len(plan.drop))],
         "emphasis": plan.emphasis,

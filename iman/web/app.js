@@ -35,6 +35,9 @@ async function loadOptions() {
   $("#packs").innerHTML = o.packs.map(p => `
     <label class="choice"><input type="radio" name="pack" value="${p.key}" ${p.key === "general" ? "checked" : ""}>
     <span>${esc(p.label)}<small>${esc(p.description)}</small></span></label>`).join("");
+  $("#redes").innerHTML = (o.redes || []).map((r, i) => `
+    <label class="choice"><input type="radio" name="red" value="${r.key}" ${i === 0 ? "checked" : ""}>
+    <span>${esc(r.label)}<small>${esc(r.description)}</small></span></label>`).join("");
   $("#brand-sector").innerHTML = o.packs.map(p => `<option value="${p.key}">${esc(p.label)}</option>`).join("");
   $("#packs").onchange = () => applyPack(false);
   renderHooks(o.hook_templates);
@@ -458,6 +461,7 @@ $("#go").onclick = async () => {
   fd.append("barra", $("#barra").checked);
   fd.append("transiciones", $("#transiciones").checked);
   fd.append("look", $("#look").value);
+  fd.append("red", $("input[name=red]:checked")?.value || "instagram");
   const ms = $("#music-style").value;
   if (ms === "mia" && $("#music-file").files[0]) fd.append("music_file", $("#music-file").files[0]);
   else fd.append("music_style", ms === "mia" ? "" : ms);  // «Mi música» sin canción elegida: sin música
@@ -888,6 +892,7 @@ function showResult(j) {
   $("#hook-box").innerHTML = (r.notices || []).map(n => `<div class="card warn"><p>${esc(n)}</p></div>`).join("")
     + (r.ai_warning ? `<div class="card warn"><p>${esc(r.ai_warning)}</p><p class="hint">El reel está cortado y con subtítulos, pero sin los efectos de la IA.</p></div>` : "")
     + (p.hook_title ? `<div class="card"><h4>${esc(p.hook_title)}</h4><p class="hint">Gancho en pantalla</p></div>` : "")
+    + ((p.hook_options || []).length ? `<div class="card"><p class="hint">Otros ganchos para probar (se cambia en segundos):</p><div class="hook-try">${p.hook_options.map(h => `<button type="button" class="ghost small" data-hook-try="${esc(h)}">${esc(h)}</button>`).join("")}</div></div>` : "")
     + (p.hook_line ? `<div class="card"><p>«${esc(p.hook_line)}»</p><p class="hint">Si quieres regrabar el arranque, prueba con esta frase.</p></div>` : "");
   const checks = r.checks || [];
   $("#check-box").hidden = !checks.length;
@@ -1175,4 +1180,10 @@ document.querySelectorAll("[data-tool]").forEach(btn => btn.onclick = async () =
   } finally {
     document.querySelectorAll("[data-tool]").forEach(b => b.disabled = false);
   }
+});
+
+// Probar otro gancho: se vuelve a montar con ese título, sin volver a escuchar el vídeo.
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-hook-try]");
+  if (b) reedit({ hook_title: b.dataset.hookTry });
 });

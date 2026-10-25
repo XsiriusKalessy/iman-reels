@@ -993,3 +993,45 @@ def test_photo_tools(tmp_path, monkeypatch):
         assert lit.size == small.size and lit.getpixel((10, 10)) != small.getpixel((10, 10))
     assert c.post("/api/imagen", data={"accion": "otra"}, files={"foto": ("a.jpg", buf.getvalue(), "image/jpeg")}).status_code == 400
     assert c.get("/api/imagen/..%2Fconfig.json").status_code == 404
+
+
+def test_tiktok_profile_loops_and_lifts_captions(sample, tmp_path):
+    import numpy as np
+    from PIL import Image
+
+    from iman import redes
+    from iman.models import EditPlan
+
+    cfg = {"provider": "none", "anthropic_key": "", "openai_key": "", "claude_model": "", "openai_model": ""}
+    fx = [{"type": "texto3d", "word": 3, "text": "JAPÓN"}, {"type": "titular", "word": 8, "text": "Lo que nadie dice"}]
+    res = pipeline.run(sample, tmp_path / "w", pipeline.EditOptions(rhythm="sin_tocar", red="tiktok"), cfg,
+                       words=TAKE, plan=EditPlan(hook_title="Mira esto", effects=fx))
+    assert abs(media.probe(res.video).duration - res.duration_out) < 0.3
+    ass = (tmp_path / "w" / "subs.ass").read_text(encoding="utf-8")
+    assert f",{redes.REDES['tiktok'].caption_y})" in ass or "\\pos(540,1240)" in ass
+
+    def frame(t):
+        p = tmp_path / f"f{t}.png"
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", str(t), "-i", str(res.video), "-frames:v", "1", str(p)],
+                       check=True)
+        return np.asarray(Image.open(p).convert("L"), np.float32)
+
+    first, last = frame(0), frame(res.duration_out - 0.04)
+    middle = frame(res.duration_out / 2)
+    assert np.abs(first - last).mean() < np.abs(first - middle).mean()  # el final ya es el principio
+    # Anuncio: fuera los efectos llamativos.
+    res2 = pipeline.run(sample, tmp_path / "a", pipeline.EditOptions(rhythm="sin_tocar", red="anuncio"), cfg,
+                        words=TAKE, plan=EditPlan(effects=fx))
+    assert [f["type"] for f in res2.plan.effects] == ["titular"]
+
+
+def test_hook_options_come_from_the_ai_plan():
+    from iman import ai
+
+    assert "hook_options" in ai.EDIT_SCHEMA["required"]
+    plan = ai._plan_from({"hook_title": "A", "hook_line": "", "hook_options": ["B", " ", "C", "D", "E"],
+                          "effects": []}, 10, "claude")
+    assert plan.hook_options == ["B", "C", "D"]
+    from iman.models import EditPlan
+
+    assert EditPlan.from_dict(plan.to_dict()).hook_options == ["B", "C", "D"]

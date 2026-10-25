@@ -424,3 +424,5 @@ select option:checked { background-color: var(--accent); color: var(--accent-ink
 .photo-tools { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 6px; align-items: center; }
 .photo-result { display: grid; justify-items: center; gap: 10px; margin-top: 8px; }
 .photo-result img { max-height: 380px; max-width: 100%; border-radius: 10px; background: repeating-conic-gradient(#8884 0 25%, transparent 0 50%) 0 0 / 18px 18px; }
+.hook-try { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.hook-try button { white-space: normal; text-align: left; }

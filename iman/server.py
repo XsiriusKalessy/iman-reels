@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ai, brand, config, copystyle, effects, jsonfile, license, media, musica, packs, pipeline, portable, updates
+from . import ai, brand, config, copystyle, effects, jsonfile, license, media, musica, packs, pipeline, portable, redes, updates
 from .captions import STYLES
 from .models import EditPlan, Word
 from .rhythm import RHYTHMS
@@ -121,6 +121,7 @@ def options():
         "rhythms": [{"key": r.key, "label": r.label, "description": r.description} for r in RHYTHMS.values()],
         "styles": _styles(),
         "hook_templates": HOOK_TEMPLATES,
+        "redes": [{"key": r.key, "label": r.label, "description": r.description} for r in redes.REDES.values()],
         "packs": [{"key": p.key, "label": p.label, "description": p.description, "style": p.style,
                    "hooks": list(p.hooks)} for p in packs.PACKS.values()],
     }
@@ -559,6 +560,7 @@ async def create_job(
     barra: bool = Form(False),
     transiciones: bool = Form(True),
     look: str = Form("auto"),
+    red: str = Form("instagram"),
 ):
     if (pack and pack not in packs.PACKS) or mode not in ("camara", "voz", "largo") \
             or background not in pipeline.BACKGROUNDS:
@@ -598,7 +600,8 @@ async def create_job(
                                 voice=voice, ruido=ruido, watermark=watermark, brand=use_brand, pack=pack,
                                 mode="voz" if mode == "voz" else "camara", background=background,
                                 sfx=sfx, music=music, punch=punch, barra=barra, transiciones=transiciones,
-                                look=look if look in media.LOOKS or look == "auto" else "")
+                                look=look if look in media.LOOKS or look == "auto" else "",
+                                red=red if red in redes.REDES else "instagram")
     JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0, "mode": mode,
                     "options": asdict(opts), "created": time.time(), "trial": watermark and mode != "largo"}
     target = _work_long if mode == "largo" else _work
