@@ -1485,3 +1485,53 @@ def test_phone_frames_mosaic_and_handwritten_lines(tmp_path):
                                        clock, captions.STYLES["impacto"], 3.0)
     assert len(lines) == 4 and "t(0,160" in lines[1] and "t(380,540" in lines[2] and "t(760,920" in lines[3] and win
     assert ai._look("frase", "lineas") == "lineas" and ai._look("frase", "raro") == ""
+
+
+def test_viral_score_agency_mode_and_calendar(tmp_path, monkeypatch):
+    """Tanda 6, viajes primero: nota de viralidad, modo agencia de viajes y calendario de contenido."""
+    from fastapi.testclient import TestClient
+
+    from iman import ai, config, server, viral
+    from iman.ai import AIConfig
+    from iman.models import EditPlan, Word
+
+    words = [Word(f"p{i}", 0.2 + i * 0.35, 0.5 + i * 0.35) for i in range(80)]  # 80 palabras en ~28 s
+    plan = EditPlan(hook_title="3 errores al ir a Japón", gancho="zoom_seco", emphasis=[1, 2, 3], silence=[40])
+    active = [{"type": "titular"}, {"type": "cifra"}, {"type": "lista"}, {"type": "cta"}, {"type": "viaje"}]
+    v = viral.score(plan, words, 28.5, active, captions=True, music=True, hook=True, cta=True)
+    assert v["score"] >= 90 and v["label"] == "Muy alta" and v["tips"] == [] and len(v["items"]) == 9
+    bad = viral.score(EditPlan(), words[:20], 95.0, [], captions=False, music=False, hook=True, cta=False)
+    assert bad["score"] < 30 and bad["label"] == "Baja" and len(bad["tips"]) == 3 and "gancho" in bad["tips"][0].lower()
+    # Modo agencia: ruta con coordenadas válidas, ganchos acotados, texto de ruta para el efecto «viaje».
+    cfg = AIConfig(provider="claude", anthropic_key="x")
+    monkeypatch.setattr(ai, "_ask_json", lambda *a, **k: {
+        "hooks": ["Japón en grupo por 3.450 €", "", "Lo que nadie te cuenta de Kioto", "cuarto"],
+        "script": "Guion.", "shots": ["El ramen a las 7", "El grupo en Fushimi"],
+        "route": [{"name": "Tokio", "lat": 35.68, "lon": 139.69}, {"name": "Kioto", "lat": 35.01, "lon": 135.77},
+                  {"name": "Mal", "lat": 999, "lon": 0}, {"name": "", "lat": 1, "lon": 1}],
+        "post": "Viaje a Japón en noviembre…", "whatsapp": "Hola…", "why": "Porque sí."})
+    d = ai.agency_plan(cfg, "Japón", "18 al 29 nov", "3.450 €")
+    assert d["hooks"] == ["Japón en grupo por 3.450 €", "Lo que nadie te cuenta de Kioto", "cuarto"]
+    assert [s["name"] for s in d["route"]] == ["Tokio", "Kioto"]
+    assert ai.route_text(d["route"]) == "Tokio (35.68, 139.69) › Kioto (35.01, 135.77)"
+    from iman import mapa
+
+    assert mapa.stops(ai.route_text(d["route"])) and len(mapa.stops(ai.route_text(d["route"]))) == 2
+    # Calendario: fechas válidas, sin repetir día, ordenado, acotado a semanas × reels.
+    monkeypatch.setattr(ai, "_ask_json", lambda *a, **k: {"items": [
+        {"date": "2026-11-02", "hook": "B", "kind": "valor", "why": "w", "record": "r"},
+        {"date": "2026-10-27", "hook": "A", "kind": "venta", "why": "w", "record": "r"},
+        {"date": "2026-10-27", "hook": "repe", "kind": "valor", "why": "w", "record": "r"},
+        {"date": "mal", "hook": "X", "kind": "valor", "why": "w", "record": "r"},
+        {"date": "2026-11-05", "hook": "C", "kind": "fecha", "why": "w", "record": "r"}]})
+    items = ai.content_calendar(cfg, "viajes", "agencia", "18-29 nov Japón", weeks=1, per_week=2, today="2026-10-25")
+    assert [i["hook"] for i in items] == ["A", "B"]
+    # Sin IA configurada, los dos agentes avisan en vez de fallar.
+    monkeypatch.setattr(config, "HOME", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    monkeypatch.setattr(config, "ai_config", lambda cfg: AIConfig(provider="none"))
+    c = TestClient(server.app)
+    assert c.post("/api/agencia", json={"destination": "Japón"}).status_code == 400
+    assert c.post("/api/calendario", json={"pack": "viajes"}).status_code == 400
+    assert c.post("/api/calendario", json={"pack": "viajes", "weeks": 99}).status_code == 422

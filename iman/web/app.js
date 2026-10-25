@@ -401,6 +401,88 @@ document.addEventListener("click", e => {
   go("upload");
 });
 
+// Nota de viralidad: lo que retiene, medido sobre este reel, y los tres cambios que más suman.
+function renderViral(v) {
+  const box = $("#viral-box");
+  if (!v || typeof v.score !== "number") { box.hidden = true; return; }
+  box.hidden = false;
+  const cls = v.score >= 70 ? "good" : v.score >= 50 ? "mid" : "low";
+  box.innerHTML = `<div class="viral-head"><div class="viral-score ${cls}"><b>${v.score}</b><span>/100</span></div>
+    <div><h4>Nota de viralidad: ${esc(v.label)}</h4><p class="hint">No adivina las visitas: mide lo que retiene (gancho, arranque, duración, ritmo, cambios en pantalla, subtítulos, música, cierre).</p></div></div>
+    ${(v.tips || []).length ? `<p class="hint">Lo que más sumaría:</p><ul class="checks">${v.tips.map(t => `<li class="warn">↑ ${esc(t)}</li>`).join("")}</ul>` : `<p class="hint">Está redondo. A publicar.</p>`}
+    <div class="viral-bars">${(v.items || []).map(i => `<div title="${esc(i.text)}"><span style="width:${Math.round(100 * i.points / i.max)}%"></span></div>`).join("")}</div>`;
+}
+
+// Modo agencia de viajes: destino y fechas → reel listo para grabar.
+$("#agency-form").onsubmit = async e => {
+  e.preventDefault();
+  const btn = e.target.querySelector("button[type=submit]");
+  btn.disabled = true; btn.textContent = "Preparando…";
+  const out = $("#agency-out");
+  try {
+    const body = Object.fromEntries(new FormData(e.target));
+    const r = await api("/api/agencia", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    state.agency = r;
+    out.innerHTML = `
+      <div class="cards">
+        <div class="card"><h4>Ganchos</h4>${(r.hooks || []).map(h => `<p class="hook-line">«${esc(h)}»</p>`).join("")}<p class="hint">${esc(r.why || "")}</p></div>
+        <div class="card"><h4>Guion (una toma)</h4><p class="script">${esc(r.script || "").replace(/\n/g, "<br>")}</p>
+          <button class="primary" type="button" id="agency-use">Grabar este →</button></div>
+        <div class="card"><h4>Qué grabar o pedir a los viajeros</h4><ul class="checks">${(r.shots || []).map(x => `<li class="ok">🎥 ${esc(x)}</li>`).join("")}</ul>
+          ${r.route_text ? `<p class="hint">Mapa 3D: ${esc((r.route || []).map(x => x.name).join(" › "))}. Imán lo dibuja solo cuando cuentes el recorrido.</p>` : ""}</div>
+        <div class="card"><h4>Instagram</h4><p class="script">${esc(r.post || "").replace(/\n/g, "<br>")}</p><button class="ghost small" type="button" data-copy="post">Copiar</button></div>
+        <div class="card"><h4>WhatsApp</h4><p class="script">${esc(r.whatsapp || "").replace(/\n/g, "<br>")}</p><button class="ghost small" type="button" data-copy="whatsapp">Copiar</button></div>
+      </div>`;
+    out.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => { navigator.clipboard.writeText(r[b.dataset.copy] || ""); b.textContent = "Copiado"; });
+    $("#agency-use").onclick = () => {
+      showHook((r.hooks || [])[0] || "");
+      const inst = $("#instructions");
+      const route = r.route_text ? `Si cuento el recorrido, usa el efecto "viaje" con estas paradas: ${r.route_text}${body.dates ? ` (subtitle: ${body.dates})` : ""}.` : "";
+      if (inst && route) inst.value = (inst.value ? inst.value + "\n" : "") + route;
+      go("upload");
+    };
+  } catch (err) {
+    out.innerHTML = `<p class="error">${esc(err.message)}</p>`;
+  } finally { btn.disabled = false; btn.textContent = "Prepárame el reel"; }
+};
+
+// Calendario de contenido: qué grabar cada día, y descarga para el calendario del móvil.
+const KIND_NAMES = { venta: "Vende", valor: "Da valor", detras: "Cómo trabajas", testimonio: "Testimonio", tendencia: "Tendencia", fecha: "Fecha clave" };
+$("#calendar-form").onsubmit = async e => {
+  e.preventDefault();
+  const btn = e.target.querySelector("button[type=submit]");
+  btn.disabled = true; btn.textContent = "Pensando…";
+  const out = $("#calendar-out");
+  try {
+    const body = Object.fromEntries(new FormData(e.target));
+    body.pack = $("input[name=pack]:checked")?.value || state.brand?.sector || "general";
+    body.weeks = +body.weeks; body.per_week = +body.per_week;
+    const { items } = await api("/api/calendario", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    state.calendar = items;
+    const fmt = d => { const [y, m, dd] = d.split("-"); return `${dd}/${m}`; };
+    out.innerHTML = `<table class="calendar"><thead><tr><th>Día</th><th>Reel</th><th>Tipo</th><th></th></tr></thead><tbody>
+      ${items.map((it, i) => `<tr><td><b>${fmt(it.date)}</b></td><td><b>${esc(it.hook)}</b><br><small>${esc(it.why)}</small><br><small>🎥 ${esc(it.record)}</small></td><td><span class="kind kind-${esc(it.kind)}">${esc(KIND_NAMES[it.kind] || it.kind)}</span></td><td><button class="ghost small use-idea" data-hook="${esc(it.hook)}">Grabar →</button></td></tr>`).join("")}
+      </tbody></table>
+      <button class="ghost" type="button" id="calendar-ics">Descargar para el calendario (.ics)</button>`;
+    $("#calendar-ics").onclick = () => {
+      const esc2 = t => String(t || "").replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+      const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Iman//Calendario de contenido//ES"];
+      items.forEach((it, i) => {
+        const d = it.date.replace(/-/g, "");
+        lines.push("BEGIN:VEVENT", `UID:iman-${d}-${i}@imanreels`, `DTSTART;VALUE=DATE:${d}`, `SUMMARY:${esc2("Reel: " + it.hook)}`,
+          `DESCRIPTION:${esc2((KIND_NAMES[it.kind] || it.kind) + ". " + it.why + " Grabar: " + it.record)}`, "END:VEVENT");
+      });
+      lines.push("END:VCALENDAR");
+      const blob = new Blob([lines.join("\r\n")], { type: "text/calendar" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = "calendario-iman.ics"; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    };
+  } catch (err) {
+    out.innerHTML = `<p class="error">${esc(err.message)}</p>`;
+  } finally { btn.disabled = false; btn.textContent = "Hazme el calendario"; }
+};
+
 // ---------- 1. subir ----------
 const drop = $("#drop");
 state.broll = [];
@@ -1083,6 +1165,7 @@ function showResult(j) {
   $("#versions-hooks").value = [p.hook_title, ...(p.hook_options || [])].filter(Boolean).join("\n");
   $("#versions-box").open = j.options?.red === "anuncio";
   pollVersions();
+  renderViral(r.viral);
   const checks = r.checks || [];
   $("#check-box").hidden = !checks.length;
   $("#check-list").innerHTML = checks.map(c => `<li class="${c.ok ? "ok" : "warn"}">${c.ok ? "✓" : "!"} ${esc(c.text)}${c.ok || !c.tip ? "" : `<small>${esc(c.tip)}</small>`}</li>`).join("");

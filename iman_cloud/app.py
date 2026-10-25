@@ -122,6 +122,40 @@ def ideas(request: Request, body: IdeasIn, x_iman_license: str = Header(""), x_i
     return {"ideas": ai.generate_ideas(_cfg(), body.topic, body.audience, body.voice_samples, body.n)}
 
 
+class AgencyIn(BaseModel):
+    destination: str = Field(..., max_length=200)
+    dates: str = Field("", max_length=80)
+    price: str = Field("", max_length=60)
+    seats: str = Field("", max_length=40)
+    includes: str = Field("", max_length=600)
+    audience: str = Field("", max_length=200)
+    voice_samples: str = Field("", max_length=6000)
+
+
+@app.post("/v1/agencia")
+def agencia(request: Request, body: AgencyIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
+    _check(x_iman_license, x_iman_instance, request)
+    return ai.agency_plan_raw(_cfg(), body.destination, body.dates, body.price, body.seats, body.includes,
+                              body.audience, body.voice_samples)
+
+
+class CalendarIn(BaseModel):
+    pack: str = Field("general", max_length=20)
+    topic: str = Field("", max_length=300)
+    key_dates: str = Field("", max_length=1200)
+    weeks: int = Field(2, ge=1, le=6)
+    per_week: int = Field(3, ge=1, le=7)
+    today: str = Field("", max_length=10)
+    voice_samples: str = Field("", max_length=6000)
+
+
+@app.post("/v1/calendario")
+def calendario(request: Request, body: CalendarIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
+    _check(x_iman_license, x_iman_instance, request)
+    return {"items": ai.content_calendar_raw(_cfg(), body.pack, body.topic, body.key_dates, body.weeks, body.per_week,
+                                             body.today, body.voice_samples)}
+
+
 class CascadeIn(BaseModel):
     transcript: str = Field(..., max_length=60000)
 

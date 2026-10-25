@@ -1260,3 +1260,172 @@ def guide_copy(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "", b
             user += f"\n\n{brand_voice}"
         data = _ask_json(cfg, GUIDE_SYSTEM, user, GUIDE_SCHEMA)
     return _human_dict(data)
+
+
+# --- Modo agencia de viajes: destino y fechas → guion, textos y ruta -----------------
+
+AGENCY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "hooks": {"type": "array", "items": {"type": "string"},
+                  "description": "Tres ganchos para decir en los 3 primeros segundos (máx. 9 palabras cada uno)."},
+        "script": {"type": "string", "description": "Guion de 30 a 50 segundos, en una toma, como habla la agencia."},
+        "shots": {"type": "array", "items": {"type": "string"},
+                  "description": "De 4 a 6 planos que conviene grabar o pedir a los viajeros (3 a 8 palabras cada uno)."},
+        "route": {
+            "type": "array",
+            "description": "Paradas del viaje en orden, con coordenadas aproximadas, para el mapa 3D.",
+            "items": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}, "lat": {"type": "number"}, "lon": {"type": "number"}},
+                "required": ["name", "lat", "lon"],
+                "additionalProperties": False,
+            },
+        },
+        "post": {"type": "string", "description": "Descripción para Instagram (palabra clave en los primeros 50 caracteres)."},
+        "whatsapp": {"type": "string", "description": "Mensaje corto para el grupo o la lista de clientes de WhatsApp."},
+        "why": {"type": "string", "description": "Por qué este enfoque, en una frase."},
+    },
+    "required": ["hooks", "script", "shots", "route", "post", "whatsapp", "why"],
+    "additionalProperties": False,
+}
+
+AGENCY_SYSTEM = """Eres el guionista de vídeo de una agencia de viajes que vende viajes en grupo y a medida con reels.
+Te dan un destino, unas fechas y, si los hay, el precio, las plazas, lo que incluye y el público. Devuelves lo
+que la agencia necesita para grabar un reel en una sola toma y publicarlo:
+- hooks: 3 ganchos distintos (una cifra o precio, un secreto del destino, una escena que se siente).
+- script: un guion de 30 a 50 segundos que vende SIN sonar a folleto: una escena concreta del viaje, qué incluye
+  de verdad, para quién es y para quién no, y UNA sola llamada a la acción ("escríbeme JAPÓN por privado").
+  Sigue los 7 pasos (gancho, problema, agitación, intriga, solución, el fallo, cierre) cuando el reel vende.
+- shots: qué grabar o pedir a los viajeros para los planos de apoyo (lugares, comida, el grupo, el detalle).
+- route: las paradas reales del viaje con coordenadas aproximadas (lat, lon), para dibujar el mapa 3D.
+- post: la descripción para Instagram con la palabra clave (destino) en los primeros 50 caracteres y una frase
+  que responda a lo que la gente busca en Google ("viaje organizado a Japón en noviembre").
+- whatsapp: un mensaje corto y cercano para la lista de clientes, sin mayúsculas gritando.
+Nunca inventes precios, plazas ni fechas: usa solo los datos que te dan. Si falta el precio, no lo menciones.""" \
+    + "\n\n" + COPY_RULES
+
+
+def agency_plan(cfg: AIConfig, destination: str, dates: str = "", price: str = "", seats: str = "",
+                includes: str = "", audience: str = "", voice_samples: str = "") -> dict:
+    """Modo agencia de viajes: destino y fechas → ganchos, guion, planos, ruta y textos."""
+    payload = {"destination": destination[:200], "dates": dates[:80], "price": price[:60], "seats": seats[:40],
+               "includes": includes[:600], "audience": audience[:200]}
+    if cfg.provider == "iman":
+        from . import cloud
+
+        return cloud.call(cfg, "agencia", {**payload, "voice_samples": voice_samples[:6000]})
+    return agency_plan_raw(cfg, voice_samples=voice_samples, **payload)
+
+
+def agency_plan_raw(cfg: AIConfig, destination: str, dates: str = "", price: str = "", seats: str = "",
+                    includes: str = "", audience: str = "", voice_samples: str = "") -> dict:
+    user = f"DESTINO: {destination}"
+    for label, value in (("FECHAS", dates), ("PRECIO", price), ("PLAZAS", seats), ("INCLUYE", includes),
+                         ("PÚBLICO", audience)):
+        if value.strip():
+            user += f"\n{label}: {value.strip()}"
+    if voice_samples:
+        user += f"\n\nASÍ HABLA LA AGENCIA:\n{voice_samples[:6000]}"
+    data = _human_dict(_ask_json(cfg, AGENCY_SYSTEM, user, AGENCY_SCHEMA))
+    route = []
+    for stop in data.get("route", []) or []:
+        try:
+            lat, lon = float(stop["lat"]), float(stop["lon"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if -85 <= lat <= 85 and -180 <= lon <= 180 and str(stop.get("name", "")).strip():
+            route.append({"name": str(stop["name"]).strip()[:24], "lat": round(lat, 2), "lon": round(lon, 2)})
+    data["route"] = route[:8]
+    data["hooks"] = [str(h).strip()[:80] for h in data.get("hooks", []) if str(h).strip()][:3]
+    data["shots"] = [str(s).strip()[:80] for s in data.get("shots", []) if str(s).strip()][:6]
+    return data
+
+
+def route_text(route: list[dict]) -> str:
+    """La ruta tal y como la entiende el efecto «viaje»: "Tokio (35.68, 139.69) › Kioto (35.01, 135.77)"."""
+    return " › ".join(f"{s['name']} ({s['lat']:.2f}, {s['lon']:.2f})" for s in route if "lat" in s and "lon" in s)
+
+
+# --- Calendario de contenido: por nicho y fechas clave ------------------------------
+
+CALENDAR_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "date": {"type": "string", "description": "Fecha de publicación, AAAA-MM-DD."},
+                    "hook": {"type": "string", "description": "Gancho del reel (máx. 9 palabras)."},
+                    "kind": {"type": "string", "enum": ["venta", "valor", "detras", "testimonio", "tendencia", "fecha"],
+                             "description": "venta (vende), valor (enseña), detras (cómo trabajas), testimonio, tendencia, fecha (ligado a una fecha clave)."},
+                    "why": {"type": "string", "description": "Por qué ese día y ese reel, en una frase."},
+                    "record": {"type": "string", "description": "Qué grabar, en una frase (3 a 12 palabras)."},
+                },
+                "required": ["date", "hook", "kind", "why", "record"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["items"],
+    "additionalProperties": False,
+}
+
+CALENDAR_SYSTEM = """Eres el responsable de contenido de un creador o negocio que publica reels. Preparas su calendario
+de publicación para las próximas semanas: qué reel grabar cada día de publicación, con su gancho, el tipo de reel
+y qué grabar. Reglas:
+- Reparte los tipos: por cada reel que vende, dos o tres que dan valor, enseñan cómo se trabaja o cuentan una
+  historia; un testimonio real solo si el creador lo tiene.
+- Las FECHAS CLAVE que te pasan mandan: antes de una salida o un evento, calienta (qué llevar, qué ver, por qué
+  ese sitio); durante, cuenta el día a día; después, el resumen y "la próxima salida". Para fechas de ventas
+  (Black Friday, Navidad, verano), empieza a hablar del tema dos semanas antes.
+- Fechas en formato AAAA-MM-DD, empezando desde HOY, en los días de publicación que te indiquen, y nunca dos
+  reels el mismo día.
+- Los ganchos, con las reglas de siempre: concretos, sin "descubre" ni "increíble", con las palabras de la persona.
+- Si te pasan reels anteriores, no repitas sus temas tal cual: dales otra vuelta.""" + "\n\n" + COPY_RULES
+
+
+def content_calendar(cfg: AIConfig, pack: str, topic: str = "", key_dates: str = "", weeks: int = 2,
+                     per_week: int = 3, today: str = "", voice_samples: str = "") -> list[dict]:
+    weeks = max(1, min(6, int(weeks)))
+    per_week = max(1, min(7, int(per_week)))
+    payload = {"pack": pack[:20], "topic": topic[:300], "key_dates": key_dates[:1200], "weeks": weeks,
+               "per_week": per_week, "today": today[:10]}
+    if cfg.provider == "iman":
+        from . import cloud
+
+        return cloud.call(cfg, "calendario", {**payload, "voice_samples": voice_samples[:6000]}).get("items", [])
+    return content_calendar_raw(cfg, voice_samples=voice_samples, **payload)
+
+
+def content_calendar_raw(cfg: AIConfig, pack: str, topic: str = "", key_dates: str = "", weeks: int = 2,
+                         per_week: int = 3, today: str = "", voice_samples: str = "") -> list[dict]:
+    import datetime as _dt
+
+    from . import packs as _packs
+
+    today = today or _dt.date.today().isoformat()
+    user = (f"HOY: {today}\nSEMANAS: {weeks}\nREELS POR SEMANA: {per_week}\n"
+            f"SECTOR: {_packs.get(pack).label if pack in _packs.PACKS else 'general'}")
+    if topic.strip():
+        user += f"\nDE QUÉ VA EL NEGOCIO O EL CREADOR: {topic.strip()}"
+    if key_dates.strip():
+        user += f"\nFECHAS CLAVE:\n{key_dates.strip()}"
+    if voice_samples:
+        user += f"\n\nASÍ HABLA Y REELS ANTERIORES:\n{voice_samples[:6000]}"
+    items = _human_dict(_ask_json(cfg, CALENDAR_SYSTEM, user, CALENDAR_SCHEMA)).get("items", [])
+    out, seen = [], set()
+    for it in items:
+        date = str(it.get("date", ""))[:10]
+        try:
+            _dt.date.fromisoformat(date)
+        except ValueError:
+            continue
+        if date in seen or not str(it.get("hook", "")).strip():
+            continue
+        seen.add(date)
+        out.append({"date": date, "hook": str(it["hook"]).strip()[:90], "kind": it.get("kind", "valor"),
+                    "why": str(it.get("why", "")).strip()[:200], "record": str(it.get("record", "")).strip()[:120]})
+    return sorted(out, key=lambda i: i["date"])[:weeks * per_week]

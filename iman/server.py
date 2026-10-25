@@ -603,6 +603,49 @@ def ideas(body: IdeasIn):
     return {"ideas": ai.generate_ideas(cfg, body.topic, body.audience, _voice_samples(), body.n)}
 
 
+class AgencyIn(BaseModel):
+    destination: str = Field(..., max_length=200)
+    dates: str = Field("", max_length=80)
+    price: str = Field("", max_length=60)
+    seats: str = Field("", max_length=40)
+    includes: str = Field("", max_length=600)
+    audience: str = Field("", max_length=200)
+
+
+@app.post("/api/agencia")
+def agencia(body: AgencyIn):
+    """Modo agencia de viajes: destino y fechas → ganchos, guion, planos que grabar, ruta para el mapa y textos."""
+    cfg = config.ai_config(config.load())
+    if not cfg.enabled:
+        raise HTTPException(400, "Configura Claude o ChatGPT en Ajustes para usar el modo agencia")
+    data = ai.agency_plan(cfg, body.destination, body.dates, body.price, body.seats, body.includes, body.audience,
+                          _voice_samples())
+    data["route_text"] = ai.route_text(data.get("route", []))
+    return data
+
+
+class CalendarIn(BaseModel):
+    pack: str = Field("general", max_length=20)
+    topic: str = Field("", max_length=300)
+    key_dates: str = Field("", max_length=1200)
+    weeks: int = Field(2, ge=1, le=6)
+    per_week: int = Field(3, ge=1, le=7)
+
+
+@app.post("/api/calendario")
+def calendario(body: CalendarIn):
+    """Calendario de contenido: qué reel grabar cada día, por sector y fechas clave (salidas, Black Friday…)."""
+    import datetime as _dt
+
+    cfg = config.ai_config(config.load())
+    if not cfg.enabled:
+        raise HTTPException(400, "Configura Claude o ChatGPT en Ajustes para usar el calendario")
+    pack = body.pack if body.pack in packs.PACKS else "general"
+    items = ai.content_calendar(cfg, pack, body.topic, body.key_dates, body.weeks, body.per_week,
+                                _dt.date.today().isoformat(), _voice_samples())
+    return {"items": items}
+
+
 @app.post("/api/comentario")
 def comment_to_reel(texto: str = Form(""), autor: str = Form(""), captura: UploadFile | None = File(None)):
     """Reel desde un comentario: respuesta para el seguidor y guion de un reel nuevo que le responde."""

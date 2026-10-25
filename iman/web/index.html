@@ -65,6 +65,40 @@
       </div>
       <div id="ideas" class="cards"></div>
 
+      <details class="from-comment" id="agency-box">
+        <summary>✈️ Modo agencia de viajes</summary>
+        <p class="hint">Dime el destino y las fechas y te preparo el reel entero: tres ganchos, el guion para grabar de una toma, qué planos pedir a los viajeros, la ruta para el mapa 3D y los textos para Instagram y WhatsApp.</p>
+        <form id="agency-form" class="stack">
+          <div class="row">
+            <label>Destino<input name="destination" required placeholder="Ej.: Japón en grupo"></label>
+            <label>Fechas<input name="dates" placeholder="Ej.: 18 al 29 de noviembre"></label>
+          </div>
+          <div class="row">
+            <label>Precio (opcional)<input name="price" placeholder="Ej.: 3.450 € con vuelos"></label>
+            <label>Plazas (opcional)<input name="seats" placeholder="Ej.: 30"></label>
+          </div>
+          <label>Qué incluye (opcional)<input name="includes" placeholder="Ej.: vuelos, hoteles 4*, ryokan en Gero, guía en español"></label>
+          <label>Para quién (opcional)<input name="audience" placeholder="Ej.: parejas y amigos de 35 a 60 que no quieren organizar nada"></label>
+          <button class="primary" type="submit">Prepárame el reel</button>
+        </form>
+        <div id="agency-out"></div>
+      </details>
+
+      <details class="from-comment" id="calendar-box">
+        <summary>🗓️ Calendario de contenido</summary>
+        <p class="hint">Qué reel grabar cada día en las próximas semanas, según tu sector y tus fechas clave (una salida, Black Friday, Navidad). Lo puedes descargar para tu calendario.</p>
+        <form id="calendar-form" class="stack">
+          <label>De qué va tu negocio o tu cuenta<input name="topic" placeholder="Ej.: agencia de viajes en grupo y a medida"></label>
+          <label>Fechas clave (una por línea)<textarea name="key_dates" rows="3" placeholder="Ej.: 18 al 29 de noviembre: salida a Japón en grupo&#10;28 de noviembre: Black Friday"></textarea></label>
+          <div class="row">
+            <label>Semanas<select name="weeks"><option>2</option><option>3</option><option>4</option></select></label>
+            <label>Reels por semana<select name="per_week"><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+          </div>
+          <button class="primary" type="submit">Hazme el calendario</button>
+        </form>
+        <div id="calendar-out"></div>
+      </details>
+
       <details class="from-comment" id="from-comment">
         <summary>💬 Reel desde un comentario</summary>
         <p class="hint">Pega lo que te ha escrito un seguidor (o sube la captura). Te doy la respuesta para el comentario y el guion de un reel nuevo que le responde, con su comentario en pantalla al principio.</p>
@@ -294,6 +328,7 @@
           <div id="stats" class="stats"></div>
           <div id="hook-box"></div>
           <div id="fixes-box" hidden></div>
+          <div id="viral-box" class="card viral" hidden></div>
           <div id="check-box" class="card" hidden><h4>Revisión antes de publicar</h4><ul id="check-list" class="checks"></ul></div>
           <h3>Publicar y vender</h3>
           <div class="publish">

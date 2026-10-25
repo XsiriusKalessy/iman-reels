@@ -587,3 +587,19 @@ button.big { font-size: 18px; padding: 16px 28px; }
 .gancho-lib summary { cursor: pointer; font-weight: 600; }
 .gancho-card { cursor: pointer; }
 .gancho-card:hover { outline: 2px solid var(--accent, #F2C46D); }
+
+/* Nota de viralidad */
+.viral-head { display: flex; gap: 16px; align-items: center; }
+.viral-score { display: flex; align-items: baseline; gap: 2px; min-width: 96px; padding: 10px 14px; border-radius: 14px; background: rgba(255,255,255,.06); }
+.viral-score b { font-size: 36px; line-height: 1; }
+.viral-score span { font-size: 13px; opacity: .7; }
+.viral-score.good b { color: #3DD68C; } .viral-score.mid b { color: #F2C46D; } .viral-score.low b { color: #FF5547; }
+.viral-bars { display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; margin-top: 10px; }
+.viral-bars div { height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
+.viral-bars span { display: block; height: 100%; background: var(--accent, #FF5547); border-radius: 3px; }
+/* Calendario de contenido */
+table.calendar { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 14px; }
+table.calendar th, table.calendar td { text-align: left; padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,.08); vertical-align: top; }
+.kind { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: rgba(255,255,255,.08); white-space: nowrap; }
+.kind-venta { background: rgba(255,85,71,.25); } .kind-fecha { background: rgba(242,196,109,.25); }
+.hook-line { margin: 4px 0; }

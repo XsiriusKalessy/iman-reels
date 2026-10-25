@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable
 
-from . import ai, brand, captions, copystyle, effects, fondos, ganchos, gestos, hands, jsonfile, limpiar, media, musica, packfx, packs, pexels, redes, segment, seguir, sfx
+from . import ai, brand, captions, copystyle, effects, fondos, ganchos, gestos, hands, jsonfile, limpiar, media, musica, packfx, packs, pexels, redes, segment, seguir, sfx, viral
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Span, Word
@@ -79,6 +79,7 @@ class EditResult:
     notices: list[str] = field(default_factory=list)  # avisos: algo se ha quitado para que el reel salga
     checks: list[dict] = field(default_factory=list)
     fixes: list[str] = field(default_factory=list)  # «Revisado y arreglado solo»: lo que Imán ha decidido por ti
+    viral: dict = field(default_factory=dict)  # nota de viralidad (iman/viral.py)
 
     def summary(self) -> dict:
         return {
@@ -92,6 +93,7 @@ class EditResult:
             "notices": self.notices,
             "checks": self.checks,
             "fixes": self.fixes,
+            "viral": self.viral,
         }
 
 
@@ -720,4 +722,6 @@ def run(
         notices=warnings,
         checks=pre_publish(opts, plan, kept, total, active, kit, music is not None),
         fixes=_fixes(info.duration, out_duration, drops, beats, active, clock),
+        viral=viral.score(plan, kept, total, active, captions=opts.captions, music=music is not None, hook=opts.hook,
+                          cta=any(fx.get("type") == "cta" for fx in active) or bool(kit and kit.active and kit.end_card)),
     )
