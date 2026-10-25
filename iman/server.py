@@ -9,7 +9,7 @@ import shutil
 import threading
 import time
 import uuid
-from dataclasses import asdict, replace
+from dataclasses import asdict, fields, replace
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -543,6 +543,7 @@ async def create_job(
     hook_template: str = Form(""),
     instructions: str = Form(""),
     voice: bool = Form(True),
+    ruido: bool = Form(False),
     use_brand: bool = Form(True),
     pack: str = Form(""),
     remember: bool = Form(False),
@@ -593,7 +594,7 @@ async def create_job(
     if names and mode == "camara":  # en "solo voz" los vídeos ya son la imagen de todo el reel
         instructions = f"{instructions}\n\n{pipeline.broll_prompt(names)}".strip()
     opts = pipeline.EditOptions(rhythm, style, size, fit, hook, hook_title, hook_template, instructions,
-                                voice=voice, watermark=watermark, brand=use_brand, pack=pack,
+                                voice=voice, ruido=ruido, watermark=watermark, brand=use_brand, pack=pack,
                                 mode="voz" if mode == "voz" else "camara", background=background,
                                 sfx=sfx, music=music, punch=punch, barra=barra, transiciones=transiciones,
                                 look=look if look in media.LOOKS or look == "auto" else "")
@@ -704,7 +705,8 @@ def reedit(job_id: str, body: dict):
         raise HTTPException(404, "No encuentro ese reel o aún se está editando")
     workdir = JOBS_DIR / job_id
     src = next(workdir.glob("original.*"))
-    merged = {**job["options"], **{k: v for k, v in body.items() if k in job["options"]}}
+    known = {f.name for f in fields(pipeline.EditOptions)}
+    merged = {**job["options"], **{k: v for k, v in body.items() if k in known}}
     opts = pipeline.EditOptions(**merged)
     _claim(job_id, step="Aplicando cambios", progress=0.0, options=asdict(opts), error=None)
     plan_file = workdir / "plan.json"

@@ -409,6 +409,7 @@ $("#go").onclick = async () => {
   fd.append("size", $("input[name=size]:checked").value);
   fd.append("hook", $("#hook").checked);
   fd.append("voice", $("#voice").checked);
+  fd.append("ruido", $("#ruido").checked);
   fd.append("pack", $("input[name=pack]:checked")?.value === "general" ? "" : $("input[name=pack]:checked")?.value || "");
   fd.append("use_brand", $("#use-brand").checked && !$("#use-brand-row").hidden);
   fd.append("hook_title", $("#hook-title").value);
@@ -771,7 +772,8 @@ async function reedit(changes) {
 }
 $$(".quick:not(.ideas) button").forEach(b => b.onclick = () => reedit(
   b.dataset.rhythm ? { rhythm: b.dataset.rhythm } : b.dataset.background !== undefined ? { background: b.dataset.background }
-    : b.dataset.voice ? { voice: b.dataset.voice === "true" } : { style: b.dataset.style }));
+    : b.dataset.voice ? { voice: b.dataset.voice === "true" }
+    : b.dataset.ruido ? { ruido: b.dataset.ruido === "true" } : { style: b.dataset.style }));
 // Fondo: «Mi foto» pide elegir la imagen; solo tiene sentido cuando hablas a cámara.
 $("#bg-choices").onchange = () => {
   const foto = $("input[name=background]:checked").value === "foto";

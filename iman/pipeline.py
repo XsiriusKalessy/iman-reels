@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import ai, brand, copystyle, effects, fondos, gestos, hands, jsonfile, media, musica, packfx, packs, segment, sfx
+from . import ai, brand, copystyle, effects, fondos, gestos, hands, jsonfile, limpiar, media, musica, packfx, packs, segment, sfx
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Word
@@ -39,6 +39,7 @@ class EditOptions:
     instructions: str = ""
     captions: bool = True
     voice: bool = True  # limpiar y nivelar la voz
+    ruido: bool = False  # quitar ruido fuerte de fondo (calle, tráfico, viento): iman/limpiar.py
     auto_zoom: bool = True  # alternar plano normal y cerrado en cada corte
     effects: bool = True  # lista animada, palabra gigante y zoom de énfasis
     watermark: bool = False  # reels de prueba sin licencia
@@ -335,6 +336,14 @@ def run(
         opts.style = "auto"
     progress("Preparando tu vídeo", 0.03)
     voice_only = opts.mode == "voz"
+    notices = []
+    if opts.ruido:
+        progress("Quitando el ruido de fondo de tu voz", 0.04)
+        try:
+            src = limpiar.clean_source(src, workdir)
+        except Exception:  # noqa: BLE001 - sin limpieza el reel sale igual, con la voz original
+            log.exception("No se pudo quitar el ruido")
+            notices.append("No he podido quitar el ruido de fondo de este vídeo; tu voz va como estaba.")
     clips = broll_files(workdir)
     if voice_only:
         # Sin cámara: primero te escucho y luego monto tu voz sobre tus vídeos (o un fondo) cambiando de plano.
@@ -469,7 +478,7 @@ def run(
         look = plan.color if plan.color in media.LOOKS else AUTO_LOOK.get(opts.pack, "natural")
         plan.color = look
     av = dict(sfx_bed=sound, music=music, punch=punch, hush=hush, look=look, transitions=trans)
-    warnings = []
+    warnings = notices
     done = False
     if segs and segment.available():
         # Dos pasadas: primero el reel limpio, luego la persona recortada encima de lo que va detrás.

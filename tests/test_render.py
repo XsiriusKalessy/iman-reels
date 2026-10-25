@@ -645,3 +645,29 @@ def test_api_accepts_several_takes(sample, tmp_path, monkeypatch):
     assert [p.name for p in work.glob("original.*")] == ["original.mp4"]
     assert abs(media.probe(work / "original.mp4").duration - 24) < 0.5
     assert not list(work.glob("toma-*"))
+
+
+def test_strong_noise_removal(tmp_path):
+    import numpy as np
+
+    from iman import limpiar
+
+    sr = limpiar.SR
+    t = np.arange(sr * 8) / sr
+    voice = np.where((t % 2) < 1.2, 0.3 * np.sin(2 * np.pi * 180 * t) * (1 + 0.5 * np.sin(2 * np.pi * 4 * t)), 0)
+    noisy = (voice + 0.05 * np.random.default_rng(1).standard_normal(len(t))).astype(np.float32)
+    clean = limpiar.denoise(noisy)
+    quiet = (t % 2) > 1.4
+    db = lambda a: 20 * np.log10(np.sqrt(np.mean(a ** 2)))  # noqa: E731
+    assert db(clean[quiet]) < db(noisy[quiet]) - 6
+    talk = ((t % 2) > 0.2) & ((t % 2) < 1.0)
+    assert db(clean[talk] - voice[talk]) < db(noisy[talk] - voice[talk])
+
+    src = tmp_path / "toma.mp4"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=320x568:rate=30:duration=3",
+                    "-f", "lavfi", "-i", "anoisesrc=d=3:a=0.1", "-pix_fmt", "yuv420p", "-shortest", str(src)],
+                   check=True)
+    out = limpiar.clean_source(src, tmp_path)
+    info = media.probe(out)
+    assert info.has_audio and abs(info.duration - 3) < 0.2
+    assert limpiar.clean_source(src, tmp_path) == out  # la segunda vez no se repite

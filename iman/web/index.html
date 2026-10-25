@@ -172,6 +172,7 @@
           </div>
           <h3>Sonido</h3>
           <label class="check"><input type="checkbox" id="voice" checked> Mejorar la voz (menos ruido, volumen estable)</label>
+          <label class="check"><input type="checkbox" id="ruido"> Quitar ruido fuerte de fondo (calle, tráfico, viento) <small>solo si se oye mucho: suaviza un poco la voz</small></label>
           <label class="check"><input type="checkbox" id="sfx" checked> Efectos de sonido (golpe al empezar, whoosh y pops en cada efecto)</label>
           <label class="check"><input type="checkbox" id="punch" checked> Zoom de entrada en el primer medio segundo</label>
           <label class="check"><input type="checkbox" id="transiciones" checked> Transiciones en los cortes (barrido y glitch)</label>
@@ -280,6 +281,8 @@
             <button data-background="">Fondo original</button>
             <button data-voice="false">Voz tal cual (sin limpiar)</button>
             <button data-voice="true">Voz limpia</button>
+            <button data-ruido="true">Quitar ruido de calle</button>
+            <button data-ruido="false">Dejar el ruido de fondo</button>
           </div>
           <form id="reedit-form" class="chat-form">
             <input id="new-hook" placeholder="Cambiar el gancho por…">
