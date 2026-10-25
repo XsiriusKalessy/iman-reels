@@ -16,6 +16,7 @@ DEFAULTS = {
     "provider": "iman",
     "anthropic_key": "",
     "openai_key": "",
+    "pexels_key": "",  # gratis en pexels.com/api: planos de apoyo de 1-2 s
     "claude_model": "claude-opus-5-5",
     "openai_model": "gpt-4o",
     "transcriber": "local",
@@ -81,6 +82,7 @@ def public(cfg: dict) -> dict:
     out = {k: v for k, v in cfg.items() if not k.endswith("_key") and not k.startswith("license_")}
     out["has_anthropic_key"] = bool(cfg["anthropic_key"])
     out["has_openai_key"] = bool(cfg["openai_key"])
+    out["has_pexels_key"] = bool(cfg.get("pexels_key"))
     from .license import status
 
     out["license"] = status(cfg)

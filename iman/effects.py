@@ -710,7 +710,7 @@ def behind_events(effects: list[dict], clock: WordClock, style: Style, duration:
 
 VIDEO_KINDS = {"viaje": (5.0, 3.0), "bruto": (3.0, 2.0), "fantasma": (1.6, 0.8), "pagina": (2.6, 1.6), "apoyo": (3.0, 1.5),
                "objeto": (2.2, 1.0), "captura": (2.6, 1.4), "collage": (2.8, 1.6),
-               "tarjetas": (4.5, 2.5)}
+               "tarjetas": (4.5, 2.5), "pexels": (1.8, 1.0)}
 PERSON_TYPES = (*SEG_KINDS, "apoyo")  # necesitan a alguien delante de la cámara
 MEDIA_EXT = (".mp4", ".mov", ".m4v", ".webm", ".jpg", ".jpeg", ".png", ".webp")
 
@@ -790,10 +790,12 @@ def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=Non
         # La tarjeta "bruto" enseña la toma sin cortar desde el principio de lo que se dice ahí.
         src = src_of(span[0]) if (src_of and kind == "bruto") else 0.0
         path = ""
-        if kind == "apoyo":
-            path = (assets or {}).get(str(fx.get("text", "")).strip(), "")
+        if kind in ("apoyo", "pexels"):
+            path = (assets or {}).get(str(fx.get("_file" if kind == "pexels" else "text", "")).strip(), "")
             if not path:
                 continue
+            if kind == "pexels":  # inserto corto: complementa, no tapa
+                span = (span[0], min(span[1], span[0] + 2.0))
         if kind == "viaje":
             # Mapa 3D a pantalla completa (como un plano de apoyo); si no se encuentran las paradas, va el dibujado.
             from . import mapa
@@ -841,7 +843,7 @@ def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=Non
             if not png:
                 continue
             path = str(png)
-        ops.append(VideoOp(kind, span[0], span[1], max(0.0, src - 0.5), path=path))
+        ops.append(VideoOp("apoyo" if kind == "pexels" else kind, span[0], span[1], max(0.0, src - 0.5), path=path))
     return ops
 
 

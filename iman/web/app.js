@@ -157,6 +157,7 @@ async function loadSettings() {
   f.provider.value = s.provider; f.transcriber.value = s.transcriber; f.language.value = s.language;
   f.anthropic_key.placeholder = s.has_anthropic_key ? "Guardada ✓ (escribe para cambiarla)" : "sk-ant-…";
   f.openai_key.placeholder = s.has_openai_key ? "Guardada ✓ (escribe para cambiarla)" : "sk-…";
+  f.pexels_key.placeholder = s.has_pexels_key ? "Guardada ✓ (escribe para cambiarla)" : "Tu clave de Pexels";
   $("#own-keys").open = s.provider === "claude" || s.provider === "openai";
   const ok = s.provider === "iman" || (s.provider === "claude" && s.has_anthropic_key) || (s.provider === "openai" && s.has_openai_key);
   $("#ai-hint").innerHTML = ok
@@ -223,7 +224,7 @@ $("#save-settings").onclick = async e => {
   const body = Object.fromEntries(new FormData(f));
   delete body.license_input;
   await api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  f.anthropic_key.value = ""; f.openai_key.value = "";
+  f.anthropic_key.value = ""; f.openai_key.value = ""; f.pexels_key.value = "";
   await loadSettings();
   $("#settings").close();
 };
@@ -635,7 +636,7 @@ $("#chat-ideas").onclick = e => {
   const input = $("#chat-input");
   input.value = b.dataset.idea; input.focus(); input.setSelectionRange(input.value.length, input.value.length);
 };
-const FX_NAMES = { lista: "Lista", grafico: "Gráfico de barras", texto3d: "Texto 3D", etiqueta: "Etiqueta que te sigue", tarjetas: "Tarjetas con iconos", particulas: "Título con partículas", bloques: "Bloques que se resaltan", palabra: "Palabra gigante", titular: "Titular", cifra: "Cifra", frase: "Frase", tecleo: "Texto que se escribe",
+const FX_NAMES = { lista: "Lista", grafico: "Gráfico de barras", texto3d: "Texto 3D", etiqueta: "Etiqueta que te sigue", tarjetas: "Tarjetas con iconos", particulas: "Título con partículas", bloques: "Bloques que se resaltan", pexels: "Plano de Pexels", palabra: "Palabra gigante", titular: "Titular", cifra: "Cifra", frase: "Frase", tecleo: "Texto que se escribe",
   color: "Golpe de color", comentario: "Comentario", contador: "Contador", portada: "Portada de revista", cta: "Llamada a la acción",
   dato: "Dato", bruto: "Toma en bruto", fantasma: "Eco", pagina: "Página de revista", detras: "Texto detrás de ti",
   fondo: "Fondo de color", desenfoque: "Fondo desenfocado", ubicacion: "Ubicación", objeto: "Objeto", viaje: "Itinerario del viaje", oferta: "Oferta", ruta: "Ruta",

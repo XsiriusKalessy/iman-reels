@@ -14,7 +14,7 @@ from . import brand, config, license
 
 # Lo que siempre viaja. Las claves y la licencia, solo si se pide.
 PREFS = ("provider", "claude_model", "openai_model", "transcriber", "whisper_model", "language", "memory")
-SECRETS = ("anthropic_key", "openai_key")
+SECRETS = ("anthropic_key", "openai_key", "pexels_key")
 BRAND_FILES = ("brand.json", "logo.png")
 MAX_SIZE = 20 * 1024 * 1024
 

@@ -240,6 +240,7 @@ class SettingsIn(BaseModel):
     provider: str | None = None
     anthropic_key: str | None = None
     openai_key: str | None = None
+    pexels_key: str | None = None
     transcriber: str | None = None
     whisper_model: str | None = None
     language: str | None = None

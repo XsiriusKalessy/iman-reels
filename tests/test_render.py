@@ -873,3 +873,36 @@ def test_youtube_style_covers(sample, tmp_path, monkeypatch):
     ImageDraw.Draw(mask).rectangle((180, 520, 540, 1280), fill=255)
     out = miniaturas.render(frame, "Japón en grupo", "brillo", "vertical", "#F5D90A", "", "Anton", mask)
     assert out.size == (1080, 1920)
+
+
+def test_pexels_inserts(tmp_path, monkeypatch):
+    import json as _json
+
+    from iman import config, effects, pexels
+    from iman.effects import WordClock
+    from iman.models import Word
+
+    monkeypatch.setattr(config, "HOME", tmp_path)
+    video = {"duration": 8, "video_files": [
+        {"file_type": "video/mp4", "link": "https://x/h.mp4", "width": 1920, "height": 1080},
+        {"file_type": "video/mp4", "link": "https://x/v.mp4", "width": 1080, "height": 1920},
+        {"file_type": "video/mp4", "link": "https://x/s.mp4", "width": 360, "height": 640}]}
+    assert pexels.best_file(video)["link"] == "https://x/v.mp4"
+    calls = []
+
+    def fake_get(url, key, timeout=15):
+        calls.append(url)
+        if "api.pexels.com" in url:
+            assert key == "k" and "query=kyoto+temple" in url
+            return _json.dumps({"videos": [{"duration": 1, "video_files": []}, video]}).encode()
+        return b"mp4-bytes"
+
+    monkeypatch.setattr(pexels, "_get", fake_get)
+    p = pexels.clip("Kyoto temple", "k")
+    assert p and p.read_bytes() == b"mp4-bytes"
+    assert pexels.clip("kyoto  temple", "k") == p and len(calls) == 2  # en caché
+    words = [Word(f"w{i}", i * 0.4, i * 0.4 + 0.3) for i in range(30)]
+    fx = [{"type": "pexels", "word": 4, "until_word": 25, "text": "kyoto temple", "_file": "pexels0"}]
+    ops = effects.video_ops(fx, WordClock(words, list(range(30))), 12.0, assets={"pexels0": str(p)})
+    assert len(ops) == 1 and ops[0].kind == "apoyo" and ops[0].end - ops[0].start <= 2.0
+    assert effects.video_ops([{**fx[0], "_file": ""}], WordClock(words, list(range(30))), 12.0, assets={}) == []

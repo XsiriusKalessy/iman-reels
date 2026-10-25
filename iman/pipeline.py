@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import ai, brand, copystyle, effects, fondos, gestos, hands, jsonfile, limpiar, media, musica, packfx, packs, segment, seguir, sfx
+from . import ai, brand, copystyle, effects, fondos, gestos, hands, jsonfile, limpiar, media, musica, packfx, packs, pexels, segment, seguir, sfx
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Word
@@ -285,6 +285,27 @@ def _follow_head(active: list[dict], src: Path, info, spans, zoom, fit: str, clo
             log.exception("No se pudo seguir la cabeza")
 
 
+PEXELS_NOTE = ("HAY PEXELS: puedes añadir 1 o 2 efectos \"pexels\" (planos de apoyo de 1-2 s de Pexels que "
+               "ilustran lo que dice; text: la búsqueda EN INGLÉS, 2 a 4 palabras concretas, p. ej. "
+               "\"kyoto temple autumn\", \"airplane window clouds\"). Solo para complementar, nunca en el gancho.")
+
+
+def _pexels(active: list[dict], assets: dict[str, str], key: str, progress: Progress) -> None:
+    """Baja los planos de Pexels que pide el plan y los deja como vídeos de apoyo (`_file`)."""
+    for k, fx in enumerate(active):
+        if fx.get("type") != "pexels" or fx.get("off"):
+            continue
+        progress("Buscando planos de apoyo en Pexels", 0.64)
+        try:
+            p = pexels.clip(str(fx.get("text", "")), key)
+        except Exception:  # noqa: BLE001 - sin internet o sin resultados, el reel sale sin ese plano
+            log.exception("Pexels no ha respondido")
+            p = None
+        if p:
+            assets[f"pexels{k}"] = str(p)
+            fx["_file"] = f"pexels{k}"
+
+
 def _music_grid(choice, workdir: Path, duration: float, drop_at: float | None) -> list[float]:
     """Golpes de la música elegida en segundos del reel (vacío sin música o si tu canción no tiene pulso claro)."""
     if choice in musica.STYLES:
@@ -403,7 +424,10 @@ def run(
     elif aicfg.enabled and words:
         plan = EditPlan()
         try:
-            plan = ai.plan_edit(aicfg, words, opts.instructions, opts.hook_template, opts.pack)
+            wants = opts.instructions
+            if cfg.get("pexels_key") and not voice_only:
+                wants = f"{wants}\n\n{PEXELS_NOTE}".strip()
+            plan = ai.plan_edit(aicfg, words, wants, opts.hook_template, opts.pack)
         except Exception as e:  # la IA es un extra: si falla, seguimos y lo avisamos
             ai_warning = ai.error_message(e)
     else:
@@ -498,9 +522,11 @@ def run(
     out = workdir / f"reel-{run_id}.tmp.mp4"
     overlays = []
     if opts.effects:
+        assets = {str(i + 1): str(p) for i, p in enumerate(clips)}
+        if cfg.get("pexels_key") and not voice_only:
+            _pexels(active, assets, cfg["pexels_key"], progress)
         overlays = effects.video_ops(active, effects.WordClock(kept, kept_idx), out_duration,
-                                     lambda t: _source_time(spans, t),
-                                     {str(i + 1): str(p) for i, p in enumerate(clips)}, style.accent)
+                                     lambda t: _source_time(spans, t), assets, style.accent)
     overlays += effects.brand_ops(kit, total)
     clock = effects.WordClock(kept, kept_idx)
     segs = effects.seg_ops(active, clock, out_duration) if opts.effects else []
