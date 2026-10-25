@@ -17,11 +17,11 @@ OPENAI_MODEL = "gpt-4o"
 EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "color", "comentario",
                 "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                 "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque", "aparece",
-                "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas", "particulas", "bloques", "pexels"]
+                "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas", "particulas", "bloques", "pexels", "lluvia"]
 FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
                    "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                    "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque",
-                   "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas", "particulas", "bloques", "pexels")
+                   "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas", "particulas", "bloques", "pexels", "lluvia")
 LISTA_LOOKS = ("checklist", "capitulos", "itinerario")
 TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
@@ -232,6 +232,9 @@ Tu trabajo:
    - "bloques": de 2 a 4 bloques de texto apilados que se resaltan uno a uno mientras los dice, como un carrusel
      de ideas (text: los bloques separados por "|", cada uno de hasta 8 palabras, con sus palabras;
      title: opcional, 2 a 4 palabras). Mejor que "lista" cuando son ideas o frases, no pasos cortos.
+   - "lluvia": lluvia de cosas que caen delante y detrás del creador para celebrar (text: "confeti", "billetes",
+     "corazones" o "estrellas"): un logro, una venta, una oferta, "¡lo conseguimos!", hablar de dinero o de amor.
+     Como mucho una vez por reel.
    - "pexels": SOLO si te dicen «HAY PEXELS». Plano de apoyo de 1-2 s de Pexels (text: la búsqueda en inglés).
    - "objeto": pegatina con el dibujo de una cosa concreta que el creador nombra (text: UN emoji que la dibuje,
      p. ej. 🔌 adaptador, 🧦 calcetines, 💊 medicinas, 📱 móvil, 💶 dinero, ✈️ vuelo, 🍣 comida, 🏨 hotel;

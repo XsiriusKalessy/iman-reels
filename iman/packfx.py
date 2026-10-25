@@ -815,7 +815,82 @@ def bloques_events(effect: dict, clock: WordClock, style: Style, duration: float
     return lines, Window(start, end)
 
 
+LLUVIAS = ("confeti", "billetes", "corazones", "estrellas")
+_HEART = "m 30 54 b 6 36 0 24 0 15 b 0 6 7 0 15 0 b 22 0 27 4 30 10 b 33 4 38 0 45 0 b 53 0 60 6 60 15 b 60 24 54 36 30 54"
+
+
+def _lluvia_kind(text: str) -> str:
+    t = text.lower()
+    for k, words in (("billetes", ("billete", "dinero", "euro", "€", "$", "pasta", "money")),
+                     ("corazones", ("coraz", "amor", "love", "♥")), ("estrellas", ("estrell", "star", "★"))):
+        if any(w in t for w in words):
+            return k
+    return "confeti"
+
+
+def lluvia_events(effect: dict, clock: WordClock, style: Style, duration: float,
+                  part: str = "") -> tuple[list[str], Window | None]:
+    """Lluvia de confeti, billetes, corazones o estrellas que cae delante y detrás de ti.
+
+    Cada pieza va a una de dos capas: con el recorte de persona (`_behind`), las de detrás se pintan en la
+    capa de detrás de ti (behind_events) y tu cuerpo las tapa; sin recorte, todas caen delante."""
+    behind = bool(effect.get("_behind"))
+    if not part:
+        part = "front" if behind else "all"
+    span = _span(effect, clock, duration, 2.6, 1.6)
+    if not span:
+        return [], None
+    start, end = span
+    kind = _lluvia_kind(str(effect.get("text", "")))
+    acc = _accent(style)
+    palette = {"confeti": [acc, rgb("#F5D90A"), rgb("#FF4F7B"), rgb("#2B59E6"), rgb("#1F9E6E"), CREAM],
+               "billetes": [rgb("#7FC79A"), rgb("#9AD4A9"), rgb("#6BB585")],
+               "corazones": [rgb("#FF3B5C"), rgb("#FF6F91"), acc],
+               "estrellas": [rgb("#F5D90A"), rgb("#FFE45C"), CREAM]}[kind]
+    count = {"confeti": 90, "billetes": 34, "corazones": 46, "estrellas": 50}[kind]
+    rng = random.Random(zlib.crc32(f"{kind}{start:.2f}".encode()))  # las mismas piezas en cada render
+    span_ms = (end - start) * 1000
+    lines = []
+    for _ in range(count):
+        back = rng.random() < 0.5
+        x = rng.uniform(-40, W + 40)
+        delay = rng.uniform(0, max(200.0, span_ms - 1400))
+        fall = rng.uniform(1500, 2600) * (1.25 if back else 1.0)  # las de detrás, más lejos: caen más despacio
+        drift = rng.uniform(-160, 160)
+        spin = rng.choice((-1, 1)) * rng.randint(180, 720)
+        flip = rng.randint(360, 1080)
+        color = rng.choice(palette)
+        sc = rng.randint(70, 115) * (0.72 if back else 1.0)
+        a = start + delay / 1000
+        b = min(end + 0.6, a + fall / 1000)
+        ms = int((b - a) * 1000)
+        if kind == "confeti":
+            w, h = rng.randint(16, 26), rng.randint(9, 14)
+            shape = _rect(0, 0, w, h, 2)
+        elif kind == "billetes":
+            shape = _rect(0, 0, 150, 70, 6)
+        elif kind == "corazones":
+            shape = _HEART
+        else:
+            shape = _star(30, 30, 30)
+        bill = "\\3c&H2E6B45&\\bord2" if kind == "billetes" else "\\bord0"
+        blur = "\\blur2" if back else "\\blur0.6"
+        layer = 2 if back else 8
+        tilt = f"\\frx{rng.randint(0, 60)}\\t(0,{ms},\\frz{spin}\\frx{flip})" if kind != "corazones" else \
+            f"\\frz{rng.randint(-25, 25)}\\t(0,{ms},\\frz{rng.randint(-25, 25)})"
+        if b - a < 0.4 or (part == "front" and back) or (part == "back" and not back):
+            continue  # se sortea igual en todas las capas: delante + detrás = la lluvia entera
+        lines.append(f"Dialogue: {layer},{_ts(a)},{_ts(b)},Sub,,0,0,0,,{{\\an5\\move({x:.0f},-80,{x + drift:.0f},2000)"
+                     f"\\fscx{sc:.0f}\\fscy{sc:.0f}{bill}\\shad0{blur}\\1c{color}&{tilt}\\fad(0,200)\\p1}}{shape}")
+        if kind == "billetes":  # el óvalo del centro del billete, encima y con el mismo giro
+            lines.append(f"Dialogue: {layer + 1},{_ts(a)},{_ts(b)},Sub,,0,0,0,,{{\\an5\\move({x:.0f},-80,{x + drift:.0f},2000)"
+                         f"\\fscx{sc:.0f}\\fscy{sc:.0f}\\bord0\\shad0{blur}\\1c&H5A9E70&{tilt}\\fad(0,200)\\p1}}"
+                         f"{_circle(40)}")
+    return lines, Window(start, end)
+
+
 PACK_BUILDERS = {
+    "lluvia": lluvia_events,
     "particulas": particulas_events,
     "bloques": bloques_events,
     "etiqueta": etiqueta_events,

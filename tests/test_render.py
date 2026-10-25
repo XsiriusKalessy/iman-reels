@@ -906,3 +906,23 @@ def test_pexels_inserts(tmp_path, monkeypatch):
     ops = effects.video_ops(fx, WordClock(words, list(range(30))), 12.0, assets={"pexels0": str(p)})
     assert len(ops) == 1 and ops[0].kind == "apoyo" and ops[0].end - ops[0].start <= 2.0
     assert effects.video_ops([{**fx[0], "_file": ""}], WordClock(words, list(range(30))), 12.0, assets={}) == []
+
+
+def test_rain_falls_in_front_and_behind_the_person():
+    from iman import effects, packfx
+    from iman.captions import STYLES
+    from iman.effects import WordClock
+    from iman.models import Word
+
+    words = [Word(f"w{i}", i * 0.4, i * 0.4 + 0.3) for i in range(20)]
+    clock = WordClock(words, list(range(20)))
+    for text, n in (("confeti", 60), ("billetes", 20), ("corazones", 25), ("estrellas", 25)):
+        fx = {"type": "lluvia", "word": 2, "until_word": 12, "text": text}
+        whole, win = packfx.lluvia_events(fx, clock, STYLES["impacto"], 10.0)
+        front, _ = packfx.lluvia_events({**fx, "_behind": True}, clock, STYLES["impacto"], 10.0)
+        back = effects.behind_events([{**fx, "_behind": True}], clock, STYLES["impacto"], 10.0)
+        assert len(whole) >= n and win and sorted(front + back) == sorted(whole) and front and back
+        assert all(l[10] in "23" for l in back) and all(l[10] in "89" for l in front)
+        assert effects.behind_events([fx], clock, STYLES["impacto"], 10.0) == []
+    assert packfx._lluvia_kind("lluvia de dinero") == "billetes" and packfx._lluvia_kind("") == "confeti"
+    assert "lluvia" in effects.SEG_KINDS

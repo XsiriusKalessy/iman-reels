@@ -487,7 +487,7 @@ def run(
         _follow_head(active, src, info, spans, zoom, opts.fit, effects.WordClock(kept, kept_idx), out_duration,
                      progress, frames)
         for fx in active:  # con el recorte de persona, la mitad de atrás del anillo pasa por detrás de ti
-            if fx.get("type") == "anillo" and segment.available():
+            if fx.get("type") in ("anillo", "lluvia") and segment.available():
                 fx["_behind"] = True
     kit = brand.load() if opts.brand else None
     style_key = opts.style if opts.style in STYLES else plan.caption_style
