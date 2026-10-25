@@ -406,8 +406,28 @@ def foco_events(effect: dict, clock: WordClock, style: Style, duration: float) -
     return lines, None
 
 
-def anillo_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
-    """Anillo de texto que gira alrededor de tu cabeza: las letras de detrás se ven más pequeñas y apagadas."""
+def _at(track: list, t: float) -> tuple[float, float] | None:
+    """Posición interpolada de la cabeza en el segundo `t` (track de iman/seguir.py)."""
+    if not track:
+        return None
+    if t <= track[0][0]:
+        return track[0][1], track[0][2]
+    for (t0, x0, y0), (t1, x1, y1) in zip(track, track[1:]):
+        if t <= t1:
+            k = (t - t0) / max(t1 - t0, 1e-6)
+            return x0 + (x1 - x0) * k, y0 + (y1 - y0) * k
+    return track[-1][1], track[-1][2]
+
+
+def anillo_events(effect: dict, clock: WordClock, style: Style, duration: float,
+                  part: str = "") -> tuple[list[str], Window | None]:
+    """Anillo de texto que gira alrededor de tu cabeza y te sigue si te mueves.
+
+    Con el recorte de persona (`_behind`), las letras de detrás van en la capa de detrás de ti (`part="back"`,
+    la pinta behind_events) y de verdad pasan por detrás; sin él, se ven más pequeñas y apagadas."""
+    behind = bool(effect.get("_behind"))
+    if not part:
+        part = "front" if behind else "all"
     span = _span(effect, clock, duration, 3.2, 1.8)
     if not span:
         return [], None
@@ -415,9 +435,10 @@ def anillo_events(effect: dict, clock: WordClock, style: Style, duration: float)
     text = effect["text"].strip().upper()[:26]
     if not text:
         return [], None
-    ring = f"{text} • " * (2 if len(text) < 13 else 1)
+    ring = f"{text} • " * max(1, round(30 / (len(text) + 3)))  # unas 30 letras: la vuelta queda llena
     n = len(ring)
     cx, cy, rx, ry = W / 2, 660, 420, 120  # elipse inclinada alrededor de la cabeza
+    track = effect.get("_track") or []
     acc = _accent(style)
     fps, speed = 15, 0.9  # cuadros por segundo del anillo, vueltas por… radianes por segundo
     lines = []
@@ -425,18 +446,23 @@ def anillo_events(effect: dict, clock: WordClock, style: Style, duration: float)
     for f in range(frames):
         t0, t1 = start + f / fps, min(end, start + (f + 1) / fps)
         ang0 = (t0 - start) * speed
+        head = _at(track, t0)
+        if head:  # a la altura de la boca y la barbilla: unos 470 px bajo la coronilla
+            cx, cy = min(max(head[0], 380), W - 380), min(max(head[1] + 470, 420), 1150)
         for k, ch in enumerate(ring):
             if ch == " ":
                 continue
             a = ang0 + 2 * math.pi * k / n
             depth = math.sin(a)  # >0 delante, <0 detrás
+            if (part == "front" and depth <= 0) or (part == "back" and depth > 0):
+                continue
             x, y = cx + rx * math.cos(a), cy + ry * depth
             sc = 100 + 18 * depth
-            alpha = "00" if depth > 0 else "A0"
+            alpha = "00" if depth > 0 or part == "back" else "A0"
             layer = 6 if depth > 0 else 2
             fade = "\\fad(250,0)" if f == 0 else ("\\fad(0,250)" if f == frames - 1 else "")
             lines.append(f"Dialogue: {layer},{_ts(t0)},{_ts(t1)},Sub,,0,0,0,,{{\\an5\\pos({x:.0f},{y:.0f})"
-                         f"\\fnAnton\\fs84\\fscx{sc:.0f}\\fscy{sc:.0f}\\frz{-12 * math.cos(a):.0f}\\bord3\\3c&H000000&"
+                         f"\\fnAnton\\fs104\\fscx{sc:.0f}\\fscy{sc:.0f}\\frz{-12 * math.cos(a):.0f}\\bord3\\3c&H000000&"
                          f"\\shad0\\1c{acc}&\\alpha&H{alpha}&{fade}}}{_esc(ch)}")
     return lines, None
 

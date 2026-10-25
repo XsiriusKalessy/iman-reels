@@ -721,3 +721,21 @@ def test_label_follows_the_track():
     assert "\\move(300,670,360,670" in lines[0]
     still, _ = packfx.etiqueta_events({**fx, "_track": []}, clock, STYLES["impacto"], 10.0)
     assert len(still) == 2 and "\\move(540,490,540,490" in still[0]
+
+
+def test_ring_back_half_goes_behind_the_person():
+    from iman import effects, packfx
+    from iman.captions import STYLES
+    from iman.effects import WordClock
+    from iman.models import Word
+
+    words = [Word(f"w{i}", i * 0.4, i * 0.4 + 0.3) for i in range(20)]
+    clock = WordClock(words, list(range(20)))
+    fx = {"type": "anillo", "word": 2, "until_word": 12, "text": "Sin editar"}
+    whole, _ = packfx.anillo_events(fx, clock, STYLES["impacto"], 10.0)
+    front, _ = packfx.anillo_events({**fx, "_behind": True}, clock, STYLES["impacto"], 10.0)
+    back = effects.behind_events([{**fx, "_behind": True}], clock, STYLES["impacto"], 10.0)
+    assert len(front) + len(back) == len(whole) and front and back
+    assert effects.behind_events([fx], clock, STYLES["impacto"], 10.0) == []  # sin recorte: todo delante
+    moved, _ = packfx.anillo_events({**fx, "_track": [(0.8, 300, 400), (4.8, 300, 400)]}, clock, STYLES["impacto"], 10.0)
+    assert moved != whole

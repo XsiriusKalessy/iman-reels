@@ -646,7 +646,7 @@ def frase_events(effect: dict, clock: WordClock, style: Style, duration: float) 
     return lines, Window(start, end)
 
 
-SEG_KINDS = {"detras": (2.2, 1.2), "fondo": (2.5, 1.2), "desenfoque": (2.5, 1.2)}
+SEG_KINDS = {"detras": (2.2, 1.2), "fondo": (2.5, 1.2), "desenfoque": (2.5, 1.2), "anillo": (3.2, 1.8)}
 # Colores de texto gigante detrás y de fondo liso.
 SEG_COLORS = {"rosa": "#FF4F7B", "amarillo": "#F5D90A", "negro": "#141518", "azul": "#2B59E6", "rojo": "#E63A2E",
               "verde": "#1F7A55"}
@@ -683,6 +683,12 @@ def behind_events(effects: list[dict], clock: WordClock, style: Style, duration:
     """Textos que van detrás de la persona: la palabra gigante de "detras" y el texto de "fondo"."""
     lines = []
     for fx, (start, end) in _seg_spans(effects, clock, duration):
+        if fx["type"] == "anillo":  # la mitad de atrás del anillo, que la persona tapa
+            if fx.get("_behind"):
+                from .packfx import anillo_events
+
+                lines += anillo_events(fx, clock, style, duration, part="back")[0]
+            continue
         text = str(fx.get("text", "")).strip()
         if fx["type"] == "desenfoque" or not text or text == "-":
             continue
