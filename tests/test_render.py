@@ -481,7 +481,8 @@ def test_everything_sound_and_new_effects_together(sample, tmp_path):
     cfg = {"provider": "none", "anthropic_key": "", "openai_key": "", "claude_model": "", "openai_model": ""}
     res = pipeline.run(sample, tmp_path / "w", pipeline.EditOptions(rhythm="sin_tocar"), cfg, words=TAKE,
                        plan=plan)
-    graph = (tmp_path / "w" / "reel.filters.txt").read_text(encoding="utf-8")
+    # El anillo pasa por detrás de la persona: va en dos pasadas y el grafo de audio está en la primera.
+    graph = "".join(p.read_text(encoding="utf-8") for p in (tmp_path / "w").glob("*.filters.txt"))
     assert "between(t," in graph and "sidechaincompress" in graph and "zoompan" in graph
     assert abs(media.probe(res.video).duration - res.duration_out) < 0.3
 
@@ -814,3 +815,24 @@ def test_icon_cards_video(tmp_path):
     out = tarjetas.render(got[:3], 1.5, tmp_path / "t.mp4", "Todo incluido", "#F5D90A")
     info = media.probe(out)
     assert (info.width, info.height) == (1080, 1920) and abs(info.duration - 1.5) < 0.1
+
+
+def test_particle_title_and_highlighted_blocks():
+    from iman import packfx
+    from iman.captions import STYLES
+    from iman.effects import WordClock
+    from iman.models import Word
+
+    words = [Word(f"w{i}", i * 0.4, i * 0.4 + 0.3) for i in range(30)]
+    clock = WordClock(words, list(range(30)))
+    lines, win = packfx.particulas_events({"type": "particulas", "word": 1, "text": "Tu primer viaje"}, clock,
+                                          STYLES["impacto"], 12.0)
+    assert win and sum("\\move(" in ln for ln in lines) == 280 and any("TU PRIMER VIAJE" in ln for ln in lines)
+    again, _ = packfx.particulas_events({"type": "particulas", "word": 1, "text": "Tu primer viaje"}, clock,
+                                        STYLES["impacto"], 12.0)
+    assert again == lines  # mismo render cada vez
+    fx = {"type": "bloques", "word": 2, "until_word": 20, "text": "Elige la fecha|Reserva con tiempo|Viaja en grupo"}
+    lines, win = packfx.bloques_events(fx, clock, STYLES["impacto"], 12.0)
+    texts = [ln for ln in lines if "Reserva con tiempo" in ln]
+    assert win and len(texts) == 3 and sum("\\alpha&H00&" in ln for ln in texts) == 1  # activo en un solo tramo
+    assert packfx.bloques_events({**fx, "text": "solo uno"}, clock, STYLES["impacto"], 12.0) == ([], None)

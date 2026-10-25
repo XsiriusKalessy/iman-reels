@@ -17,11 +17,11 @@ OPENAI_MODEL = "gpt-4o"
 EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "color", "comentario",
                 "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                 "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque", "aparece",
-                "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas"]
+                "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas", "particulas", "bloques"]
 FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
                    "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                    "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque",
-                   "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas")
+                   "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas", "particulas", "bloques")
 LISTA_LOOKS = ("checklist", "capitulos", "itinerario")
 TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
@@ -227,6 +227,11 @@ Tu trabajo:
      creador en un círculo, cuando explica varias categorías, servicios u opciones (text: de 2 a 6 elementos
      "emoji Nombre" separados por "|", p. ej. "✈️ Vuelos|🏨 Hoteles|🚄 Trenes|🎎 Guía"; nombres de 1 o 2
      palabras; title: de qué va en pocas palabras, la última palabra es la que destaca: "Todo incluido").
+   - "particulas": título cinético que se forma con una nube de partículas y al final se deshace (text: 1 a 4
+     palabras potentes, p. ej. "TU PRIMER VIAJE"). Para presentar el tema o un giro; como mucho una vez por reel.
+   - "bloques": de 2 a 4 bloques de texto apilados que se resaltan uno a uno mientras los dice, como un carrusel
+     de ideas (text: los bloques separados por "|", cada uno de hasta 8 palabras, con sus palabras;
+     title: opcional, 2 a 4 palabras). Mejor que "lista" cuando son ideas o frases, no pasos cortos.
    - "objeto": pegatina con el dibujo de una cosa concreta que el creador nombra (text: UN emoji que la dibuje,
      p. ej. 🔌 adaptador, 🧦 calcetines, 💊 medicinas, 📱 móvil, 💶 dinero, ✈️ vuelo, 🍣 comida, 🏨 hotel;
      subtitle: el nombre en 1 a 3 palabras). Dura unos 2 segundos. Úsalo cada vez que nombre objetos, sobre todo

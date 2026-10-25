@@ -8,6 +8,8 @@ en los 320 px de abajo ni pegado al borde derecho, donde van los botones.
 from __future__ import annotations
 
 import math
+import random
+import zlib
 
 from . import textfit
 from .captions import W, Style, _esc, _ts, rgb
@@ -724,7 +726,98 @@ def etiqueta_events(effect: dict, clock: WordClock, style: Style, duration: floa
     return lines, Window(start, end)
 
 
+def particulas_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Título cinético: una nube de partículas vuela desde los bordes, se junta en la forma de la frase y
+    se convierte en las letras; al salir, las letras se deshacen otra vez en partículas."""
+    text = " ".join(str(effect.get("text", "")).split()).upper()[:24]
+    if not text:
+        return [], None
+    span = _span(effect, clock, duration, 2.4, 1.4)
+    if not span:
+        return [], None
+    start, end = span
+    acc = _accent(style)
+    font = "Anton"
+    size = textfit.fit(text, font, 200, 940, 90)
+    tw, th = textfit.width(text, font, size), size * 0.78
+    cx, cy = W / 2, 560
+    rng = random.Random(zlib.crc32(text.encode()))  # las mismas partículas en cada render
+    t = f"{_ts(start)},{_ts(end)}"
+    ms = int((end - start) * 1000)
+    land, out = 650, max(900, ms - 450)  # cuándo se juntan y cuándo se deshacen
+    lines = [_dim(start, end, "70"),
+             f"Dialogue: 7,{t},Sub,,0,0,0,,{{\\an5\\pos({cx:.0f},{cy:.0f})\\fn{font}\\fs{size:.0f}\\bord0\\shad0"
+             f"\\c{acc}&\\alpha&HFF&\\blur8\\t({land - 150},{land + 120},\\alpha&H00&\\blur0)"
+             f"\\t({out},{out + 200},\\alpha&HFF&\\blur10)}}{_esc(text)}"]
+    dot = _circle(14)
+    for _ in range(140):
+        # Destino: un punto al azar dentro de la caja de la frase; origen: lejos, por los bordes.
+        tx, ty = cx + rng.uniform(-tw / 2, tw / 2), cy + rng.uniform(-th / 2, th / 2)
+        ang = rng.uniform(0, 2 * math.pi)
+        r = rng.uniform(600, 1100)
+        sx, sy = cx + r * math.cos(ang), cy + r * math.sin(ang) * 0.9
+        ex, ey = tx + rng.uniform(-260, 260), ty + rng.uniform(-420, 300)
+        delay = rng.randint(0, 220)
+        sc = rng.randint(50, 140)
+        color = acc if rng.random() < 0.75 else CREAM
+        lines.append(f"Dialogue: 6,{_ts(start)},{_ts(start + land / 1000 + 0.15)},Sub,,0,0,0,,{{\\an5"
+                     f"\\move({sx:.0f},{sy:.0f},{tx:.0f},{ty:.0f},{delay},{land})\\fscx{sc}\\fscy{sc}\\bord0\\shad0"
+                     f"\\blur1\\1c{color}&\\fad(120,120)\\p1}}{dot}")
+        lines.append(f"Dialogue: 6,{_ts(start + out / 1000)},{_ts(end)},Sub,,0,0,0,,{{\\an5"
+                     f"\\move({tx:.0f},{ty:.0f},{ex:.0f},{ey:.0f},0,{max(200, ms - out)})\\fscx{sc}\\fscy{sc}\\bord0"
+                     f"\\shad0\\blur1\\1c{color}&\\fad(60,250)\\p1}}{dot}")
+    return lines, Window(start, end)
+
+
+def bloques_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Bloques de texto apilados que se resaltan uno a uno, al ritmo en que los dices (como un carrusel que
+    va marcando cada idea): el activo crece y se pinta del color de la marca, los demás se apagan."""
+    blocks = [" ".join(b.split())[:60] for b in str(effect.get("text", "")).split("|") if b.strip()][:4]
+    if len(blocks) < 2:
+        return [], None
+    span = _span(effect, clock, duration, 1.6 * len(blocks) + 0.6, 2.4)
+    if not span:
+        return [], None
+    start, end = span
+    acc = _accent(style)
+    on_ink = INK if _light(acc) else CREAM
+    font = "Figtree ExtraBold"
+    cw = 900
+    size = min(textfit.fit(b, font, 54, cw - 80, 30) for b in blocks)
+    rows = [_wrap(b, font, size, cw - 80)[:2] for b in blocks]
+    heights = [len(r) * size * 1.18 + 56 for r in rows]
+    gap = 26
+    total = sum(heights) + gap * (len(blocks) - 1)
+    y = max(300.0, 830 - total / 2)  # centrado entre el techo seguro y los subtítulos
+    title = str(effect.get("title", "")).strip()[:34]
+    lines = [_dim(start, end, "60")]
+    if title:
+        lines.append(f"Dialogue: 5,{_ts(start)},{_ts(end)},Sub,,0,0,0,,{{\\an2\\pos({W / 2:.0f},{y - 24:.0f})"
+                     f"\\fn{font}\\fs60\\bord0\\shad2\\4a&H80&\\c&H00FFFFFF&\\fad(150,200)}}{_esc(title)}")
+    step = (end - start - 0.3) / len(blocks)
+    x0 = (W - cw) / 2
+    for k, (row, h) in enumerate(zip(rows, heights)):
+        for j in range(len(blocks)):
+            a = start if j == 0 else start + 0.3 + step * j
+            b = end if j == len(blocks) - 1 else start + 0.3 + step * (j + 1)
+            active = j == k
+            fade = ("\\fad(160,0)" if j == 0 else "") + ("\\fad(0,200)" if j == len(blocks) - 1 else "")
+            pop = "\\fscx96\\fscy96\\t(0,160,\\fscx100\\fscy100)" if active else ""
+            alpha = "\\alpha&H00&" if active else "\\alpha&H60&"
+            tt = f"{_ts(a)},{_ts(b)}"
+            lines.append(f"Dialogue: 5,{tt},Sub,,0,0,0,,{{\\an7\\pos(0,0)\\bord0\\shad0"
+                         f"\\1c{acc if active else CREAM}&{alpha}{fade}\\p1}}{_rect(x0, y, cw, h, 26)}")
+            ink = on_ink if active else INK
+            body = "\\N".join(_esc(r) for r in row)
+            lines.append(f"Dialogue: 6,{tt},Sub,,0,0,0,,{{\\an5\\pos({W / 2:.0f},{y + h / 2:.0f})\\fn{font}"
+                         f"\\fs{size:.0f}\\bord0\\shad0\\c{ink}&{alpha}{fade}{pop}}}{body}")
+        y += h + gap
+    return lines, Window(start, end)
+
+
 PACK_BUILDERS = {
+    "particulas": particulas_events,
+    "bloques": bloques_events,
     "etiqueta": etiqueta_events,
     "texto3d": texto3d_events,
     "ubicacion": ubicacion_events,
