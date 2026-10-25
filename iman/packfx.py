@@ -655,7 +655,51 @@ def texto3d_events(effect: dict, clock: WordClock, style: Style, duration: float
     return lines, Window(start, end)
 
 
+def etiqueta_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Etiqueta que te sigue: una píldora con texto corto ("Yo en Kioto", "Nelson · Xsirius Viajes") que flota
+    sobre tu cabeza y se mueve contigo (posiciones de `_track`, que pone el pipeline con iman/seguir.py)."""
+    text = " ".join(str(effect.get("text", "")).split())[:28]
+    if not text:
+        return [], None
+    span = _span(effect, clock, duration, 2.6, 1.5)
+    if not span:
+        return [], None
+    start, end = span
+    track = [p for p in effect.get("_track") or [] if start - 0.01 <= p[0] <= end + 0.01]
+    if len(track) < 2:
+        track = [(start, W / 2, 520.0), (end, W / 2, 520.0)]  # sin seguimiento: quieta sobre la cabeza
+    acc = _accent(style)
+    ink = INK if _light(acc) else CREAM
+    font = "Figtree ExtraBold"
+    size = textfit.fit(text, font, 54, 700, 34)
+    w, h, tip = textfit.width(text, font, size) + 64, size + 40, 22
+    pill = (f"{_rect(0, 0, w, h, h / 2)} m {w / 2 - tip:.0f} {h - 1:.0f} l {w / 2:.0f} {h + tip:.0f} "
+            f"l {w / 2 + tip:.0f} {h - 1:.0f}")
+
+    def place(x: float, y: float) -> tuple[float, float]:
+        """Punta de la flecha 30 px por encima de la coronilla, dentro de las zonas seguras."""
+        return min(max(x, w / 2 + 40), W - w / 2 - 150), min(max(y - 30, 240 + h + tip), 1180)
+
+    lines = []
+    last = len(track) - 2
+    for k, ((t0, x0, y0), (t1, x1, y1)) in enumerate(zip(track, track[1:])):
+        a, b = (start if k == 0 else t0), (end if k == last else t1)
+        (px0, py0), (px1, py1) = place(x0, y0), place(x1, y1)
+        ms = int((b - a) * 1000)
+        fx = ("\\fscx60\\fscy60\\t(0,200,0.6,\\fscx100\\fscy100)\\fad(120,0)" if k == 0 else
+              "\\fad(0,180)" if k == last else "")
+        tt = f"{_ts(a)},{_ts(b)}"
+        mv = f"\\move({px0:.0f},{py0:.0f},{px1:.0f},{py1:.0f},0,{ms})"
+        lines.append(f"Dialogue: 6,{tt},Sub,,0,0,0,,{{\\an2{mv}\\bord0\\shad3\\4c&H000000&\\4a&HA0&"
+                     f"\\1c{acc}&{fx}\\p1}}{pill}")
+        mvt = f"\\move({px0:.0f},{py0 - tip - h / 2:.0f},{px1:.0f},{py1 - tip - h / 2:.0f},0,{ms})"
+        lines.append(f"Dialogue: 7,{tt},Sub,,0,0,0,,{{\\an5{mvt}\\fn{font}\\fs{size:.0f}\\bord0\\shad0"
+                     f"\\c{ink}&{fx}}}{_esc(text)}")
+    return lines, Window(start, end)
+
+
 PACK_BUILDERS = {
+    "etiqueta": etiqueta_events,
     "texto3d": texto3d_events,
     "ubicacion": ubicacion_events,
     "oferta": oferta_events,

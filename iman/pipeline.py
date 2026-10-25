@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import ai, brand, copystyle, effects, fondos, gestos, hands, jsonfile, limpiar, media, musica, packfx, packs, segment, sfx
+from . import ai, brand, copystyle, effects, fondos, gestos, hands, jsonfile, limpiar, media, musica, packfx, packs, segment, seguir, sfx
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Word
@@ -269,6 +269,22 @@ def _music(choice, workdir: Path, total: float, drop_at: float | None = None) ->
     return None
 
 
+def _follow_head(active: list[dict], src: Path, info, spans, zoom, fit: str, clock, duration: float,
+                 progress: Progress, frames: list[float] | None = None) -> None:
+    """Las etiquetas que te siguen: se busca tu cabeza en su rato y se guarda el recorrido en `_track`."""
+    for fx in active:
+        if fx.get("type") != "etiqueta":
+            continue
+        span = effects._span(fx, clock, duration, 2.6, 1.5)
+        if not span:
+            continue
+        progress("Siguiendo tu cabeza para la etiqueta", 0.62)
+        try:
+            fx["_track"] = seguir.track(src, info, spans, zoom, fit, *span, frames=frames)
+        except Exception:  # noqa: BLE001 - sin seguimiento, la etiqueta se queda quieta sobre la cabeza
+            log.exception("No se pudo seguir la cabeza")
+
+
 def _music_grid(choice, workdir: Path, duration: float, drop_at: float | None) -> list[float]:
     """Golpes de la música elegida en segundos del reel (vacío sin música o si tu canción no tiene pulso claro)."""
     if choice in musica.STYLES:
@@ -434,6 +450,15 @@ def run(
 
     active = [dict(fx) for fx in plan.effects if not fx.get("off")]  # los que el creador ha apagado no salen
     gestos.attach(active, found, hand_frames, effects.WordClock(kept, kept_idx))
+    frames = None
+    if opts.fit == "recortar" and not voice_only:
+        try:
+            frames = seguir.framing(src, info, spans)  # vídeo horizontal: el recorte vertical te sigue
+        except Exception:  # noqa: BLE001 - sin encuadre inteligente, recorte centrado como siempre
+            log.exception("No se pudo encuadrar")
+    if opts.effects and not voice_only:
+        _follow_head(active, src, info, spans, zoom, opts.fit, effects.WordClock(kept, kept_idx), out_duration,
+                     progress, frames)
     kit = brand.load() if opts.brand else None
     style_key = opts.style if opts.style in STYLES else plan.caption_style
     style = brand.apply(STYLES[style_key], kit) if kit else STYLES[style_key]
@@ -493,7 +518,7 @@ def run(
     if look == "auto":
         look = plan.color if plan.color in media.LOOKS else AUTO_LOOK.get(opts.pack, "natural")
         plan.color = look
-    av = dict(sfx_bed=sound, music=music, punch=punch, hush=hush, look=look, transitions=trans)
+    av = dict(sfx_bed=sound, music=music, punch=punch, hush=hush, look=look, transitions=trans, framing=frames)
     warnings = notices
     done = False
     if segs and segment.available():

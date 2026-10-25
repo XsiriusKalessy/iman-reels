@@ -687,3 +687,37 @@ def test_3d_text_effect():
     faces = [ln for ln in lines if "JAPÓN EN" in ln]
     assert len(faces) > 20 and all("\\fry-70" in ln for ln in faces)  # extrusión + cara, todas girando juntas
     assert packfx.texto3d_events({"type": "texto3d", "word": 8, "text": " "}, clock, STYLES["impacto"], 10.0) == ([], None)
+
+
+def test_reframe_and_head_mapping():
+    from iman import seguir
+    from iman.media import MediaInfo
+    from iman.models import Span
+
+    assert media.reframe(0.5, 1080, 1920) is None  # ya vertical: nada que encuadrar
+    x, cw = media.reframe(0.2, 1280, 720)
+    assert cw == 404 and x == 54  # 0,2·1280 − 202
+    assert media.reframe(0.99, 1280, 720)[0] == 1280 - 404
+    info = MediaInfo(width=1280, height=720, duration=10, fps=30, has_audio=True, hdr=False)
+    # La cabeza en el centro del recorte cae en el centro del reel.
+    px, py = seguir.to_reel((54 + 202) / 1280, 0.5, info, False, "recortar", 0.2)
+    assert abs(px - 540) < 2 and abs(py - 960) < 2
+    assert seguir.source_time([Span(1, 3), Span(5, 6)], 2.5) == (1, 5.5)
+    assert seguir.source_time([Span(1, 3)], 9) is None
+
+
+def test_label_follows_the_track():
+    from iman import packfx
+    from iman.captions import STYLES
+    from iman.effects import WordClock
+    from iman.models import Word
+
+    words = [Word(f"w{i}", i * 0.4, i * 0.4 + 0.3) for i in range(20)]
+    clock = WordClock(words, list(range(20)))
+    fx = {"type": "etiqueta", "word": 2, "until_word": 8, "text": "Yo en Kioto",
+          "_track": [(0.8 + k * 0.5, 300 + 60 * k, 700) for k in range(5)]}
+    lines, win = packfx.etiqueta_events(fx, clock, STYLES["impacto"], 10.0)
+    assert win and len(lines) == 8 and all("\\move(" in ln for ln in lines)
+    assert "\\move(300,670,360,670" in lines[0]
+    still, _ = packfx.etiqueta_events({**fx, "_track": []}, clock, STYLES["impacto"], 10.0)
+    assert len(still) == 2 and "\\move(540,490,540,490" in still[0]

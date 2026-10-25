@@ -273,6 +273,14 @@ def ramp_pts(d: float, on: bool = True) -> str:
     return f"setpts='if(lt(T,{r}),T/{f},{r / f:.4f}+(T-{r})/{sl})/TB',"
 
 
+def reframe(cx: float, w0: int, h0: int) -> tuple[int, int] | None:
+    """(x, ancho) del recorte vertical 9:16 centrado en `cx` (0-1); None si el vídeo ya es vertical."""
+    cw = int(h0 * 9 / 16) // 2 * 2
+    if cw >= w0 * 0.95:
+        return None
+    return int(min(max(cx * w0 - cw / 2, 0), w0 - cw)) // 2 * 2, cw
+
+
 def _image_inputs(ops: list, first_index: int) -> tuple[list[str], dict]:
     """Entradas extra de ffmpeg para los efectos con archivo (logo, vídeos de apoyo): una por efecto."""
     args, labels = [], {}
@@ -303,8 +311,11 @@ def build_filtergraph(
     hush: list[tuple[float, float]] | None = None,
     look: str = "",
     transitions: dict[int, str] | None = None,
+    framing: list[float] | None = None,
 ) -> str:
-    """`tail`: segundos extra al final (último fotograma congelado y silencio) para el cierre de marca.
+    """`framing`: centro x (0-1) de la cabeza en cada tramo; con vídeos horizontales el recorte vertical
+    va centrado en ella y en todos los cortes queda en el mismo sitio (los saltos casan).
+    `tail`: segundos extra al final (último fotograma congelado y silencio) para el cierre de marca.
     `sfx_bed`: pista con los efectos de sonido; `music`: tu música, que baja sola cuando hablas.
     `punch`: zoom rápido de entrada en el primer medio segundo (que nada esté quieto al empezar)."""
     W, H = SIZES[size]
@@ -315,9 +326,12 @@ def build_filtergraph(
     for i, sp in enumerate(spans):
         d = sp.duration
         fade = min(0.012, d / 4)
-        zoom = f",crop=iw/{ZOOM}:ih/{ZOOM},scale={w0}:{h0}" if zooms[i] else ""
+        ref = reframe(framing[i], w0, h0) if framing and fit != "fondo" and i < len(framing) else None
+        cw = ref[1] if ref else w0
+        frame = f",crop={ref[1]}:{h0}:{ref[0]}:0" if ref else ""
+        zoom = f",crop=iw/{ZOOM}:ih/{ZOOM},scale={cw}:{h0}" if zooms[i] else ""
         tr = "," + TRANSITIONS[transitions[i]] if transitions and i in transitions else ""
-        parts.append(f"[0:v]trim=start={sp.start:.3f}:end={sp.end:.3f},setpts=PTS-STARTPTS{zoom},setsar=1{tr}[v{i}]")
+        parts.append(f"[0:v]trim=start={sp.start:.3f}:end={sp.end:.3f},setpts=PTS-STARTPTS{frame}{zoom},setsar=1{tr}[v{i}]")
         # Microfundidos solo en los cortes de verdad, no donde un tramo sigue al anterior.
         fades = []
         if i == 0 or abs(spans[i - 1].end - sp.start) > 1e-3:
@@ -413,9 +427,10 @@ def render(
     hush: list[tuple[float, float]] | None = None,
     look: str = "",
     transitions: dict[int, str] | None = None,
+    framing: list[float] | None = None,
 ) -> Path:
     graph = build_filtergraph(spans, info, ass_path, size, fit, voice, zooms, overlays, tail, sfx_bed, music, punch,
-                              hush, look, transitions)
+                              hush, look, transitions, framing)
     script = dst.with_suffix(".filters.txt")
     script.write_text(graph, encoding="utf-8")
     extra, _ = _image_inputs(overlays, 1)
