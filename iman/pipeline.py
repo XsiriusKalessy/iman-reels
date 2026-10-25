@@ -64,6 +64,7 @@ class EditOptions:
     red: str = "instagram"  # para qué red es (iman/redes.py): instagram, tiktok, youtube, anuncio
     ligero: bool = False  # ordenador sencillo: sin los efectos más pesados ni 4K (iman/equipo.py)
     letra: str = "normal"  # tamaño de los subtítulos: normal, grande o enorme (captions.SIZES)
+    idioma: str = ""  # subtítulos y textos en otro idioma ("en", "fr"…): la voz se queda, los textos se traducen
     look: str = "auto"  # "auto" = el que recomienda la IA; o color y textura de un clic (media.LOOKS): "calido", "teal", "cine", "grano", "retro", "bn"…
 
 
@@ -605,16 +606,27 @@ def run(
     end_lines, end_window = effects.end_card_events(kit, style, total)
     ass_path = None
 
+    # Subtítulos en otro idioma: las palabras (misma línea de tiempo), el gancho y los textos de los efectos.
+    sub_words, sub_hook, sub_active = kept, plan.hook_title, active
+    if opts.idioma and aicfg.enabled and kept:
+        progress("Traduciendo los textos", 0.62)
+        try:
+            from . import traducir
+
+            sub_words, sub_hook, sub_active = traducir.localized(aicfg, kept, plan.hook_title, active, opts.idioma)
+        except Exception as e:  # noqa: BLE001 - sin traducción, el reel sale en el idioma original
+            notices.append(f"No he podido traducir los textos: {ai.error_message(e)}")
+
     def write_subs() -> Path:
-        emphasis_out = {j for j, i in enumerate(kept_idx) if i in set(plan.emphasis)}
+        emphasis_out = {j for j, i in enumerate(kept_idx) if i in set(plan.emphasis)} if sub_words is kept else set()
         fx_lines, fx_windows = ([], [])
         if opts.effects:
             fx_lines, fx_windows = effects.build_effects(
-                active, effects.WordClock(kept, kept_idx), style, out_duration, info.duration
+                sub_active, effects.WordClock(kept, kept_idx), style, out_duration, info.duration
             )
         ass = build_ass(
-            kept if opts.captions else [], style, total,
-            plan.hook_title if (opts.hook and plan.hook_shown) else "", emphasis_out,
+            sub_words if opts.captions else [], style, total,
+            sub_hook if (opts.hook and plan.hook_shown) else "", emphasis_out,
             extra_events=fx_lines + end_lines + ([WATERMARK.format(end=_ts(total))] if opts.watermark else [])
             + (packfx.progress_bar_events(out_duration, style) if opts.barra else []),
             hide=fx_windows + ([end_window] if end_window else []),

@@ -1127,6 +1127,7 @@ function showResult(j) {
   if (used === "mia" && !$("#re-music option[value=mia]")) $("#re-music").insertAdjacentHTML("beforeend", `<option value="mia">Mi música</option>`);
   $("#re-music").value = used;
   $("#re-letra").value = (j.options && j.options.letra) || "normal";
+  $("#re-idioma").value = (j.options && j.options.idioma) || "";
   const ol = j.options && j.options.look;
   $("#re-look").value = (ol === "auto" || !ol ? (j.result.plan || {}).color : ol) || "natural";
   markRecommended(j);
@@ -1198,6 +1199,7 @@ api("/api/music").then(list => {
 $("#re-music").onchange = e => reedit({ music: e.target.value });
 $("#re-look").onchange = e => reedit({ look: e.target.value });
 $("#re-letra").onchange = e => reedit({ letra: e.target.value });
+$("#re-idioma").onchange = e => reedit({ idioma: e.target.value });
 $("#music-style").onchange = () => {
   const v = $("#music-style").value;
   $("#music-pick").hidden = v !== "mia";

@@ -1535,3 +1535,38 @@ def test_viral_score_agency_mode_and_calendar(tmp_path, monkeypatch):
     assert c.post("/api/agencia", json={"destination": "Japón"}).status_code == 400
     assert c.post("/api/calendario", json={"pack": "viajes"}).status_code == 400
     assert c.post("/api/calendario", json={"pack": "viajes", "weeks": 99}).status_code == 422
+
+
+def test_subtitles_in_another_language(monkeypatch):
+    """Subtítulos en otro idioma: cada frase traducida ocupa el mismo tramo que la original; el gancho y los
+    textos de los efectos también se traducen; si la IA descuadra, se queda el original."""
+    from iman import ai, server, traducir
+    from iman.ai import AIConfig
+    from iman.models import Word
+
+    words = [Word("hola", 0.0, 0.3), Word("a", 0.35, 0.4), Word("todos", 0.45, 0.9),
+             Word("esto", 2.0, 2.3), Word("cambia", 2.35, 2.8)]
+    cfg = AIConfig(provider="claude", anthropic_key="x")
+    seen = {}
+
+    def fake(cfg_, system, user, schema, images=None):
+        seen["user"] = user
+        n = user.count("\n") and len([ln for ln in user.split("FRASES DE LOS SUBTÍTULOS:")[1].split("TEXTOS DE PANTALLA:")[0].splitlines() if ln.strip()])
+        return {"phrases": [f"phrase {k}" for k in range(n)], "texts": ["3 mistakes in Japan", "Comment GUÍA", "Day one"]}
+
+    monkeypatch.setattr(ai, "_ask_json", fake)
+    active = [{"type": "titular", "word": 0, "text": "Comenta GUÍA", "subtitle": ""}, {"type": "apoyo", "word": 1, "text": "1"},
+              {"type": "lista", "items": [{"at_word": 0, "text": "Día uno"}], "title": ""}]
+    new_words, hook, new_active = traducir.localized(cfg, words, "3 errores en Japón", active, "en")
+    assert hook == "3 mistakes in Japan" and new_active[0]["text"] == "Comment GUÍA" and new_active[1]["text"] == "1"
+    assert new_active[2]["items"][0]["text"] == "Day one" and active[0]["text"] == "Comenta GUÍA"  # el original no se toca
+    assert "inglés" in seen["user"] and len(new_words) >= 2 and new_words[0].start == 0.0
+    assert new_words[-1].end <= 2.8 + 1e-6 and all(a.end <= b.start + 1e-6 for a, b in zip(new_words, new_words[1:]))
+    # La IA junta frases → se queda el original. Idioma raro → original sin llamar a la IA.
+    monkeypatch.setattr(ai, "_ask_json", lambda *a, **k: {"phrases": ["una"], "texts": []})
+    w2, h2, a2 = traducir.localized(cfg, words, "3 errores en Japón", active, "en")
+    assert w2 == words and h2 == "3 errores en Japón" and a2 is active
+    monkeypatch.setattr(ai, "_ask_json", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no debe llamar")))
+    assert traducir.translate(cfg, words, [], "xx") == (words, [])
+    assert server._edit_fields({"idioma": "fr"}) == {"idioma": "fr"}
+    assert traducir._spread("one two", 1.0, 2.0)[1].end == 2.0

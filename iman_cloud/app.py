@@ -156,6 +156,23 @@ def calendario(request: Request, body: CalendarIn, x_iman_license: str = Header(
                                              body.today, body.voice_samples)}
 
 
+class TranslateIn(BaseModel):
+    lang: str = Field(..., max_length=2)
+    phrases: list[str] = Field(default_factory=list, max_length=400)
+    texts: list[str] = Field(default_factory=list, max_length=80)
+
+
+@app.post("/v1/traducir")
+def traducir_textos(request: Request, body: TranslateIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
+    _check(x_iman_license, x_iman_instance, request)
+    from iman import traducir
+
+    target = traducir.LANGS.get(body.lang.lower())
+    if not target:
+        return {"phrases": body.phrases, "texts": body.texts}
+    return traducir.translate_raw(_cfg(), [p[:300] for p in body.phrases], [t[:140] for t in body.texts], target)
+
+
 class CascadeIn(BaseModel):
     transcript: str = Field(..., max_length=60000)
 
