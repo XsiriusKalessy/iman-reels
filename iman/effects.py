@@ -709,7 +709,8 @@ def behind_events(effects: list[dict], clock: WordClock, style: Style, duration:
 
 
 VIDEO_KINDS = {"viaje": (5.0, 3.0), "bruto": (3.0, 2.0), "fantasma": (1.6, 0.8), "pagina": (2.6, 1.6), "apoyo": (3.0, 1.5),
-               "objeto": (2.2, 1.0), "captura": (2.6, 1.4), "collage": (2.8, 1.6)}
+               "objeto": (2.2, 1.0), "captura": (2.6, 1.4), "collage": (2.8, 1.6),
+               "tarjetas": (4.5, 2.5)}
 PERSON_TYPES = (*SEG_KINDS, "apoyo")  # necesitan a alguien delante de la cámara
 MEDIA_EXT = (".mp4", ".mov", ".m4v", ".webm", ".jpg", ".jpeg", ".png", ".webp")
 
@@ -804,6 +805,19 @@ def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=Non
                 path = str(mapa.cached(route, span[1] - span[0], str(fx.get("title", "")), str(fx.get("subtitle", "")),
                                        mapa.ass_hex(accent)))
             except Exception:  # noqa: BLE001 - sin mapa, el reel sigue con el itinerario dibujado
+                continue
+            ops.append(VideoOp("apoyo", span[0], span[1], path=path, ramp=False))
+            continue
+        if kind == "tarjetas":
+            # Tarjetas con iconos a pantalla completa (como el mapa), con el creador en el círculo.
+            from . import mapa, tarjetas
+
+            entries = tarjetas.items(str(fx.get("text", "")))
+            if len(entries) < 2:
+                continue
+            try:
+                path = str(tarjetas.cached(entries, span[1] - span[0], str(fx.get("title", "")), mapa.ass_hex(accent)))
+            except Exception:  # noqa: BLE001 - sin tarjetas, el reel sigue sin ellas
                 continue
             ops.append(VideoOp("apoyo", span[0], span[1], path=path, ramp=False))
             continue

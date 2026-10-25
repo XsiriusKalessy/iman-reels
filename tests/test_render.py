@@ -804,3 +804,13 @@ def test_review_phrases_while_the_director_works(sample, tmp_path, monkeypatch):
         time.sleep(0.25)
     assert job["status"] == "done"
     assert c.get(f"/api/jobs/{job['id']}/review").json()["draft"] is False
+
+
+def test_icon_cards_video(tmp_path):
+    from iman import tarjetas
+
+    got = tarjetas.items("✈️ Vuelos | 🏨 Hoteles|Guía local| |🚄 Trenes")
+    assert got == [("✈️", "Vuelos"), ("🏨", "Hoteles"), ("", "Guía local"), ("🚄", "Trenes")]
+    out = tarjetas.render(got[:3], 1.5, tmp_path / "t.mp4", "Todo incluido", "#F5D90A")
+    info = media.probe(out)
+    assert (info.width, info.height) == (1080, 1920) and abs(info.duration - 1.5) < 0.1
