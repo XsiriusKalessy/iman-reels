@@ -133,3 +133,38 @@ def subject(img) -> tuple[float, float, float] | None:
     width = (cols[-1] - cols[0]) / MASK_W if len(cols) else 0.3
     face = top / MASK_H + max(0.06, width * 0.55 * MASK_W / MASK_H)
     return float(cx), float(top / MASK_H), float(min(0.95, face))
+
+
+def person_mask(img):
+    """Máscara (PIL "L", del tamaño de la foto) de la persona de una foto, con el borde pegado al pelo.
+    None si no hay modelo o no se ve a nadie."""
+    if not available():
+        return None
+    from PIL import Image
+
+    try:
+        import mediapipe as mp
+        from mediapipe.tasks.python import BaseOptions, vision
+
+        rgb = img.convert("RGB")
+        small = np.ascontiguousarray(np.asarray(rgb.resize((MASK_W, MASK_H))))
+        opts = vision.ImageSegmenterOptions(base_options=BaseOptions(model_asset_path=str(MODEL)),
+                                            output_confidence_masks=True, output_category_mask=False)
+        with vision.ImageSegmenter.create_from_options(opts) as seg:
+            conf = seg.segment(mp.Image(image_format=mp.ImageFormat.SRGB, data=small)).confidence_masks[0]
+            conf = conf.numpy_view().reshape(MASK_H, MASK_W).astype(np.float32)
+    except Exception:  # noqa: BLE001
+        return None
+    if (conf > 0.5).mean() < 0.02:
+        return None
+    w, h = rgb.size
+    cv2 = _cv2()
+    if cv2:
+        frame = np.asarray(rgb)
+        guide = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255
+        up = cv2.resize(conf, (w, h), interpolation=cv2.INTER_LINEAR)
+        conf = np.clip(cv2.ximgproc.guidedFilter(guide, up, max(4, w // 160), 1e-3), 0, 1)
+    else:
+        conf = np.asarray(Image.fromarray((conf * 255).astype(np.uint8)).resize((w, h), Image.BILINEAR)) / 255
+    mask = np.clip((conf - 0.35) / 0.3, 0, 1)
+    return Image.fromarray((mask * 255).astype(np.uint8), "L")

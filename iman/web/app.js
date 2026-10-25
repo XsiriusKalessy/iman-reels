@@ -679,6 +679,24 @@ $("#post-copy").onclick = async () => {
   $("#post-copy").textContent = "Copiado ✓";
   setTimeout(() => $("#post-copy").textContent = "Copiar texto", 1500);
 };
+// Portadas tipo YouTube: 3 variantes, cada una en vertical y en horizontal.
+$("#covers-btn").onclick = async () => {
+  if (!state.job) return;
+  const btn = $("#covers-btn");
+  btn.disabled = true; btn.textContent = "Recortándote y pintando las portadas…";
+  try {
+    const r = await api(`/api/jobs/${state.job.id}/portadas`, { method: "POST" });
+    const base = `/api/jobs/${state.job.id}/portadas`, v = `?v=${r.version}`;
+    $("#covers").innerHTML = Object.entries(r.variants).map(([k, label]) => `
+      <figure><img src="${base}/portada-${k}-vertical.jpg${v}" alt="${esc(label)}">
+        <figcaption>${esc(label)}<span>
+          <a href="${base}/portada-${k}-vertical.jpg" download="portada-${k}-vertical.jpg">Vertical</a> ·
+          <a href="${base}/portada-${k}-horizontal.jpg" download="portada-${k}-youtube.jpg">YouTube</a></span></figcaption></figure>`).join("");
+    $("#covers").hidden = false; $("#covers-hint").hidden = false;
+    btn.textContent = "↻ Otras portadas";
+  } catch (err) { btn.textContent = "✦ Hazme 3 portadas que se pinchen"; alert(err.message); }
+  finally { btn.disabled = false; }
+};
 function setCover(t) {
   const url = `/api/jobs/${state.job.id}/cover.jpg?t=${(+t).toFixed(1)}`;
   $("#cover-img").src = url; $("#cover-dl").href = url;

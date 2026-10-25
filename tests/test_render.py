@@ -836,3 +836,40 @@ def test_particle_title_and_highlighted_blocks():
     texts = [ln for ln in lines if "Reserva con tiempo" in ln]
     assert win and len(texts) == 3 and sum("\\alpha&H00&" in ln for ln in texts) == 1  # activo en un solo tramo
     assert packfx.bloques_events({**fx, "text": "solo uno"}, clock, STYLES["impacto"], 12.0) == ([], None)
+
+
+def test_youtube_style_covers(sample, tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from PIL import Image
+
+    from iman import config, miniaturas, server
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    real_run = pipeline.run
+    monkeypatch.setattr(pipeline, "run", lambda *a, **k: real_run(*a, **{**k, "words": TAKE}))
+    c = TestClient(server.app)
+    c.post("/api/settings", json={"provider": "none"})
+    with sample.open("rb") as v:
+        job = c.post("/api/jobs", data={"rhythm": "natural"}, files=[("video", ("toma.mp4", v, "video/mp4"))]).json()
+    for _ in range(240):
+        job = c.get(f"/api/jobs/{job['id']}").json()
+        if job["status"] != "working":
+            break
+        time.sleep(0.25)
+    r = c.post(f"/api/jobs/{job['id']}/portadas").json()
+    assert len(r["files"]) == 6 and set(r["variants"]) == set(miniaturas.VARIANTS)
+    img = c.get(f"/api/jobs/{job['id']}/portadas/portada-pop-horizontal.jpg")
+    p = tmp_path / "p.jpg"
+    p.write_bytes(img.content)
+    assert Image.open(p).size == (1280, 720)
+    assert c.get(f"/api/jobs/{job['id']}/portadas/..%2Fplan.json").status_code == 404
+    # Con una persona de verdad (un círculo "cabeza" + un "cuerpo") el recorte entra en la portada.
+    frame = Image.new("RGB", (720, 1280), (40, 60, 90))
+    mask = Image.new("L", (720, 1280), 0)
+    from PIL import ImageDraw
+
+    ImageDraw.Draw(mask).ellipse((260, 300, 460, 540), fill=255)
+    ImageDraw.Draw(mask).rectangle((180, 520, 540, 1280), fill=255)
+    out = miniaturas.render(frame, "Japón en grupo", "brillo", "vertical", "#F5D90A", "", "Anton", mask)
+    assert out.size == (1080, 1920)

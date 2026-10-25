@@ -921,6 +921,40 @@ def kit_file(job_id: str, name: str):
     return FileResponse(p, media_type=media, filename=f"{job_id}-{name}" if name.endswith(".zip") else None)
 
 
+@app.post("/api/jobs/{job_id}/portadas")
+def make_covers(job_id: str):
+    """Tres portadas tipo YouTube (tú recortado, luz de borde, texto grande), en vertical y en horizontal."""
+    from . import miniaturas
+
+    job = _job(job_id)
+    if not job or job["status"] != "done":
+        raise HTTPException(404, "No encuentro ese reel")
+    workdir = JOBS_DIR / job_id
+    src = workdir / "lienzo.mp4" if (workdir / "lienzo.mp4").exists() else next(workdir.glob("original.*"))
+    dur = float(job["result"]["duration_in"])
+    frames = [media.thumbnail(src, workdir / f"portada-frame-{k}.jpg", max(0.0, min(dur * f, dur - 0.1)))
+              for k, f in enumerate((0.08, 0.2, 0.32, 0.45, 0.58, 0.7, 0.85))]
+    b = brand.load()
+    accent = b.primary if brand.is_hex(b.primary or "") else "#FF5547"
+    title = job["result"]["plan"].get("hook_title", "") or "Mira esto"
+    outdir = workdir / "portadas"
+    for old in outdir.glob("*.jpg"):
+        old.unlink()
+    names = miniaturas.render_all(frames, title, outdir, accent, b.secondary or "",
+                                  brand.font_family(b.font) or "Anton")
+    for f in frames:
+        f.unlink(missing_ok=True)
+    return {"files": names, "variants": miniaturas.VARIANTS, "version": int(time.time())}
+
+
+@app.get("/api/jobs/{job_id}/portadas/{name}")
+def cover_file(job_id: str, name: str):
+    p = JOBS_DIR / job_id / "portadas" / name
+    if not job_id.isalnum() or "/" in name or ".." in name or not p.exists():
+        raise HTTPException(404)
+    return FileResponse(p, media_type="image/jpeg")
+
+
 @app.get("/api/jobs/{job_id}/cover.jpg")
 def get_cover(job_id: str, t: float = 0.5):
     """Fotograma del reel para usarlo de portada."""
