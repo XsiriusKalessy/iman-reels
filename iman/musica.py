@@ -417,3 +417,56 @@ def render(style_key: str, duration: float, dst: Path, seed: int = 0, drop_at: f
         w.setframerate(RATE)
         w.writeframes((out * 32767).astype("<i2").tobytes())
     return dst
+
+
+def style_grid(style_key: str, duration: float, drop_at: float | None = None) -> list[float]:
+    """Los golpes (negras) de una pieza de Imán en segundos del reel, igual que los coloca `render`."""
+    beat = 60 / STYLES[style_key].bpm
+    first = (drop_at % beat) if drop_at else 0.0  # con drop_at, el golpe fuerte cae justo en drop_at
+    n = int((duration - first) / beat) + 1
+    return [round(first + k * beat, 3) for k in range(max(0, n))]
+
+
+def beat_grid(path: Path, duration: float, lo_bpm: float = 70, hi_bpm: float = 180) -> list[float]:
+    """Golpes de tu canción (empieza en el segundo 0 del reel): tempo por autocorrelación de los ataques
+    y la fase que más golpes acierta. Lista vacía si no se distingue un pulso claro."""
+    import subprocess
+
+    from .media import FFMPEG
+
+    sr, hop = 11025, 256
+    raw = subprocess.run([FFMPEG, "-v", "error", "-i", str(path), "-t", f"{duration + 1:.2f}", "-ac", "1",
+                          "-ar", str(sr), "-f", "f32le", "-"], capture_output=True).stdout
+    x = np.frombuffer(raw, np.float32)
+    if len(x) < sr * 4:
+        return []
+    n = 1 + (len(x) - 1024) // hop
+    idx = np.arange(1024)[None, :] + hop * np.arange(n)[:, None]
+    mag = np.log1p(10 * np.abs(np.fft.rfft(x[idx] * np.hanning(1024), axis=1)))
+    flux = np.maximum(np.diff(mag, axis=0), 0).sum(1)
+    flux = flux - np.convolve(flux, np.ones(16) / 16, mode="same")
+    env = np.maximum(flux, 0)
+    if env.std() == 0:
+        return []
+    fps = sr / hop
+    lags = np.arange(int(fps * 60 / hi_bpm), int(fps * 60 / lo_bpm) + 1)
+    ac = np.array([np.dot(env[:-lag], env[lag:]) / (len(env) - lag) for lag in lags])
+    # Preferir tempos alrededor de 110 BPM (a veces la autocorrelación duda entre el doble y la mitad).
+    bpm = 60 * fps / lags
+    ac = ac * np.exp(-0.5 * (np.log2(bpm / 110) / 0.9) ** 2)
+    best = int(np.argmax(ac))
+    if ac[best] < 1.3 * np.median(ac):
+        return []
+    period = lags[best]
+    # La fase, con los graves (bombo y bajo marcan el golpe mejor que los platillos o los acordes).
+    low = np.maximum(np.diff(mag[:, 1:int(160 * 1024 / sr) + 2], axis=0), 0).sum(1)
+    kick = env / env.max() + 2 * low / max(low.max(), 1e-9)
+    times = (np.arange(len(kick)) + 1) / fps + 512 / sr  # centro de la ventana donde se ve cada ataque
+    best_score, beat, first = -1.0, period / fps, 0.0
+    # Afinar tempo y fase a la vez (el tempo de la autocorrelación va en saltos de 23 ms y se descuadra).
+    for b in np.linspace(beat * 0.97, beat * 1.03, 61):
+        for f in np.arange(0, b, 0.005):
+            score = np.interp(np.arange(f, times[-1], b), times, kick).sum()
+            if score > best_score:
+                best_score, beat, first = score, b, f
+    return [round(float(first + k * beat), 3) for k in range(int((duration - first) / beat) + 1)]

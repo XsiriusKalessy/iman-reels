@@ -269,6 +269,20 @@ def _music(choice, workdir: Path, total: float, drop_at: float | None = None) ->
     return None
 
 
+def _music_grid(choice, workdir: Path, duration: float, drop_at: float | None) -> list[float]:
+    """Golpes de la música elegida en segundos del reel (vacío sin música o si tu canción no tiene pulso claro)."""
+    if choice in musica.STYLES:
+        return musica.style_grid(choice, duration, drop_at)
+    song = _music(choice, workdir, duration) if (choice is True or choice == "mia") else None
+    if song is None:
+        return []
+    try:
+        return musica.beat_grid(song, duration)
+    except Exception:  # noqa: BLE001 - sin golpes, los cortes van como siempre
+        log.exception("No se pudo sacar el ritmo de la canción")
+        return []
+
+
 def _hush_windows(silence: list[int], words: list[Word], clock: effects.WordClock) -> list[tuple[float, float]]:
     """Tramos de silencio dramático en el reel: desde justo antes de la frase clave hasta que termina."""
     out = []
@@ -386,9 +400,15 @@ def run(
     spans, drops = keep_spans(words, info.duration, rhythm, plan.drop + plan.cut, plan.restore, plan.pauses)
     zooms_wanted = plan.zooms if opts.effects else []
     spans = effects.split_spans(spans, words, zooms_wanted)
+    choice = opts.music
+    if choice == "auto":  # la que recomienda la IA; sin IA, una según el sector
+        choice = plan.music if plan.music in musica.STYLES else AUTO_MUSIC.get(opts.pack, "inspiracional")
+        plan.music = choice  # para que la app muestre cuál ha elegido
+    drop_at = 2.8 if opts.hook and plan.hook_title else None
     beats: set[float] = set()
     if opts.auto_zoom and rhythm.cut and not voice_only:
-        spans, beats = effects.beat_spans(spans, words)  # un cambio de plano cada 2-3 s
+        # Un cambio de plano cada 2-3 s, y a ser posible justo en un golpe de la música.
+        spans, beats = effects.beat_spans(spans, words, grid=_music_grid(choice, workdir, info.duration, drop_at))
     zoom = effects.zoom_flags(spans, words, zooms_wanted, opts.auto_zoom and rhythm.cut, beats)
     kept, kept_idx = remap_words(words, spans, drops)
     out_duration = sum(s.duration for s in spans)
@@ -466,12 +486,8 @@ def run(
         evs = sorted(evs + [(starts[i], "whoosh" if k == "whip" else "click", 0.45) for i, k in trans.items()])
         if evs:
             sound = sfx.bed(evs, total, workdir / "sfx.wav")
-    choice = opts.music
-    if choice == "auto":  # la que recomienda la IA; sin IA, una según el sector
-        choice = plan.music if plan.music in musica.STYLES else AUTO_MUSIC.get(opts.pack, "inspiracional")
-        plan.music = choice  # para que la app muestre cuál ha elegido
     # La música "explota" justo cuando se va el texto del gancho.
-    music = _music(choice, workdir, total, min(2.8, out_duration) if opts.hook and plan.hook_title else None)
+    music = _music(choice, workdir, total, min(drop_at, out_duration) if drop_at else None)
     punch = opts.punch and not voice_only
     look = opts.look
     if look == "auto":

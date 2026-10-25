@@ -6,6 +6,8 @@ se convierten a tiempos del reel ya cortado y a eventos ASS.
 
 from __future__ import annotations
 
+import bisect
+
 from dataclasses import dataclass
 
 from . import textfit
@@ -855,16 +857,35 @@ def build_effects(effects: list[dict], clock: WordClock, style: Style, duration:
 
 
 def beat_spans(spans: list[Span], words: list[Word], every: float = 2.6, run: int = 4,
-               rest: float = 5.0) -> tuple[list[Span], set[float]]:
+               rest: float = 5.0, grid: list[float] | None = None) -> tuple[list[Span], set[float]]:
     """Interrupción de patrón: si un tramo sigue más de `every` segundos sin corte, lo parte entre dos
     palabras para que el plano cambie (zoom in/out) cada 2-3 s. Devuelve los tramos y los puntos de cambio.
 
     Con respiración: tras `run` cambios seguidos deja un respiro de unos `rest` segundos sin cambios,
-    para que no sea frenético todo el rato (eso cansa y hace que la gente se vaya)."""
-    gaps = sorted(round((a.end + b.start) / 2, 3) for a, b in zip(words, words[1:]))
+    para que no sea frenético todo el rato (eso cansa y hace que la gente se vaya).
+
+    `grid`: golpes de la música en segundos del reel. Entre los huecos posibles se elige el que cae más
+    cerca de un golpe, así los cambios de plano van al ritmo de la canción."""
+    bounds = {round((a.end + b.start) / 2, 3): (a.end, b.start) for a, b in zip(words, words[1:])}
+    gaps = sorted(bounds)
     out: list[Span] = []
     beats: set[float] = set()
     streak = 0
+    done = 0.0  # segundos de reel antes del tramo actual
+
+    def nearest(g: float, sp_start: float) -> float:
+        """Desplazamiento (s) desde el hueco `g` hasta el golpe más cercano."""
+        t = done + g - sp_start
+        k = bisect.bisect_left(grid, t)
+        return min((grid[j] - t for j in (k - 1, k) if 0 <= j < len(grid)), key=abs, default=0.0)
+
+    def off_beat(g: float, sp_start: float) -> float:
+        if not grid:
+            return 0.0
+        lo, hi = bounds[g]
+        shift = nearest(g, sp_start)
+        return 0.0 if lo <= g + shift <= hi else abs(shift)  # si el golpe cae dentro del silencio, perfecto
+
     for sp in spans:
         start = sp.start
         while sp.end - start > every * 1.5:
@@ -877,12 +898,15 @@ def beat_spans(spans: list[Span], words: list[Word], every: float = 2.6, run: in
             near = [g for g in gaps if start + 0.8 < g and lo < g < hi]
             if not near:
                 break
-            cut = min(near, key=lambda g: abs(g - target))
+            cut = min(near, key=lambda g: abs(g - target) * 0.15 + off_beat(g, sp.start))
+            if grid and off_beat(cut, sp.start) == 0.0:
+                cut = round(cut + nearest(cut, sp.start), 3)  # el corte justo en el golpe
             out.append(Span(start, cut))
             beats.add(cut)
             streak += 1
             start = cut
         out.append(Span(start, sp.end))
+        done += sp.end - sp.start
     return out, beats
 
 

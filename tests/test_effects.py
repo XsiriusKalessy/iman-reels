@@ -202,3 +202,27 @@ def test_packs_reach_the_ai_and_validate():
     finally:
         mp.undo()
     assert "PACK VIAJES" in seen["user"]
+
+
+def test_cuts_land_on_music_beats():
+    from iman.models import Word
+
+    # Palabras de 0,4 s con silencios de 0,2 s: 40 s seguidos sin ningún corte.
+    words = [Word(f"w{i}", i * 0.6, i * 0.6 + 0.4) for i in range(66)]
+    grid = [0.35 + k * 0.5 for k in range(90)]
+    spans, beats = effects.beat_spans([Span(0.0, 40.0)], words, grid=grid)
+    assert len(beats) >= 6
+    off = [min(abs(c - g) for g in grid) for c in beats]
+    assert max(off) < 0.11  # cada cambio de plano cae en un golpe (o a un pelo)
+    assert sum(o < 0.01 for o in off) >= len(off) // 2
+
+
+def test_beat_grid_of_a_song(tmp_path):
+    from iman import musica
+
+    song = musica.render("tropical", 16, tmp_path / "t.wav", seed=2)
+    got = musica.beat_grid(song, 16)
+    want = musica.style_grid("tropical", 16)
+    beat = want[1] - want[0]
+    assert abs((got[1] - got[0]) - beat) < 0.02 or abs((got[1] - got[0]) - beat / 2) < 0.02
+    assert all(min(abs(g - w) for w in want) < 0.05 for g in got[:20:2])
