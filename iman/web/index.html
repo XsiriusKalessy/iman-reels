@@ -20,6 +20,7 @@
     </nav>
     <a href="#" class="pill" id="trial-pill" hidden></a>
     <button class="primary small" id="new-reel" title="Empezar un reel desde cero">＋ Nuevo reel</button>
+    <button class="ghost" id="open-photos" title="Quitar fondo, mejorar y reiluminar fotos">Fotos</button>
     <button class="ghost" id="open-brand"><i class="dot" id="brand-dot"></i> Mi marca</button>
     <button class="ghost" id="open-settings">Ajustes</button>
   </header>
@@ -486,6 +487,38 @@
       </div>
       <p class="hint error" id="brand-error" hidden></p>
       <div class="row end"><button class="ghost" value="cancel">Cerrar</button><button class="primary" id="brand-save" value="default">Guardar mi marca</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="photos" class="wide">
+    <form method="dialog" id="photos-form">
+      <h2>Herramientas de foto</h2>
+      <p class="hint">Para tus fotos de apoyo, portadas o lo que publiques aparte. Todo se hace en tu ordenador.</p>
+      <label class="photo-drop" id="photo-drop">
+        <input type="file" id="photo-file" accept="image/png,image/jpeg,image/webp" hidden>
+        <span id="photo-empty"><strong>Elige una foto</strong><br>JPG, PNG o WebP</span>
+        <img id="photo-before" alt="Tu foto" hidden>
+      </label>
+      <div class="photo-tools">
+        <button class="ghost" type="button" data-tool="fondo">✂️ Quitar fondo</button>
+        <button class="ghost" type="button" data-tool="mejorar">✨ Mejorar foto</button>
+        <span class="row tight">
+          <button class="ghost" type="button" data-tool="luz">💡 Reiluminar</button>
+          <select id="photo-light" aria-label="Luz">
+            <option value="estudio">Estudio</option><option value="calida">Atardecer</option>
+            <option value="fria">Luz fría</option><option value="neon">Neón</option>
+          </select>
+          <select id="photo-side" aria-label="Lado de la luz">
+            <option value="izquierda">desde la izquierda</option><option value="derecha">desde la derecha</option>
+          </select>
+        </span>
+      </div>
+      <p class="hint" id="photo-status" role="status"></p>
+      <div class="photo-result" id="photo-result" hidden>
+        <img id="photo-after" alt="Resultado">
+        <a class="primary" id="photo-download" download>Descargar</a>
+      </div>
+      <div class="row end"><button class="ghost" value="cancel">Cerrar</button></div>
     </form>
   </dialog>
 

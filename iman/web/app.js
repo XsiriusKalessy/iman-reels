@@ -1137,3 +1137,42 @@ checkUpdate(); setInterval(checkUpdate, 6 * 3600 * 1000);
 
 loadOptions().then(() => api("/api/brand").then(renderBrand)); loadSettings();
 api("/api/reels").then(r => go(r.reels.length ? "home" : "upload"));
+
+// Herramientas de foto: quitar fondo, mejorar y reiluminar (en local).
+const photoFile = $("#photo-file");
+$("#open-photos").onclick = () => $("#photos").showModal();
+photoFile.onchange = () => {
+  const f = photoFile.files[0];
+  if (!f) return;
+  const img = $("#photo-before");
+  img.src = URL.createObjectURL(f);
+  img.hidden = false;
+  $("#photo-empty").hidden = true;
+  $("#photo-result").hidden = true;
+  $("#photo-status").textContent = "";
+};
+document.querySelectorAll("[data-tool]").forEach(btn => btn.onclick = async () => {
+  const f = photoFile.files[0];
+  const status = $("#photo-status");
+  if (!f) { status.textContent = "Primero elige una foto."; return; }
+  const fd = new FormData();
+  fd.append("foto", f);
+  fd.append("accion", btn.dataset.tool);
+  fd.append("luz", $("#photo-light").value);
+  fd.append("lado", $("#photo-side").value);
+  document.querySelectorAll("[data-tool]").forEach(b => b.disabled = true);
+  status.textContent = "Trabajando en tu foto…";
+  try {
+    const r = await api("/api/imagen", { method: "POST", body: fd });
+    const url = `${r.url}?v=${Date.now()}`;
+    $("#photo-after").src = url;
+    $("#photo-download").href = r.url;
+    $("#photo-download").setAttribute("download", r.name);
+    $("#photo-result").hidden = false;
+    status.textContent = `Listo (${r.width}×${r.height}).`;
+  } catch (err) {
+    status.textContent = err.message || "No se ha podido.";
+  } finally {
+    document.querySelectorAll("[data-tool]").forEach(b => b.disabled = false);
+  }
+});

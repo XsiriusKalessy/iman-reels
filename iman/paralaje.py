@@ -127,6 +127,12 @@ def render(photo: Path, duration: float, dst: Path) -> Path:
     dst.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(photo) as im:
         img = ImageOps.exif_transpose(im).convert("RGB")
+    try:  # la foto mejorada antes (luz, color, nitidez): las de móvil suelen venir apagadas
+        from . import imagen
+
+        img = imagen.mejorar(img)
+    except Exception:  # noqa: BLE001
+        pass
     direction = 1 if int(hashlib.sha1(str(photo).encode()).hexdigest(), 16) % 2 else -1
     proc = subprocess.Popen(
         [FFMPEG, "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-",

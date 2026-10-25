@@ -956,6 +956,54 @@ def cover_file(job_id: str, name: str):
     return FileResponse(p, media_type="image/jpeg")
 
 
+PHOTOS_DIR = config.HOME / "fotos"
+
+
+@app.post("/api/imagen")
+def photo_tool(foto: UploadFile = File(...), accion: str = Form("mejorar"), luz: str = Form("estudio"),
+               lado: str = Form("izquierda")):
+    """Herramientas de foto: quitar el fondo (PNG transparente), mejorar o reiluminar."""
+    from . import imagen
+
+    if accion not in ("fondo", "mejorar", "luz"):
+        raise HTTPException(400, "Herramienta desconocida")
+    PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
+    raw = foto.file.read()
+    if len(raw) > 40 * 1024 * 1024:
+        raise HTTPException(413, "La foto es demasiado grande (máx. 40 MB)")
+    try:
+        img = imagen.load(io.BytesIO(raw))
+    except Exception:  # noqa: BLE001
+        raise HTTPException(400, "No puedo abrir esa imagen. Prueba con un JPG o PNG.") from None
+    try:
+        if accion == "fondo":
+            out = imagen.quitar_fondo(img)
+        elif accion == "luz":
+            out = imagen.reiluminar(img, luz if luz in imagen.LIGHTS else "estudio",
+                                    "derecha" if lado == "derecha" else "izquierda")
+        else:
+            out = imagen.mejorar(img)
+    except imagen.NoPerson as e:
+        raise HTTPException(422, str(e)) from None
+    stem = Path(foto.filename or "foto").stem[:40] or "foto"
+    stem = "".join(c if c.isalnum() or c in "-_" else "-" for c in stem)
+    png = out.mode == "RGBA"
+    name = f"{stem}-{accion}-{uuid.uuid4().hex[:6]}.{'png' if png else 'jpg'}"
+    if png:
+        out.save(PHOTOS_DIR / name)
+    else:
+        out.convert("RGB").save(PHOTOS_DIR / name, quality=93)
+    return {"name": name, "url": f"/api/imagen/{name}", "width": out.width, "height": out.height}
+
+
+@app.get("/api/imagen/{name}")
+def photo_file(name: str):
+    p = PHOTOS_DIR / name
+    if "/" in name or "\\" in name or ".." in name or not p.exists():
+        raise HTTPException(404)
+    return FileResponse(p, media_type="image/png" if name.endswith(".png") else "image/jpeg", filename=name)
+
+
 @app.get("/api/jobs/{job_id}/cover.jpg")
 def get_cover(job_id: str, t: float = 0.5):
     """Fotograma del reel para usarlo de portada."""

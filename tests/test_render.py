@@ -954,3 +954,42 @@ def test_support_photos_move_in_2_5d(tmp_path, monkeypatch):
                             WordClock(words, list(range(20))), 8.0, assets={"1": str(photo)})
     assert len(ops) == 1 and ops[0].path.endswith(".mp4") and ops[0].ramp is False
     assert abs(media.probe(type(photo)(ops[0].path)).duration - (ops[0].end - ops[0].start)) < 0.1
+
+
+def test_photo_tools(tmp_path, monkeypatch):
+    import io
+
+    from fastapi.testclient import TestClient
+    from PIL import Image
+
+    from iman import imagen, segment, server
+
+    monkeypatch.setattr(server, "PHOTOS_DIR", tmp_path / "fotos")
+    small = Image.new("RGB", (400, 600), (150, 120, 100))
+    better = imagen.mejorar(small)
+    assert min(better.size) == 1080  # agrandada para redes
+    buf = io.BytesIO()
+    small.save(buf, "JPEG")
+    c = TestClient(server.app)
+    r = c.post("/api/imagen", data={"accion": "mejorar"}, files={"foto": ("mi foto.jpg", buf.getvalue(), "image/jpeg")})
+    assert r.status_code == 200, r.text
+    got = r.json()
+    assert got["name"].startswith("mi-foto-mejorar") and c.get(got["url"]).status_code == 200
+    # Sin nadie en la foto, quitar el fondo y reiluminar avisan en vez de fallar.
+    monkeypatch.setattr(segment, "person_mask", lambda img: None)
+    r = c.post("/api/imagen", data={"accion": "fondo"}, files={"foto": ("a.jpg", buf.getvalue(), "image/jpeg")})
+    assert r.status_code == 422 and "persona" in r.json()["detail"]
+    # Con alguien (máscara simulada): PNG recortado y foto reiluminada.
+    def fake_mask(img):
+        m = Image.new("L", img.size, 0)
+        m.paste(255, (img.width // 4, img.height // 4, img.width * 3 // 4, img.height))
+        return m
+
+    monkeypatch.setattr(segment, "person_mask", fake_mask)
+    cut = imagen.quitar_fondo(small)
+    assert cut.mode == "RGBA" and cut.width < small.width
+    for light in imagen.LIGHTS:
+        lit = imagen.reiluminar(small, light)
+        assert lit.size == small.size and lit.getpixel((10, 10)) != small.getpixel((10, 10))
+    assert c.post("/api/imagen", data={"accion": "otra"}, files={"foto": ("a.jpg", buf.getvalue(), "image/jpeg")}).status_code == 400
+    assert c.get("/api/imagen/..%2Fconfig.json").status_code == 404
