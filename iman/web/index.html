@@ -39,6 +39,7 @@
         <div><h1>Mis reels</h1><p class="lead">Todo lo que has editado con Imán, listo para volver a tocar o publicar.</p></div>
         <button class="primary" data-goto="upload">+ Nuevo reel</button>
       </div>
+      <div id="learned" class="card learned" hidden></div>
       <div id="library" class="library"></div>
     </section>
 
@@ -175,6 +176,11 @@
         <label class="choice"><input type="radio" name="mode" value="largo"><span>✂️ Vídeo largo → varios reels<small>Un directo, una clase, un podcast</small></span></label>
       </div>
       </details>
+      <p class="hint plantilla-row" id="plantilla-row" hidden>
+        <label>Plantilla <select id="plantilla"><option value="">Imán decide (sin plantilla)</option></select></label>
+        <button class="ghost small" type="button" id="plantilla-del" hidden title="Borrar esta plantilla">✕</button>
+        <span id="plantilla-hint"></span>
+      </p>
       <div class="row end quick-go">
         <button class="ghost" id="to-edit" disabled>Ajuste fino →</button>
         <button class="primary big" id="go-quick" disabled>Hazlo tú, Imán ✦</button>
@@ -324,12 +330,22 @@
             <div id="early-phrases" class="phrases"></div>
             <p class="hint">Lo que quites o recuperes aquí se aplica solo en cuanto el reel esté listo.</p>
             <audio id="early-audio" preload="none" hidden></audio>
+            <div id="early-preview" class="early-preview" hidden>
+              <h4>Vista previa al instante</h4>
+              <video id="early-video" controls muted playsinline preload="metadata"></video>
+              <p class="hint">Tu vídeo ya con los cortes, en pequeño. El reel de verdad, con subtítulos, música y efectos, sigue montándose.</p>
+            </div>
           </div>
           <div id="result-tools">
           <div id="stats" class="stats"></div>
           <div id="hook-box"></div>
           <div id="fixes-box" hidden></div>
           <div id="viral-box" class="card viral" hidden></div>
+          <div class="row tight" id="template-row">
+            <button class="ghost" type="button" id="template-save" title="Guarda el ritmo, el estilo, el gancho, la música y el look de este reel para repetirlos en los siguientes">💾 Guardar como plantilla</button>
+            <button class="ghost" type="button" id="results-open" title="Apunta cómo le fue en tu red: con 3 o más reels anotados, Imán aprende qué te funciona">📈 Anotar resultados</button>
+            <span class="hint" id="template-msg"></span>
+          </div>
           <div id="check-box" class="card" hidden><h4>Revisión antes de publicar</h4><ul id="check-list" class="checks"></ul></div>
           <h3>Publicar y vender</h3>
           <div class="publish">
@@ -665,6 +681,25 @@
     </form>
   </dialog>
 
+  <dialog id="results">
+    <form method="dialog" id="results-form">
+      <h2>¿Cómo le fue a este reel?</h2>
+      <p class="hint">Copia los números de las estadísticas de tu red. Con 3 o más reels anotados, Imán aprende qué gancho, estilo, ritmo, duración y música te funcionan mejor y lo tiene en cuenta en los siguientes.</p>
+      <div class="grid2 results-grid">
+        <label>Visualizaciones <input type="number" min="0" step="1" name="views" inputmode="numeric"></label>
+        <label>Retención media (%) <input type="text" name="retention" inputmode="decimal" placeholder="48,5"></label>
+        <label>Guardados <input type="number" min="0" step="1" name="saves" inputmode="numeric"></label>
+        <label>Compartidos <input type="number" min="0" step="1" name="shares" inputmode="numeric"></label>
+        <label>Comentarios <input type="number" min="0" step="1" name="comments" inputmode="numeric"></label>
+        <label>Seguidores nuevos <input type="number" min="0" step="1" name="followers" inputmode="numeric"></label>
+      </div>
+      <p class="hint" id="results-msg"></p>
+      <div class="row end">
+        <button class="ghost" type="button" id="results-cancel">Cancelar</button>
+        <button class="primary" type="submit">Guardar</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="photos" class="wide">
     <form method="dialog" id="photos-form">
       <h2>Herramientas de foto</h2>

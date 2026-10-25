@@ -618,3 +618,16 @@ table.calendar th, table.calendar td { text-align: left; padding: 8px 6px; borde
 .rec-warn { position: absolute; left: 12px; right: 12px; bottom: 12px; margin: 0; padding: 8px 10px; border-radius: 10px; background: rgba(255,85,71,.85); color: #fff; font-size: 13px; }
 #recorder { max-height: 94vh; overflow: auto; }
 .rec-stage { max-height: 52vh; aspect-ratio: 9 / 16; width: auto; }
+
+/* Plantillas, resultados y vista previa al instante */
+.plantilla-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.plantilla-row select { max-width: 18rem; }
+.plantilla-row .small { padding: .2rem .5rem; }
+.learned { margin-bottom: 1rem; }
+.learned ul { margin: .4rem 0 0; padding-left: 1.1rem; }
+.learned li { margin: .2rem 0; }
+.learned .meter { display: inline-block; font-size: .85rem; opacity: .8; margin-left: .4rem; }
+.reel-card .res { position: absolute; left: .4rem; top: .4rem; font-size: .75rem; background: rgba(0,0,0,.6); color: #fff; padding: .15rem .45rem; border-radius: 999px; }
+.results-grid label { display: flex; flex-direction: column; gap: .25rem; font-size: .9rem; }
+.early-preview { margin-top: 1rem; }
+.early-preview video { width: min(100%, 270px); aspect-ratio: 9 / 16; background: #000; border-radius: 12px; display: block; }

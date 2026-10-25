@@ -1570,3 +1570,67 @@ def test_subtitles_in_another_language(monkeypatch):
     assert traducir.translate(cfg, words, [], "xx") == (words, [])
     assert server._edit_fields({"idioma": "fr"}) == {"idioma": "fr"}
     assert traducir._spread("one two", 1.0, 2.0)[1].end == 2.0
+
+
+def test_templates_results_and_instant_preview(tmp_path, monkeypatch):
+    """Tanda 6: plantillas propias, aprender de los resultados y vista previa al instante."""
+    import time
+    from fastapi.testclient import TestClient
+    from iman import config, jsonfile, plantillas, resultados, server
+    monkeypatch.setattr(config, "HOME", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    server.JOBS.clear()
+    # Plantilla: los «auto» se resuelven a lo que se usó de verdad; el fondo «foto» no viaja.
+    opts = {"rhythm": "rapido", "style": "auto", "music": "auto", "gancho": "auto", "look": "auto", "red": "tiktok",
+            "background": "foto", "sfx": True, "hook_title": "no viaja"}
+    plan = {"caption_style": "hormozi", "music": "epica", "gancho": "numero", "look": "calido"}
+    t = plantillas.crear("Viajes", opts, plan)
+    assert t["options"] == {"rhythm": "rapido", "style": "hormozi", "music": "epica", "gancho": "numero", "look": "calido",
+                            "red": "tiktok", "background": "", "sfx": True}
+    assert "hormozi" in t["resumen"] and "Rápido" in t["resumen"]
+    assert plantillas.apply({"rhythm": "natural", "letra": "grande"}, t["id"]) == {**t["options"], "letra": "grande"}
+    assert plantillas.crear("viajes", opts, plan)["name"] == "viajes" and len(plantillas.listar()) == 1  # mismo nombre: sustituye
+    assert plantillas.borrar(t["id"]) is False and plantillas.borrar(plantillas.listar()[0]["id"]) and plantillas.listar() == []
+    # Resultados: con menos de 3 reels no hay lecciones; con 4, gana el gancho «cifra gigante».
+    assert resultados.normalize({"views": "12.500", "retention": "48,5", "saves": "-3", "x": 1}) == {"views": 12500, "retention": 48.5, "saves": 0}
+
+    def reel(i, gancho, views, ret, dur=25.0):
+        return {"id": f"r{i}", "title": "3 errores en Japón" if gancho == "numero" else "Lo que nadie te cuenta de Japón",
+                "duration": dur, "options": {"rhythm": "rapido", "style": "hormozi", "music": "epica", "red": "instagram"},
+                "plan": {"gancho": gancho, "caption_style": "hormozi", "music": "epica", "hook_title": "3 errores en Japón"},
+                "resultados": {"views": views, "retention": ret}}
+    assert resultados.insights([reel(1, "numero", 9000, 60), reel(2, "titulo", 3000, 40)])["lessons"] == []
+    ins = resultados.insights([reel(1, "numero", 9000, 60), reel(2, "titulo", 3000, 40), reel(3, "numero", 8000, 55),
+                               reel(4, "titulo", 2500, 35)])
+    assert ins["n"] == 4 and ins["best"]["gancho"] == "numero" and "cifra gigante" in ins["lessons"][0]
+    assert "style" not in ins["best"]  # todos con el mismo estilo: no se puede comparar
+    assert ins["top"][0]["id"] == "r1" and resultados.prompt(ins).startswith("LO QUE FUNCIONA")
+    assert resultados.prompt({"lessons": []}) == ""
+    # Servidor: guardar plantilla desde un reel hecho, anotar resultados y la previa en el sondeo.
+    c = TestClient(server.app)
+    for i, g in enumerate(["numero", "titulo", "numero", "titulo"]):
+        d = tmp_path / "jobs" / f"j{i}"
+        d.mkdir(parents=True)
+        job = {"id": f"j{i}", "status": "done", "created": time.time() - i, "options": opts,
+               "result": {"plan": {**plan, "gancho": g, "hook_title": "3 errores en Japón"}, "duration_out": 24.0}}
+        jsonfile.save(d / "job.json", job)
+    r = c.post("/api/plantillas", json={"name": "Mis viajes", "job_id": "j0"})
+    assert r.status_code == 200 and r.json()["plantilla"]["options"]["gancho"] == "numero"
+    assert c.get("/api/plantillas").json()["plantillas"][0]["name"] == "Mis viajes"
+    assert c.post("/api/plantillas", json={"name": "x", "job_id": "nope"}).status_code == 404
+    for i, (v, ret) in enumerate([(9000, 60), (3000, 40), (8000, 55), (2500, 35)]):
+        r = c.post(f"/api/jobs/j{i}/resultados", json={"views": v, "retention": ret}).json()
+    assert r["resultados"]["views"] == 2500 and r["insights"]["best"]["gancho"] == "numero"
+    assert jsonfile.load(tmp_path / "jobs" / "j3" / "job.json")["resultados"]["views"] == 2500
+    assert c.get("/api/reels").json()["reels"][0]["resultados"]["views"] == 9000
+    assert "cifra gigante" in server._learned_prompt()
+    assert c.post("/api/jobs/j3/resultados", json={}).json()["resultados"] is None  # vaciar
+    with server._lock:
+        server.JOBS["w1"] = {"id": "w1", "status": "working", "step": "x", "progress": 0.5, "mode": "camara"}
+    (tmp_path / "jobs" / "w1").mkdir()
+    assert c.get("/api/jobs/w1").json()["preview"] is False and c.get("/api/jobs/w1/previa.mp4").status_code == 404
+    (tmp_path / "jobs" / "w1" / "previa.mp4").write_bytes(b"\x00")
+    assert c.get("/api/jobs/w1").json()["preview"] is True and c.get("/api/jobs/w1/previa.mp4").status_code == 200
+    assert c.delete(f"/api/plantillas/{c.get('/api/plantillas').json()['plantillas'][0]['id']}").json()["plantillas"] == []
+    server.JOBS.clear()

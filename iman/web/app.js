@@ -4,6 +4,7 @@ const state = { file: null, takes: [], job: null, settings: null, poll: null };
 
 function go(step) {
   if (step === "home") loadLibrary();
+  if (step === "upload") loadTemplates();
   const swap = () => {
     $$(".panel").forEach(p => p.classList.toggle("show", p.dataset.panel === step));
     $$("#steps button").forEach(b => b.classList.toggle("active", b.dataset.step === step));
@@ -629,6 +630,7 @@ $("#go").onclick = async () => {
   fd.append("gancho", $("#gancho").value || "auto");
   fd.append("instructions", $("#instructions").value);
   fd.append("remember", $("#remember").checked);
+  if ($("#plantilla").value) fd.append("plantilla", $("#plantilla").value);
   fd.append("mode", mode() === "vozclips" ? "voz" : mode());
   const bg = mode() === "camara" ? $("input[name=background]:checked").value : "";
   fd.append("background", bg === "foto" && !$("#bg-photo").files[0] ? "" : bg);
@@ -682,7 +684,7 @@ function poll(retries = 0) {
     }
     if (state.job?.id !== id) return;  // ya has empezado otro reel: este sondeo sobra
     state.job = j;
-    if (j.status === "working") { showWorking(j.step, j.progress); earlyReview(j); return poll(); }
+    if (j.status === "working") { showWorking(j.step, j.progress); earlyReview(j); earlyPreview(j); return poll(); }
     $("#early").hidden = true;
     if (j.status === "done" && await applyEarly(j)) return;
     if (j.status === "error") return showError(j.error);
@@ -971,9 +973,95 @@ async function loadLibrary() {
   $("#library").innerHTML = reels.map(r => `
     <div class="reel-card" data-open="${r.id}" role="button" tabindex="0">
       <img src="/api/jobs/${r.id}/reel.jpg" alt="" loading="lazy">
+      ${r.resultados?.views ? `<span class="res" title="Resultados anotados">👁 ${Number(r.resultados.views).toLocaleString("es-ES")}</span>` : ""}
       <button class="del" data-del="${r.id}" title="Borrar">✕</button>
       <div><strong>${esc(r.title || "Sin título")}</strong><span>${fmt(r.duration)} · ${new Date(r.created * 1000).toLocaleDateString("es-ES")}</span></div>
     </div>`).join("");
+  api("/api/resultados").then(renderLearned).catch(() => {});
+}
+// Aprende de tus resultados: con 3 o más reels anotados, lo que mejor te funciona.
+function renderLearned(ins) {
+  const box = $("#learned");
+  if (!ins || !ins.n) { box.hidden = true; return; }
+  box.hidden = false;
+  if (ins.lessons?.length) {
+    box.innerHTML = `<h4>Lo que aprendo de tus resultados <span class="meter">${ins.n} reels anotados</span></h4>
+      <ul>${ins.lessons.map(l => `<li>${esc(l)}</li>`).join("")}</ul>
+      <p class="hint">Imán ya lo tiene en cuenta al montar tus próximos reels. Cuantos más anotes, más afina.</p>`;
+  } else {
+    box.innerHTML = `<h4>Aprendiendo de tus resultados <span class="meter">${ins.n} de ${ins.needed} reels anotados</span></h4>
+      <p class="hint">${ins.n < ins.needed ? `Anota los resultados de ${ins.needed - ins.n} reel${ins.needed - ins.n > 1 ? "s" : ""} más (en el reel, «Anotar resultados») y te diré qué te funciona mejor.` : "Aún no veo una diferencia clara entre tus reels: sigue anotando y te lo diré en cuanto la haya."}</p>`;
+  }
+}
+// Tus propias plantillas: cómo quedó un reel, para montar los siguientes igual.
+async function loadTemplates() {
+  let list = [];
+  try { list = (await api("/api/plantillas")).plantillas || []; } catch { /* sin plantillas */ }
+  state.templates = list;
+  const sel = $("#plantilla");
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">Imán decide (sin plantilla)</option>` + list.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join("");
+  if (list.some(t => t.id === cur)) sel.value = cur;
+  $("#plantilla-row").hidden = !list.length;
+  templateHint();
+}
+function templateHint() {
+  const t = (state.templates || []).find(x => x.id === $("#plantilla").value);
+  $("#plantilla-hint").textContent = t ? t.resumen || "" : "";
+  $("#plantilla-del").hidden = !t;
+}
+$("#plantilla").onchange = templateHint;
+$("#plantilla-del").onclick = async () => {
+  const t = (state.templates || []).find(x => x.id === $("#plantilla").value);
+  if (!t || !confirm(`¿Borrar la plantilla «${t.name}»?`)) return;
+  await api(`/api/plantillas/${t.id}`, { method: "DELETE" });
+  $("#plantilla").value = "";
+  loadTemplates();
+};
+$("#template-save").onclick = async () => {
+  if (!state.job?.id) return;
+  const name = prompt("Nombre de la plantilla (por ejemplo «Mis reels de viajes»):", "");
+  if (name === null) return;
+  const msg = $("#template-msg");
+  try {
+    const r = await postJSON("/api/plantillas", { name, job_id: state.job.id });
+    msg.textContent = `Plantilla «${r.plantilla.name}» guardada: la tienes al subir el próximo vídeo.`;
+  } catch (err) { msg.textContent = err.message; }
+};
+// Anotar resultados de un reel.
+$("#results-open").onclick = () => {
+  if (!state.job?.id) return;
+  const form = $("#results-form");
+  form.reset();
+  const cur = state.job.resultados || {};
+  for (const el of form.elements) if (el.name && cur[el.name] != null) el.value = cur[el.name];
+  $("#results-msg").textContent = "";
+  $("#results").showModal();
+};
+$("#results-cancel").onclick = () => $("#results").close();
+$("#results-form").onsubmit = async e => {
+  e.preventDefault();
+  const body = {};
+  for (const el of $("#results-form").elements) if (el.name && el.value !== "") body[el.name] = el.value;
+  try {
+    const r = await postJSON(`/api/jobs/${state.job.id}/resultados`, body);
+    state.job.resultados = r.resultados;
+    $("#results").close();
+    const ins = r.insights || {};
+    $("#template-msg").textContent = ins.lessons?.length ? `Anotado. ${ins.lessons[0]}` :
+      `Anotado. ${ins.n < ins.needed ? `Con ${ins.needed - ins.n} reel${ins.needed - ins.n > 1 ? "s" : ""} más te diré qué te funciona mejor.` : "Sigo comparando tus reels."}`;
+  } catch (err) { $("#results-msg").textContent = err.message; }
+};
+// Vista previa al instante: tu vídeo ya cortado, en pequeño, mientras se monta el reel entero.
+function earlyPreview(j) {
+  if (!j.preview || j.result || j.mode !== "camara") return;
+  const v = $("#early-video");
+  const src = `/api/jobs/${j.id}/previa.mp4`;
+  if (v.dataset.job === j.id) return;
+  v.dataset.job = j.id;
+  v.src = src;
+  $("#early-preview").hidden = false;
+  $("#early").hidden = false;
 }
 $("#library").onkeydown = e => { if ((e.key === "Enter" || e.key === " ") && e.target.closest(".reel-card")) { e.preventDefault(); e.target.closest(".reel-card").click(); } };
 $("#library").onclick = async e => {
@@ -1122,6 +1210,8 @@ function setView(view) {
 }
 $("#view-tabs").onclick = e => { const b = e.target.closest("[data-view]"); if (b) setView(b.dataset.view); };
 function showResult(j) {
+  $("#template-msg").textContent = "";
+  $("#early-preview").hidden = true;
   const om = j.options && j.options.music;
   const used = om === "auto" ? ((j.result.plan || {}).music || "") : om === true ? "mia" : (om || "");
   if (used === "mia" && !$("#re-music option[value=mia]")) $("#re-music").insertAdjacentHTML("beforeend", `<option value="mia">Mi música</option>`);

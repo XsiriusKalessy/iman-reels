@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ai, brand, config, copystyle, effects, equipo, ganchos, jsonfile, license, media, musica, packs, pipeline, portable, redes, updates
+from . import ai, brand, config, copystyle, effects, equipo, ganchos, jsonfile, license, media, musica, packs, pipeline, plantillas, portable, redes, resultados, updates
 from . import captions as captions_mod
 from .captions import STYLES
 from .models import EditPlan, Word
@@ -202,7 +202,8 @@ def reels():
             continue
         r = job.get("result") or {}
         out.append({"id": job["id"], "created": job.get("created", 0), "title": (r.get("plan") or {}).get("hook_title", ""),
-                    "duration": r.get("duration_out", 0), "pack": (job.get("options") or {}).get("pack", "")})
+                    "duration": r.get("duration_out", 0), "pack": (job.get("options") or {}).get("pack", ""),
+                    "resultados": job.get("resultados") or {}})
     return {"reels": sorted(out, key=lambda r: -r["created"])}
 
 
@@ -431,6 +432,74 @@ def delete_memory(index: int):
         mem.pop(index)
         config.save({"memory": mem})
     return {"memory": mem}
+
+
+# --- Tus propias plantillas: cómo quedó un reel, para montar los siguientes igual ---
+@app.get("/api/plantillas")
+def list_templates():
+    return {"plantillas": plantillas.listar()}
+
+
+class TemplateIn(BaseModel):
+    name: str = ""
+    job_id: str = ""
+
+
+@app.post("/api/plantillas")
+def create_template(body: TemplateIn):
+    job = _job(body.job_id)
+    if not job or job.get("status") != "done" or not job.get("result"):
+        raise HTTPException(404, "Primero termina un reel: la plantilla se guarda a partir de uno hecho")
+    item = plantillas.crear(body.name, job.get("options") or {}, (job.get("result") or {}).get("plan") or {})
+    return {"plantilla": item, "plantillas": plantillas.listar()}
+
+
+@app.delete("/api/plantillas/{pid}")
+def delete_template(pid: str):
+    if not plantillas.borrar(pid):
+        raise HTTPException(404, "No encuentro esa plantilla")
+    return {"plantillas": plantillas.listar()}
+
+
+# --- Aprende de tus resultados: apunta cómo le fue a cada reel ---
+def _reels_with_results() -> list[dict]:
+    out = []
+    for f in JOBS_DIR.glob("*/job.json") if JOBS_DIR.exists() else []:
+        job = _job(f.parent.name)
+        if not job or job.get("status") != "done" or not job.get("resultados"):
+            continue
+        r = job.get("result") or {}
+        out.append({"id": job["id"], "title": (r.get("plan") or {}).get("hook_title", ""), "duration": r.get("duration_out", 0),
+                    "options": job.get("options") or {}, "plan": r.get("plan") or {}, "resultados": job["resultados"]})
+    return out
+
+
+@app.get("/api/resultados")
+def get_insights():
+    return resultados.insights(_reels_with_results())
+
+
+@app.post("/api/jobs/{job_id}/resultados")
+def set_results(job_id: str, body: dict):
+    job = _job(job_id)
+    if not job or job.get("status") != "done":
+        raise HTTPException(404, "No encuentro ese reel")
+    data = resultados.normalize(body if isinstance(body, dict) else {})
+    with _lock:
+        if data:
+            JOBS[job_id]["resultados"] = {**data, "updated": time.time()}
+        else:
+            JOBS[job_id].pop("resultados", None)
+        _save_job(JOBS[job_id])
+    return {"resultados": JOBS[job_id].get("resultados"), "insights": resultados.insights(_reels_with_results())}
+
+
+def _learned_prompt() -> str:
+    try:
+        return resultados.prompt(resultados.insights(_reels_with_results()))
+    except Exception:  # noqa: BLE001 - un job.json raro no puede parar un montaje
+        log.exception("No se pudo leer lo aprendido de los resultados")
+        return ""
 
 
 class LicenseIn(BaseModel):
@@ -774,6 +843,7 @@ async def create_job(
     red: str = Form("instagram"),
     comentario: str = Form(""),
     comentario_de: str = Form(""),
+    plantilla: str = Form(""),
 ):
     if (pack and pack not in packs.PACKS) or mode not in ("camara", "voz", "largo") \
             or background not in pipeline.BACKGROUNDS:
@@ -787,9 +857,23 @@ async def create_job(
     if remember and instructions.strip():
         config.remember(instructions)
         instructions = ""  # ya va en las preferencias guardadas
-    saved = config.memory_prompt(config.load())
+    saved = "\n\n".join(p for p in (config.memory_prompt(config.load()), _learned_prompt()) if p)
     if saved:
         instructions = f"{saved}\n\n{instructions}".strip()
+    if plantilla:
+        form = plantillas.apply({}, plantilla)
+        rhythm, style, fit, size = form.get("rhythm", rhythm), form.get("style", style), form.get("fit", fit), form.get("size", size)
+        hook, gancho, pack = bool(form.get("hook", hook)), form.get("gancho", gancho), form.get("pack", pack)
+        sfx, punch, barra = bool(form.get("sfx", sfx)), bool(form.get("punch", punch)), bool(form.get("barra", barra))
+        transiciones, look, letra, red = bool(form.get("transiciones", transiciones)), form.get("look", look), form.get("letra", letra), form.get("red", red)
+        if not background and mode == "camara":
+            background = form.get("background", "") if form.get("background", "") in pipeline.BACKGROUNDS else ""
+        if music_style == "auto" and music_file is None:
+            music_style = form.get("music", "auto") if form.get("music", "auto") != "mia" else "auto"
+        if pack and pack not in packs.PACKS:
+            pack = ""
+        if rhythm not in RHYTHMS or (style != "auto" and style not in STYLES) or size not in ("1080", "4k") or fit not in ("recortar", "fondo"):
+            raise HTTPException(400, "Esa plantilla tiene una opción que ya no existe: bórrala y guárdala de nuevo")
     job_id = uuid.uuid4().hex[:10]
     workdir = JOBS_DIR / job_id
     workdir.mkdir(parents=True, exist_ok=True)
@@ -1015,7 +1099,18 @@ def get_job(job_id: str):
     job = _job(job_id)
     if job is None:
         raise HTTPException(404, "No encuentro ese reel")
+    if job.get("status") == "working":
+        return {**job, "preview": (JOBS_DIR / job_id / "previa.mp4").exists()}
     return job
+
+
+@app.get("/api/jobs/{job_id}/previa.mp4")
+def get_preview(job_id: str):
+    """Vista previa al instante: tu vídeo ya con los cortes, pequeño, mientras Imán monta el reel entero."""
+    p = _dir(job_id) / "previa.mp4"
+    if not p.exists():
+        raise HTTPException(404)
+    return FileResponse(p, media_type="video/mp4")
 
 
 class PhraseIn(BaseModel):

@@ -434,6 +434,20 @@ def _sfx_events(active: list[dict], clock: effects.WordClock, hook: bool, beats:
     return sorted(events)
 
 
+def _preview_async(src: Path, workdir: Path, spans: list[tuple[float, float]]) -> None:
+    """Monta en segundo plano una versión pequeña y rápida solo con los cortes (previa.mp4). Si falla, no pasa
+    nada: el reel de verdad sigue su camino y la app simplemente no enseña la previa."""
+    import threading
+
+    def go():
+        try:
+            media.rough_cut(src, spans, workdir / "previa.mp4", width=480, crf=30, preset="ultrafast")
+        except Exception:  # noqa: BLE001
+            log.exception("No se pudo montar la vista previa")
+
+    threading.Thread(target=go, daemon=True).start()
+
+
 def run(
     src: Path,
     workdir: Path,
@@ -448,6 +462,7 @@ def run(
     if opts.style != "auto" and opts.style not in STYLES:
         opts.style = "auto"
     progress("Preparando tu vídeo", 0.03)
+    (workdir / "previa.mp4").unlink(missing_ok=True)  # la vista previa es de este montaje, no del anterior
     voice_only = opts.mode == "voz"
     notices = []
     if opts.ruido:
@@ -557,6 +572,8 @@ def run(
     # Los tramos que se quedan, para la pestaña «Sin silencios» (tu vídeo tal cual, solo con los cortes).
     jsonfile.save(workdir / "tramos.json", [[round(s.start, 3), round(s.end, 3)] for s in spans])
     (workdir / "sin-silencios.mp4").unlink(missing_ok=True)
+    if not voice_only:  # vista previa al instante: tu vídeo ya cortado, pequeño, mientras se monta el reel entero
+        _preview_async(src, workdir, [(s.start, s.end) for s in spans])
     out_duration = sum(s.duration for s in spans)
     if not plan.hook_title and kept:
         plan.hook_title = ai.fallback_hook(kept)
