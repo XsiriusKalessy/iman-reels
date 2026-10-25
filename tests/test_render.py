@@ -4,6 +4,7 @@ import json
 import shutil
 import subprocess
 import time
+from pathlib import Path
 
 import pytest
 
@@ -1207,3 +1208,30 @@ def test_whatsapp_light_video(sample, tmp_path, monkeypatch):
     p.write_bytes(r.content)
     assert media.probe(p).width == 720
     assert c.get("/api/jobs/..%2F/whatsapp.mp4").status_code == 404
+
+
+def test_brand_phrases_and_preset_import(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from iman import brand, config, effects, portable, server
+    from iman.captions import STYLES
+
+    monkeypatch.setattr(config, "HOME", tmp_path / "home")
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    c = TestClient(server.app)
+    c.post("/api/brand", json={"primary": "#123456", "font": "", "cta": "Reserva por WhatsApp"})
+    r = c.post("/api/brand", json={"company": "Mi Empresa, S.L.", "phrases": [
+        {"kind": "eslogan", "text": "  Sigue a la estrella. ", "where": "cierre"}, {"kind": "raro", "text": "Otra frase"},
+        {"kind": "promesa", "text": " "}]}).json()
+    assert r["company"] == "Mi Empresa, S.L." and r["phrases"] == [
+        {"kind": "eslogan", "text": "Sigue a la estrella.", "where": "cierre"}, {"kind": "otra", "text": "Otra frase", "where": ""}]
+    b = brand.load()
+    assert "Sigue a la estrella" in b.phrases_prompt()
+    lines, _ = effects.end_card_events(b, STYLES["impacto"], 20.0)
+    assert any("Sigue a la estrella." in ln for ln in lines)
+    # El archivo de marca de Xsirius se suma a lo que ya tienes (tu llamada a la acción se queda).
+    preset = Path(__file__).parent / "fixtures" / "marca-viajes-xsirius.iman"
+    got = portable.import_(preset.read_bytes())
+    b = brand.load()
+    assert got["marca"] and b.name == "Viajes Xsirius" and b.primary == "#E5C24D" and b.cta == "Reserva por WhatsApp"
+    assert b.phrase("actitud") == "No vendemos viajes. Te quitamos las excusas." and b.company == "TRAVEL ELENELS, S.L.U."

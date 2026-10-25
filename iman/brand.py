@@ -92,6 +92,19 @@ class Brand:
     logo_corner: bool = True  # logo pequeño arriba a la derecha todo el reel
     end_card: bool = True  # cierre con logo y llamada a la acción
     palette: list[str] = field(default_factory=list)  # colores sacados del logo, para elegir
+    company: str = ""  # razón social (datos fijos de la empresa)
+    # Frases de marca: [{"kind": "eslogan" | "promesa" | "cta" | "actitud" | "otra", "text": …, "where": …}].
+    # La IA las usa en los textos y el eslogan sale en el cierre del reel.
+    phrases: list[dict] = field(default_factory=list)
+
+    def phrase(self, kind: str) -> str:
+        return next((p.get("text", "") for p in self.phrases if p.get("kind") == kind and p.get("text")), "")
+
+    def phrases_prompt(self) -> str:
+        """Las frases de marca para la IA: cuál es cada una y dónde se usa."""
+        rows = [f"- {p.get('kind', 'otra')}: «{p['text']}»" + (f" (se usa en: {p['where']})" if p.get("where") else "")
+                for p in self.phrases if p.get("text")]
+        return "FRASES DE MARCA (úsalas tal cual cuando encajen, sin forzarlas):\n" + "\n".join(rows) if rows else ""
 
     @property
     def active(self) -> bool:
@@ -113,6 +126,20 @@ def load() -> Brand:
         return Brand()
     data = json.loads(f.read_text(encoding="utf-8"))
     return Brand(**{k: v for k, v in data.items() if k in Brand.__dataclass_fields__})
+
+
+PHRASE_KINDS = {"eslogan": "Eslogan", "promesa": "Promesa", "cta": "Llamada a la acción", "actitud": "Actitud",
+                "otra": "Otra"}
+
+
+def clean_phrases(raw) -> list[dict]:
+    out = []
+    for p in raw or []:
+        text = " ".join(str(p.get("text", "")).split())[:160]
+        if text:
+            kind = p.get("kind") if p.get("kind") in PHRASE_KINDS else "otra"
+            out.append({"kind": kind, "text": text, "where": " ".join(str(p.get("where", "")).split())[:200]})
+    return out[:12]
 
 
 def save(b: Brand) -> Brand:

@@ -355,6 +355,8 @@ def get_brand():
 class BrandIn(BaseModel):
     name: str | None = None
     description: str | None = Field(None, max_length=300)
+    company: str | None = Field(None, max_length=120)
+    phrases: list[dict] | None = None
     primary: str | None = None
     secondary: str | None = None
     font: str | None = None
@@ -378,6 +380,8 @@ def set_brand(body: BrandIn):
             raise HTTPException(400, "Sector no válido")
         if k == "font" and v and v not in brand.fonts():
             raise HTTPException(400, "Fuente no válida")
+        if k == "phrases":
+            v = brand.clean_phrases(v)
         setattr(b, k, v.strip() if isinstance(v, str) else v)
     return _brand_out(brand.save(b))
 
@@ -889,7 +893,7 @@ def post_copy(job_id: str, nuevo: bool = False):
     try:
         data = ai.post_copy(aicfg, " ".join(w.text for w in words), job["result"]["plan"].get("hook_title", ""),
                             job["options"].get("pack", "") or b.sector, b.cta, b.handle, b.description, b.contact,
-                            b.name)
+                            b.name, b.phrases_prompt())
     except Exception as e:
         raise HTTPException(502, f"La IA no ha podido escribir el texto: {e}")
     cached.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")

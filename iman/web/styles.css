@@ -438,3 +438,8 @@ select option:checked { background-color: var(--accent); color: var(--accent-ink
 .from-comment textarea { width: 100%; }
 .file-pick { cursor: pointer; align-self: end; }
 #comment-out .script { white-space: normal; }
+.phrases { display: grid; gap: 6px; margin: 6px 0; }
+.phrase-row { display: grid; grid-template-columns: 130px 1fr; gap: 6px; align-items: center; }
+.phrase-row .ph-where { grid-column: 1 / 2; grid-row: 2; font-size: 12px; }
+.phrase-row .ph-where { grid-column: 2; }
+.phrase-row .ph-del { grid-column: 1; grid-row: 2; justify-self: start; }

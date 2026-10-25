@@ -9,6 +9,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from dataclasses import asdict
 
 from . import brand, config, license
 
@@ -56,7 +57,10 @@ def import_(raw: bytes) -> dict:
     names = set(z.namelist())
     if "marca/brand.json" in names:
         info = json.loads(z.read("marca/brand.json"))
-        brand.save(brand.Brand(**{k: v for k, v in info.items() if k in brand.Brand.__dataclass_fields__}))
+        # Se suma a tu marca: lo que trae el archivo manda, y lo que no trae (tu fuente, tu logo…) se queda.
+        mine = asdict(brand.load())
+        info = {**mine, **{k: v for k, v in info.items() if v not in ("", None, []) and k in mine}}
+        brand.save(brand.Brand(**info))
         got["marca"] = True
     if "marca/logo.png" in names:
         brand.set_logo(z.read("marca/logo.png"))  # vuelve a pasar por Pillow: solo entra una imagen de verdad

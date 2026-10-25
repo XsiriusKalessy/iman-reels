@@ -1002,7 +1002,8 @@ function renderBrand(b) {
   renderToday();
   renderInstrIdeas();
   const f = brandForm;
-  for (const k of ["name", "cta", "contact", "handle", "description"]) f[k].value = b[k] || "";
+  for (const k of ["name", "cta", "contact", "handle", "description", "company"]) f[k].value = b[k] || "";
+  renderPhrases(b.phrases || []);
   f.primary.value = b.primary || "#FF5547"; f.secondary.value = b.secondary || "#141518";
   f.logo_corner.checked = b.logo_corner; f.end_card.checked = b.end_card;
   f.sector.value = b.sector || "general";
@@ -1113,7 +1114,7 @@ $("#font-file").onchange = async e => {
 $("#font-remove").onclick = async () => renderBrand(await api("/api/brand/font", { method: "DELETE" }));
 function brandBody() {
   const f = brandForm;
-  return { name: f.name.value, description: f.description.value.trim(), cta: f.cta.value, contact: f.contact.value, handle: f.handle.value,
+  return { name: f.name.value, description: f.description.value.trim(), company: f.company.value.trim(), phrases: readPhrases(), cta: f.cta.value, contact: f.contact.value, handle: f.handle.value,
     primary: f.primary.value.toUpperCase(), secondary: f.secondary.value.toUpperCase(),
     font: f.querySelector("input[name=font]:checked")?.value || "", sector: f.sector.value === "general" ? "" : f.sector.value,
     logo_corner: f.logo_corner.checked, end_card: f.end_card.checked };
@@ -1300,3 +1301,21 @@ document.addEventListener("click", async e => {
     go("upload");
   }
 });
+
+// Frases de marca: eslogan, promesa, llamada a la acción, actitud…
+const PHRASE_KINDS = { eslogan: "Eslogan", promesa: "Promesa", cta: "Llamada a la acción", actitud: "Actitud", otra: "Otra" };
+function phraseRow(p = {}) {
+  return `<div class="phrase-row">
+    <select aria-label="Tipo">${Object.entries(PHRASE_KINDS).map(([k, v]) => `<option value="${k}" ${k === (p.kind || "eslogan") ? "selected" : ""}>${v}</option>`).join("")}</select>
+    <input class="ph-text" maxlength="160" placeholder="La frase" value="${esc(p.text || "")}">
+    <input class="ph-where" maxlength="200" placeholder="Dónde va (opcional)" value="${esc(p.where || "")}">
+    <button type="button" class="link ph-del" aria-label="Quitar">✕</button></div>`;
+}
+function renderPhrases(list) { $("#phrases").innerHTML = list.map(phraseRow).join(""); }
+function readPhrases() {
+  return [...document.querySelectorAll("#phrases .phrase-row")].map(r => ({
+    kind: r.querySelector("select").value, text: r.querySelector(".ph-text").value.trim(), where: r.querySelector(".ph-where").value.trim(),
+  })).filter(p => p.text);
+}
+$("#phrase-add").onclick = () => $("#phrases").insertAdjacentHTML("beforeend", phraseRow({ kind: readPhrases().length ? "otra" : "eslogan" }));
+$("#phrases").onclick = e => { if (e.target.closest(".ph-del")) e.target.closest(".phrase-row").remove(); };

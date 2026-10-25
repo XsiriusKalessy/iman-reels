@@ -431,6 +431,8 @@ def run(
         plan = EditPlan()
         try:
             wants = opts.instructions
+            if opts.brand and brand.load().phrases_prompt():  # el "cta" y los titulares pueden usar tus frases
+                wants = f"{wants}\n\n{brand.load().phrases_prompt()}".strip()
             if cfg.get("pexels_key") and not voice_only:
                 wants = f"{wants}\n\n{PEXELS_NOTE}".strip()
             if redes.get(opts.red).note:

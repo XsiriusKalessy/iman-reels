@@ -654,13 +654,13 @@ def _tags(raw) -> list[str]:
 
 
 def post_copy(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "", cta: str = "", handle: str = "",
-              business: str = "", contact: str = "", name: str = "") -> dict:
+              business: str = "", contact: str = "", name: str = "", phrases: str = "") -> dict:
     if cfg.provider == "iman":
         from . import cloud
 
         data = cloud.call(cfg, "post", {"transcript": transcript[:6000], "hook": hook, "pack": pack,
                                         "cta": cta, "handle": handle, "business": business, "contact": contact,
-                                        "name": name})
+                                        "name": name, "phrases": phrases})
     else:
         user = f"LO QUE DICE EL VÍDEO:\n{transcript[:6000]}\n\nTítulo en pantalla: {hook}"
         if name or business:
@@ -673,6 +673,8 @@ def post_copy(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "", ct
             user += f"\nContacto (web, WhatsApp o teléfono): {contact}"
         if handle:
             user += f"\nCuenta: {handle}"
+        if phrases:
+            user += f"\n\n{phrases}"
         data = _ask_json(cfg, POST_SYSTEM, user, POST_SCHEMA)
     if "caption" in data and "instagram" not in data:  # servidor antiguo: un solo texto
         data = {"instagram": {"text": data["caption"], "hashtags": data.get("hashtags", [])}}

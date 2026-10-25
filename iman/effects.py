@@ -1045,4 +1045,8 @@ def end_card_events(brand, style: Style, duration: float) -> tuple[list[str], Wi
             lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an8\\pos(540,{y:.0f})\\fnFigtree SemiBold\\fs52\\bord0\\shad0"
                          f"\\c{ink}&\\alpha&H30&\\fad(500,0)}}{_esc(txt)}")
             y += 72
+    slogan = brand.phrase("eslogan") if hasattr(brand, "phrase") else ""
+    if slogan:  # el eslogan, abajo y en cursiva, como firma
+        lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an2\\pos(540,1560)\\fnPlayfair Display ExtraBold\\i1\\fs58"
+                     f"\\bord0\\shad0\\c{ink}&\\fad(700,0)}}{_esc(slogan[:60])}")
     return lines, Window(start, end)

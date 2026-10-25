@@ -153,13 +153,14 @@ class PostIn(BaseModel):
     business: str = Field("", max_length=300)
     contact: str = Field("", max_length=60)
     name: str = Field("", max_length=60)
+    phrases: str = Field("", max_length=3000)
 
 
 @app.post("/v1/post")
 def post(request: Request, body: PostIn, x_iman_license: str = Header(""), x_iman_instance: str = Header("")):
     _check(x_iman_license, x_iman_instance, request)
     return ai.post_copy(_cfg(), body.transcript, body.hook, body.pack, body.cta, body.handle, body.business,
-                        body.contact, body.name)
+                        body.contact, body.name, body.phrases)
 
 
 class KitIn(BaseModel):
