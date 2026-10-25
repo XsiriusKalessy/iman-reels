@@ -847,7 +847,7 @@ def lluvia_events(effect: dict, clock: WordClock, style: Style, duration: float,
                "billetes": [rgb("#7FC79A"), rgb("#9AD4A9"), rgb("#6BB585")],
                "corazones": [rgb("#FF3B5C"), rgb("#FF6F91"), acc],
                "estrellas": [rgb("#F5D90A"), rgb("#FFE45C"), CREAM]}[kind]
-    count = {"confeti": 90, "billetes": 34, "corazones": 46, "estrellas": 50}[kind]
+    count = {"confeti": 130, "billetes": 34, "corazones": 46, "estrellas": 50}[kind]
     rng = random.Random(zlib.crc32(f"{kind}{start:.2f}".encode()))  # las mismas piezas en cada render
     span_ms = (end - start) * 1000
     lines = []
@@ -865,7 +865,7 @@ def lluvia_events(effect: dict, clock: WordClock, style: Style, duration: float,
         b = min(end + 0.6, a + fall / 1000)
         ms = int((b - a) * 1000)
         if kind == "confeti":
-            w, h = rng.randint(16, 26), rng.randint(9, 14)
+            w, h = rng.randint(30, 46), rng.randint(16, 24)
             shape = _rect(0, 0, w, h, 2)
         elif kind == "billetes":
             shape = _rect(0, 0, 150, 70, 6)

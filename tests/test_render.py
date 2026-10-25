@@ -926,3 +926,31 @@ def test_rain_falls_in_front_and_behind_the_person():
         assert effects.behind_events([fx], clock, STYLES["impacto"], 10.0) == []
     assert packfx._lluvia_kind("lluvia de dinero") == "billetes" and packfx._lluvia_kind("") == "confeti"
     assert "lluvia" in effects.SEG_KINDS
+
+
+def test_support_photos_move_in_2_5d(tmp_path, monkeypatch):
+    from PIL import Image, ImageDraw
+
+    from iman import config, effects, paralaje
+    from iman.effects import WordClock
+    from iman.models import Word
+
+    photo = tmp_path / "paisaje.jpg"
+    im = Image.new("RGB", (1600, 1000), (120, 170, 230))
+    d = ImageDraw.Draw(im)
+    for x in range(0, 1600, 80):  # rayas para que se note el movimiento
+        d.rectangle((x, 500, x + 40, 1000), fill=(40, 120, 60))
+    im.save(photo)
+    frames = list(paralaje.frames(Image.open(photo), 0.5))
+    assert len(frames) == 15 and frames[0].size == (1080, 1920)
+    import numpy as np
+
+    first, last = np.asarray(frames[0], np.float32), np.asarray(frames[-1], np.float32)
+    # Abajo (cerca) se mueve más que arriba (lejos).
+    assert np.abs(first[1500:] - last[1500:]).mean() > np.abs(first[200:600] - last[200:600]).mean()
+    monkeypatch.setattr(config, "HOME", tmp_path / "home")
+    words = [Word(f"w{i}", i * 0.4, i * 0.4 + 0.3) for i in range(20)]
+    ops = effects.video_ops([{"type": "apoyo", "word": 2, "until_word": 8, "text": "1"}],
+                            WordClock(words, list(range(20))), 8.0, assets={"1": str(photo)})
+    assert len(ops) == 1 and ops[0].path.endswith(".mp4") and ops[0].ramp is False
+    assert abs(media.probe(type(photo)(ops[0].path)).duration - (ops[0].end - ops[0].start)) < 0.1

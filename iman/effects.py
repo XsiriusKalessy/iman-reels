@@ -849,6 +849,16 @@ def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=Non
             if not png:
                 continue
             path = str(png)
+        if kind == "apoyo" and path.lower().endswith(MEDIA_EXT[4:]):
+            # Foto de apoyo: en 2.5D (te recorta y mueve las capas, o da volumen a un paisaje).
+            from . import paralaje
+
+            try:
+                ops.append(VideoOp("apoyo", span[0], span[1], path=str(paralaje.cached(path, span[1] - span[0])),
+                                   ramp=False))
+                continue
+            except Exception:  # noqa: BLE001 - si falla, la foto entra con el zoom lento de siempre
+                pass
         ops.append(VideoOp("apoyo" if kind == "pexels" else kind, span[0], span[1], max(0.0, src - 0.5), path=path))
     return ops
 
