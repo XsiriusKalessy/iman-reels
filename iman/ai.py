@@ -17,11 +17,11 @@ OPENAI_MODEL = "gpt-4o"
 EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "color", "comentario",
                 "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                 "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque", "aparece",
-                "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas", "particulas", "bloques", "pexels", "lluvia"]
+                "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas", "particulas", "bloques", "pexels", "lluvia", "capitulo"]
 FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
                    "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                    "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque",
-                   "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas", "particulas", "bloques", "pexels", "lluvia")
+                   "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas", "particulas", "bloques", "pexels", "lluvia", "capitulo")
 LISTA_LOOKS = ("checklist", "capitulos", "itinerario")
 TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
@@ -235,6 +235,9 @@ Tu trabajo:
    - "bloques": de 2 a 4 bloques de texto apilados que se resaltan uno a uno mientras los dice, como un carrusel
      de ideas (text: los bloques separados por "|", cada uno de hasta 8 palabras, con sus palabras;
      title: opcional, 2 a 4 palabras). Mejor que "lista" cuando son ideas o frases, no pasos cortos.
+   - "capitulo": pantalla de capítulo al empezar cada parte de un vídeo explicativo, con número y título (text:
+     el título de la parte en 1 a 4 palabras; subtitle: vacío, se numeran solos). Sobre todo en YouTube Shorts
+     y vídeos largos: de 2 a 5 capítulos, el primero tras el gancho.
    - "lluvia": lluvia de cosas que caen delante y detrás del creador para celebrar (text: "confeti", "billetes",
      "corazones" o "estrellas"): un logro, una venta, una oferta, "¡lo conseguimos!", hablar de dinero o de amor.
      Como mucho una vez por reel.

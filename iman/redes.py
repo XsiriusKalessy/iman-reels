@@ -35,7 +35,7 @@ llamadas tipo "link en la bio": en TikTok, mejor "sígueme para la parte 2" o un
         caption_y=1240, loop=True),
     Red("youtube", "YouTube Shorts", "Tres ganchos para probar, capítulos y cierre para suscribirse",
         """PERFIL YOUTUBE SHORTS. Propón en "hook_options" tres ganchos distintos (cifra, problema y curiosidad)
-para que el creador los pruebe. Si el vídeo tiene partes claras, usa "lista" con look "capitulos". Si al final
+para que el creador los pruebe. Si el vídeo tiene partes claras, usa "capitulo" al empezar cada una (de 2 a 5). Si al final
 invita a algo, que sea a suscribirse o a ver el vídeo largo.""", caption_y=1300),
     Red("anuncio", "Anuncio", "Estilo UGC y VSL: casero, creíble y con llamada a la acción",
         """PERFIL ANUNCIO (UGC / VSL). Tiene que parecer un vídeo grabado por una persona real, no un anuncio:

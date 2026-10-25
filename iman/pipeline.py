@@ -437,6 +437,9 @@ def run(
         plan = EditPlan()
     if opts.hook_title:
         plan.hook_title = opts.hook_title
+    chapters = sorted((fx for fx in plan.effects if fx.get("type") == "capitulo"), key=lambda fx: int(fx.get("word", 0)))
+    for k, fx in enumerate(chapters, 1):  # capítulos numerados en orden
+        fx["_n"] = k
     if opts.red == "anuncio":  # estilo casero: fuera los efectos más llamativos
         plan.effects = [fx for fx in plan.effects if fx.get("type") not in redes.ANUNCIO_FUERA]
 

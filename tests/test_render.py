@@ -1076,3 +1076,23 @@ def test_ad_versions_with_other_hooks_and_ctas(sample, tmp_path, monkeypatch):
     assert "Gancho B" in zipfile.ZipFile(p).read("versiones.txt").decode()
     # El reel original sigue ahí.
     assert c.get(f"/api/jobs/{job['id']}/reel.mp4").status_code == 200
+
+
+def test_chapter_screen_numbers_itself(sample, tmp_path):
+    from iman import packfx
+    from iman.captions import STYLES
+    from iman.effects import WordClock
+    from iman.models import EditPlan, Word
+
+    words = [Word(f"w{i}", i * 0.4, i * 0.4 + 0.3) for i in range(20)]
+    clock = WordClock(words, list(range(20)))
+    lines, win = packfx.capitulo_events({"type": "capitulo", "word": 3, "text": "El presupuesto", "_n": 2}, clock,
+                                        STYLES["impacto"], 8.0)
+    assert win and any("02" in ln for ln in lines) and any("EL PRESUPUESTO" in ln for ln in lines)
+    cfg = {"provider": "none", "anthropic_key": "", "openai_key": "", "claude_model": "", "openai_model": ""}
+    fx = [{"type": "capitulo", "word": 12, "text": "Segunda parte"}, {"type": "capitulo", "word": 4, "text": "Primera"}]
+    res = pipeline.run(sample, tmp_path / "w", pipeline.EditOptions(rhythm="sin_tocar", red="youtube"), cfg,
+                       words=TAKE, plan=EditPlan(effects=fx))
+    assert sorted((f["_n"], f["text"]) for f in res.plan.effects) == [(1, "Primera"), (2, "Segunda parte")]
+    ass = (tmp_path / "w" / "subs.ass").read_text(encoding="utf-8")
+    assert "SEGUNDA PARTE" in ass and "}01" in ass

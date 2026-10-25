@@ -889,7 +889,44 @@ def lluvia_events(effect: dict, clock: WordClock, style: Style, duration: float,
     return lines, Window(start, end)
 
 
+def capitulo_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
+    """Pantalla de capítulo (perfil YouTube): una franja del color de la marca entra barriendo, con el número
+    del capítulo y su título; suena un whoosh. Separa las partes de un vídeo explicativo."""
+    title = " ".join(str(effect.get("text", "")).split())[:34]
+    if not title:
+        return [], None
+    span = _span(effect, clock, duration, 1.5, 1.0)
+    if not span:
+        return [], None
+    start, end = span
+    acc = _accent(style)
+    ink = INK if _light(acc) else CREAM
+    n = str(effect.get("subtitle", "")).strip() or str(effect.get("_n", ""))
+    num = f"{int(n):02d}" if n.isdigit() else n[:6]
+    t = f"{_ts(start)},{_ts(end)}"
+    ms = int((end - start) * 1000)
+    font = "Anton"
+    size = textfit.fit(title.upper(), font, 170, 900, 70)
+    y = 760
+    band_h = size + 110
+    lines = [_dim(start, end, "50"),
+             # Franja que barre de izquierda a derecha y, al final, se va por la derecha.
+             f"Dialogue: 5,{t},Sub,,0,0,0,,{{\\an4\\pos(0,{y:.0f})\\bord0\\shad0\\1c{acc}&\\fscx0"
+             f"\\t(0,260,0.5,\\fscx100)\\fad(0,160)\\p1}}{_rect(0, 0, W, band_h, 0)}"]
+    if num:
+        lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an1\\pos(80,{y - band_h / 2 - 10:.0f})\\fn{font}\\fs150"
+                     f"\\bord5\\3c{acc}&\\1c&H00FFFFFF&\\1a&HFF&\\shad0\\alpha&HFF&\\t(120,300,\\alpha&H00&)"
+                     f"\\fad(0,160)}}{_esc(num)}")
+        lines.append(f"Dialogue: 6,{t},Sub,,0,0,0,,{{\\an1\\pos(80,{y - band_h / 2 - 10:.0f})\\fn{font}\\fs150"
+                     f"\\bord0\\shad0\\c{acc}&\\alpha&HFF&\\t(120,300,\\alpha&HA0&)\\fad(0,160)}}{_esc(num)}")
+    lines.append(f"Dialogue: 7,{t},Sub,,0,0,0,,{{\\an4\\move(140,{y:.0f},80,{y:.0f},180,{min(ms, 700)})\\fn{font}"
+                 f"\\fs{size:.0f}\\bord0\\shad0\\c{ink}&\\alpha&HFF&\\t(180,320,\\alpha&H00&)\\fad(0,160)}}"
+                 f"{_esc(title.upper())}")
+    return lines, Window(start, end)
+
+
 PACK_BUILDERS = {
+    "capitulo": capitulo_events,
     "lluvia": lluvia_events,
     "particulas": particulas_events,
     "bloques": bloques_events,
