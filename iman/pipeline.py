@@ -335,7 +335,7 @@ def _fixes(dur_in: float, dur_out: float, drops, beats, active: list[dict], cloc
     names = {"anillo": "Anillo", "lluvia": "Lluvia", "detras": "Detrás de ti", "fondo": "Fondo", "desenfoque": "Desenfoque",
              "bruto": "Toma en bruto", "pagina": "Página", "viaje": "Itinerario", "titular": "Titular", "cifra": "Cifra",
              "bocadillo": "Bocadillo", "hueca": "Palabra hueca", "marco": "Marco", "lista": "Lista", "paso": "Paso",
-             "progreso": "Barra de progreso", "congelado": "Congelado"}
+             "progreso": "Barra de progreso", "congelado": "Congelado", "moviles": "Móviles", "mosaico": "Mosaico"}
     defaults = {**{k: v[0] for k, v in effects.SEG_KINDS.items()}, **{k: v[0] for k, v in effects.VIDEO_KINDS.items()}}
     for fx in active:
         start, nxt = clock.at(effects.word_of(fx)), fx.get("_next")
@@ -639,7 +639,7 @@ def run(
                                      lambda t: _source_time(spans, t), assets, style.accent)
     overlays += effects.brand_ops(kit, total)
     clock = effects.WordClock(kept, kept_idx)
-    segs = effects.seg_ops(active, clock, out_duration) if opts.effects else []
+    segs = effects.seg_ops(active, clock, out_duration, {str(i + 1): str(p) for i, p in enumerate(clips)}) if opts.effects else []
     whole = _background_op(opts, workdir, kit, out_duration) if opts.mode == "camara" else None
     if whole:
         segs = [whole, *segs]  # va primero: los efectos de fondo del plan se pintan encima

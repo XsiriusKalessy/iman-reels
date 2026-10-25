@@ -16,7 +16,7 @@ MIN_CORES = 4  # con 4 hilos o menos, mejor ligero
 MIN_RAM_GB = 8
 
 # Efectos que recortan o siguen a la persona en cada fotograma, o que dibujan en 3D: lo más pesado.
-HEAVY_EFFECTS = {"detras", "fondo", "desenfoque", "anillo", "lluvia", "texto3d", "particulas", "etiqueta"}
+HEAVY_EFFECTS = {"detras", "fondo", "desenfoque", "anillo", "lluvia", "texto3d", "particulas", "etiqueta", "mosaico"}
 
 
 def ram_gb() -> float:

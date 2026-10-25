@@ -180,6 +180,26 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx
                 f"rotate=-0.07:c=none:ow=rotw(-0.07):oh=roth(-0.07)[ov{k}]"
             )
             parts.append(f"{cur}[ov{k}]overlay=x={int(600 * k_scale)}:y={int(330 * k_scale)}:{on}:eof_action=pass[o{k}]")
+        elif op.kind == "moviles" and images and all((id(op), i) in images for i in range(len(op.paths))):
+            # Tus clips en marcos de móvil, en fila sobre tu cabeza: entran subiendo uno tras otro, un pelín girados.
+            n = len(op.paths)
+            pw, ph = int(250 * k_scale) // 2 * 2, int(500 * k_scale) // 2 * 2
+            brd = int(14 * k_scale)
+            fw, fh = pw + 2 * brd, ph + 2 * brd
+            gap = int(36 * k_scale)
+            x0 = (W - (n * fw + (n - 1) * gap)) // 2
+            top = int(200 * k_scale)
+            d = b - a
+            for i in range(n):
+                parts.append(f"{images[(id(op), i)]}fps=30,trim=duration={d + 0.1:.3f},setpts=PTS-STARTPTS+{a:.3f}/TB,"
+                             f"scale={pw}:{ph}:force_original_aspect_ratio=increase,crop={pw}:{ph},setsar=1,"
+                             f"pad={fw}:{fh}:{brd}:{brd}:0x14151A,format=rgba,"
+                             f"rotate={(-0.05, 0.0, 0.05)[i % 3] if n == 3 else (-0.04, 0.04)[i % 2]}:c=none:ow=rotw(0.06):oh=roth(0.06),"
+                             f"fade=t=in:st={a + 0.18 * i:.3f}:d=0.2:alpha=1,fade=t=out:st={b - 0.2:.3f}:d=0.2:alpha=1[mv{k}_{i}]")
+                y = f"{top}+{int(90 * k_scale)}*pow(max(0,1-(t-{a + 0.18 * i:.3f})/0.35),3)"
+                parts.append(f"{cur}[mv{k}_{i}]overlay=x={x0 + i * (fw + gap)}:y='{y}':{on}:eof_action=pass[mo{k}_{i}]")
+                cur = f"[mo{k}_{i}]"
+            parts.append(f"{cur}null[o{k}]")
         elif op.kind == "congelado":
             # El primer fotograma del tramo se queda quieto (el título entra encima) y el vídeo arranca de golpe.
             parts.append(f"{cur}split[m{k}][fz{k}]")
@@ -306,7 +326,14 @@ def _image_inputs(ops: list, first_index: int) -> tuple[list[str], dict]:
         if op.path:
             labels[id(op)] = f"[{first_index + len(labels)}:v]"
             args += ["-i", op.path]
+        for i, path in enumerate(getattr(op, "paths", ()) or ()):  # varios clips (móviles): uno por entrada
+            labels[(id(op), i)] = f"[{first_index + len(labels)}:v]"
+            args += ["-stream_loop", "-1", "-i", path] if not _is_still(path) else ["-loop", "1", "-i", path]
     return args, labels
+
+
+def _is_still(path: str) -> bool:
+    return Path(path).suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")
 
 
 def _hush(hush: list[tuple[float, float]] | None) -> str:
@@ -498,6 +525,9 @@ def composite(
         if op.kind == "foto" and op.path:
             photos[id(op)] = f"[{3 + len(images) + len(photos)}:v]"
             extra += ["-loop", "1", "-i", op.path]
+        for i, path in enumerate(getattr(op, "paths", ()) or ()):  # clips del mosaico de detrás
+            photos[(id(op), i)] = f"[{3 + len(images) + len(photos)}:v]"
+            extra += (["-loop", "1", "-i", path] if _is_still(path) else ["-stream_loop", "-1", "-i", path])
     for k, op in enumerate(seg_ops):
         a, b = op.start, op.end
         on = f"enable='between(t,{a:.3f},{b:.3f})'"
@@ -508,6 +538,27 @@ def composite(
             parts.append(f"{photos[id(op)]}scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,"
                          f"fps=30,trim=duration={b - a:.3f},setpts=PTS-STARTPTS+{a:.3f}/TB,format=yuv420p[ph{k}]")
             parts.append(f"{cur}[ph{k}]overlay=0:0:{on}:eof_action=pass[b{k}]")
+        elif op.kind == "mosaico" and op.paths and all((id(op), i) in photos for i in range(len(op.paths))):
+            # Mosaico de tus reels antiguos detrás de ti: 3×3 azulejos, oscurecidos para que tú sigas delante.
+            cols, rows = 3, 3
+            tw, th = W // cols // 2 * 2, H // rows // 2 * 2
+            n = len(op.paths)
+            uses = [len(range(i, cols * rows, n)) for i in range(n)]  # cuántos azulejos usa cada clip
+            for i in range(n):
+                outs = "".join(f"[mi{k}_{i}_{u}]" for u in range(uses[i]))
+                parts.append(f"{photos[(id(op), i)]}fps=30,trim=duration={b - a + 0.1 + 0.9 * uses[i]:.3f},setpts=PTS-STARTPTS,"
+                             f"scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th},setsar=1,split={uses[i]}{outs}")
+            tiles = []
+            for j in range(cols * rows):
+                i, u = j % n, j // n
+                off = 0.9 * u  # el mismo clip repetido, con desfase para que no se vea calcado
+                parts.append(f"[mi{k}_{i}_{u}]trim=start={off:.3f},setpts=PTS-STARTPTS[mz{k}_{j}]")
+                tiles.append(f"[mz{k}_{j}]")
+            layout = "|".join(f"{(j % cols) * tw}_{(j // cols) * th}" for j in range(cols * rows))
+            parts.append(f"{''.join(tiles)}xstack=inputs={cols * rows}:layout={layout}:fill=black,"
+                         f"scale={W}:{H},eq=brightness=-0.12:saturation=0.85,gblur=sigma=1.2,"
+                         f"setpts=PTS+{a:.3f}/TB,format=yuv420p[ms{k}]")
+            parts.append(f"{cur}[ms{k}]overlay=0:0:{on}:eof_action=pass[b{k}]")
         elif op.kind == "desenfoque":
             parts.append(f"{cur}split[x{k}][y{k}]")
             parts.append(f"[y{k}]boxblur=22:2,eq=brightness=-0.04[yb{k}]")
@@ -526,7 +577,7 @@ def composite(
     parts.append("[sb]lut=y=val*0.55[sx]")
     parts.append("[sk]format=yuv420p[skc]")
     parts.append("[skc][sx]alphamerge[shadow]")
-    swap = [o for o in seg_ops if o.kind in ("fondo", "foto", "desenfoque")]
+    swap = [o for o in seg_ops if o.kind in ("fondo", "foto", "desenfoque", "mosaico")]
     when = "+".join(f"between(t,{o.start:.3f},{o.end:.3f})" for o in swap) or "0"
     parts.append(f"{cur}[shadow]overlay={int(18 * W / 1080)}:{int(26 * W / 1080)}:enable='{when}'[sh]")
     parts.append("[fg][mk]alphamerge[person]")

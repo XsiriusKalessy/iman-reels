@@ -48,6 +48,7 @@ class VideoOp:
     path: str = ""  # imagen que se superpone (logo)
     color: str = ""  # fondo liso (cierre de marca)
     ramp: bool = True  # rampa de velocidad en los vídeos de apoyo (el mapa va a su ritmo)
+    paths: tuple[str, ...] = ()  # varios archivos (los clips de «moviles»)
 
 
 @dataclass
@@ -766,10 +767,18 @@ def frase_events(effect: dict, clock: WordClock, style: Style, duration: float) 
         return _frase_enfoque(effect, start, end)
     tokens = effect["text"].split()[:8]
     size = 170 if len(" ".join(tokens)) <= 14 else 130
-    rows = _wrap(" ".join(tokens), HAND, size, 920)
+    if effect.get("look") == "lineas":  # cada línea entra entera, una tras otra (como una frase escrita a mano)
+        rows = [r.strip() for r in effect["text"].replace("|", "\n").split("\n") if r.strip()][:4] or [" ".join(tokens)]
+        rows = [r for row in rows for r in _wrap(row, HAND, size, 920)][:4]
+    else:
+        rows = _wrap(" ".join(tokens), HAND, size, 920)
     first = int(effect["word"])
     parts, k = [], 0
     for r, row in enumerate(rows):
+        if effect.get("look") == "lineas":
+            ms = int(min(r * 0.38, max(0.0, end - start - 0.5)) * 1000)
+            parts.append(f"{{\\alpha&HFF&\\t({ms},{ms + 160},\\alpha&H00&)\\fscx92\\fscy92\\t({ms},{ms + 220},\\fscx100\\fscy100)}}{_esc(row)}")
+            continue
         words = []
         for tok in row.split():
             t = clock.at(first + k)
@@ -785,7 +794,8 @@ def frase_events(effect: dict, clock: WordClock, style: Style, duration: float) 
     return lines, Window(start, end)
 
 
-SEG_KINDS = {"detras": (2.2, 1.2), "fondo": (2.5, 1.2), "desenfoque": (2.5, 1.2), "anillo": (3.2, 1.8), "lluvia": (2.6, 1.6)}
+SEG_KINDS = {"detras": (2.2, 1.2), "fondo": (2.5, 1.2), "desenfoque": (2.5, 1.2), "anillo": (3.2, 1.8), "lluvia": (2.6, 1.6),
+             "mosaico": (3.2, 1.6)}
 # Colores de texto gigante detrás y de fondo liso.
 SEG_COLORS = {"rosa": "#FF4F7B", "amarillo": "#F5D90A", "negro": "#141518", "azul": "#2B59E6", "rojo": "#E63A2E",
               "verde": "#1F7A55"}
@@ -798,6 +808,7 @@ class SegOp:
     end: float
     color: str = ""
     path: str = ""  # foto de fondo (kind "foto")
+    paths: tuple[str, ...] = ()  # clips del mosaico de detrás (kind "mosaico")
 
 
 def _seg_spans(effects: list[dict], clock: WordClock, duration: float):
@@ -813,10 +824,24 @@ def _seg_spans(effects: list[dict], clock: WordClock, duration: float):
             yield fx, span
 
 
-def seg_ops(effects: list[dict], clock: WordClock, duration: float) -> list[SegOp]:
-    """Efectos que necesitan recortar a la persona, en tiempos del reel."""
-    return [SegOp(fx["type"], a, b, SEG_COLORS.get(fx.get("look", ""), "#123A35"))
-            for fx, (a, b) in _seg_spans(effects, clock, duration)]
+def clip_paths(text: str, assets: dict[str, str] | None, limit: int = 9) -> tuple[str, ...]:
+    """Los archivos de apoyo que nombra un efecto ("1,3" o "1 2 3"); vacío = todos, en orden."""
+    assets = assets or {}
+    keys = [k for k in str(text or "").replace(",", " ").replace("|", " ").split() if k in assets]
+    if not keys:
+        keys = sorted(assets, key=lambda k: int(k) if k.isdigit() else 0)
+    return tuple(assets[k] for k in keys[:limit])
+
+
+def seg_ops(effects: list[dict], clock: WordClock, duration: float, assets: dict[str, str] | None = None) -> list[SegOp]:
+    """Efectos que necesitan recortar a la persona, en tiempos del reel. `assets`: vídeos de apoyo (mosaico)."""
+    out = []
+    for fx, (a, b) in _seg_spans(effects, clock, duration):
+        paths = clip_paths(fx.get("text", ""), assets) if fx["type"] == "mosaico" else ()
+        if fx["type"] == "mosaico" and not paths:  # sin clips de apoyo no hay mosaico
+            continue
+        out.append(SegOp(fx["type"], a, b, SEG_COLORS.get(fx.get("look", ""), "#123A35"), paths=paths))
+    return out
 
 
 def behind_events(effects: list[dict], clock: WordClock, style: Style, duration: float) -> list[str]:
@@ -854,7 +879,7 @@ def behind_events(effects: list[dict], clock: WordClock, style: Style, duration:
     return lines
 
 
-VIDEO_KINDS = {"congelado": (0.6, 0.3), "viaje": (5.0, 3.0), "bruto": (3.0, 2.0), "fantasma": (1.6, 0.8), "pagina": (2.6, 1.6), "paso": (4.0, 2.0), "apoyo": (3.0, 1.5),
+VIDEO_KINDS = {"congelado": (0.6, 0.3), "moviles": (3.2, 1.8), "viaje": (5.0, 3.0), "bruto": (3.0, 2.0), "fantasma": (1.6, 0.8), "pagina": (2.6, 1.6), "paso": (4.0, 2.0), "apoyo": (3.0, 1.5),
                "objeto": (2.2, 1.0), "captura": (2.6, 1.4), "collage": (2.8, 1.6),
                "tarjetas": (4.5, 2.5), "pexels": (1.8, 1.0)}
 PERSON_TYPES = (*SEG_KINDS, "apoyo")  # necesitan a alguien delante de la cámara
@@ -995,6 +1020,12 @@ def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=Non
         # La tarjeta "bruto" enseña la toma sin cortar desde el principio de lo que se dice ahí.
         src = src_of(span[0]) if (src_of and kind == "bruto") else 0.0
         path = ""
+        if kind == "moviles":
+            paths = clip_paths(fx.get("text", ""), assets, limit=3)
+            if len(paths) < 2:
+                continue
+            ops.append(VideoOp(kind, span[0], span[1], paths=paths))
+            continue
         if kind in ("apoyo", "pexels"):
             path = (assets or {}).get(str(fx.get("_file" if kind == "pexels" else "text", "")).strip(), "")
             if not path:

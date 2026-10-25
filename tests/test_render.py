@@ -1452,3 +1452,36 @@ def test_visual_hooks_library(tmp_path, monkeypatch):
     assert server._edit_fields({"gancho": "detras"}) == {"gancho": "detras"}
     d = EditPlan.from_dict({**plan.to_dict(), "gancho_options": ["detras", "numero"]})
     assert d.gancho == "congelado" and d.gancho_options == ["detras", "numero"] and d.punch == ""
+
+
+def test_phone_frames_mosaic_and_handwritten_lines(tmp_path):
+    """Los tres pendientes de los reels de Lily: tus clips en marcos de móvil, el mosaico de reels antiguos
+    detrás de ti y la frase manuscrita que entra línea a línea."""
+    from iman import ai, captions, effects, media
+    from iman.media import MediaInfo
+    from iman.models import Span, Word
+
+    words = [Word("mira", 0.0, 0.4), Word("todos", 0.5, 0.9), Word("mis", 1.0, 1.2), Word("reels", 1.3, 1.8)]
+    clock = effects.WordClock(words, [0, 1, 2, 3])
+    assets = {"1": "a.mp4", "2": "b.mp4", "3": "c.jpg"}
+    assert effects.clip_paths("2,1", assets) == ("b.mp4", "a.mp4") and effects.clip_paths("-", assets) == ("a.mp4", "b.mp4", "c.jpg")
+    assert effects.clip_paths("1", assets, limit=3) == ("a.mp4",)
+    # «moviles» necesita 2 o 3 clips; «mosaico» necesita clips de apoyo (y recortar a la persona).
+    fx = [{"type": "moviles", "word": 0, "text": "1,2,3"}, {"type": "moviles", "word": 2, "text": "1"},
+          {"type": "mosaico", "word": 1, "text": "-"}]
+    ops = effects.video_ops(fx, clock, 6.0, assets=assets)
+    assert [op.kind for op in ops] == ["moviles"] and ops[0].paths == ("a.mp4", "b.mp4", "c.jpg")
+    segs = effects.seg_ops(fx, clock, 6.0, assets)
+    assert [s.kind for s in segs] == ["mosaico"] and len(segs[0].paths) == 3
+    assert effects.seg_ops(fx, clock, 6.0, {}) == []  # sin apoyos no hay mosaico
+    info = MediaInfo(width=1080, height=1920, duration=6, fps=30, has_audio=True, hdr=False)
+    graph = media.build_filtergraph([Span(0, 6)], info, None, overlays=ops)
+    assert graph.count("pad=278:528") == 3 and "rotate=" in graph
+    args, labels = media._image_inputs(ops, 1)
+    assert args[:3] == ["-stream_loop", "-1", "-i"] and args[-4:-1] == ["-loop", "1", "-i"] and len(labels) == 3
+    assert "mosaico" in effects.PERSON_TYPES and "mosaico" in ai.EFFECT_TYPES and "moviles" in ai.FREE_TEXT_TYPES
+    # Frase a mano, línea a línea: tres líneas, cada una entra después de la anterior.
+    lines, win = effects.build_effects([{"type": "frase", "word": 0, "text": "Comenta GUÍA|y te la|mando", "look": "lineas"}],
+                                       clock, captions.STYLES["impacto"], 3.0)
+    assert len(lines) == 4 and "t(0,160" in lines[1] and "t(380,540" in lines[2] and "t(760,920" in lines[3] and win
+    assert ai._look("frase", "lineas") == "lineas" and ai._look("frase", "raro") == ""

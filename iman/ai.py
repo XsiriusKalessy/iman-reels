@@ -21,8 +21,8 @@ EFFECT_TYPES = ["lista", "palabra", "titular", "cifra", "frase", "tecleo", "colo
                 "contador", "portada", "cta", "dato", "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                 "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque", "aparece",
                 "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas", "particulas", "bloques", "pexels", "lluvia", "capitulo",
-                "bocadillo", "hueca", "marco", "progreso", "paso"]
-FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
+                "bocadillo", "hueca", "marco", "progreso", "paso", "moviles", "mosaico"]
+FREE_TEXT_TYPES = ("moviles", "mosaico", "titular", "cifra", "frase", "tecleo", "color", "comentario", "contador", "portada", "cta", "dato",
                    "bruto", "fantasma", "pagina", "detras", "fondo", "desenfoque",
                    "ubicacion", "oferta", "ruta", "testimonio", "plazas", "precio", "apoyo", "sube", "choque",
                    "aparece", "objeto", "viaje", "notificaciones", "foco", "anillo", "buscador", "chat", "captura", "collage", "grafico", "texto3d", "etiqueta", "tarjetas", "particulas", "bloques", "pexels", "lluvia", "capitulo",
@@ -30,7 +30,7 @@ FREE_TEXT_TYPES = ("titular", "cifra", "frase", "tecleo", "color", "comentario",
 LISTA_LOOKS = ("checklist", "capitulos", "itinerario")
 TITULAR_LOOKS = ("revista", "elegante", "pizarra", "mixto")
 COLORS = ("rosa", "amarillo", "negro", "azul", "rojo", "verde")
-LOOK_ENUM = ["", *TITULAR_LOOKS, *LISTA_LOOKS, "enfoque", *COLORS]
+LOOK_ENUM = ["", *TITULAR_LOOKS, *LISTA_LOOKS, "enfoque", "lineas", *COLORS]
 
 CAPTION_STYLES = ["", "impacto", "editorial", "palabra", "karaoke", "caja", "neon", "gigante", "mezcla", "minimal",
                   "elegante", "manuscrita", "marcador", "hormozi", "bebas", "comic", "bloque", "cursiva"]
@@ -155,6 +155,8 @@ Tu trabajo:
      palabras). Ocupa la pantalla dos segundos.
    - "frase": una frase corta y emocional (1 a 4 palabras) a pantalla completa en letra manuscrita. Con look
      "enfoque", una afirmación de hasta 12 palabras en serif que entra desenfocada sobre fondo oscuro.
+     Con look "lineas", una frase de 2 a 4 líneas cortas separadas por "|" (text: "Comenta GUÍA|y te la|mando")
+     que entran a mano línea a línea: ideal para la llamada a la acción del final.
    - "dato": etiqueta pequeña junto a la cara con un dato (text: la cifra, "12"; subtitle: "horas de vídeo").
    - "bocadillo": bocadillo oscuro arriba a la derecha con una cifra grande en color y su explicación debajo,
      señalando al creador (text: la cifra o dato corto, "97" o "x2"; subtitle: 2 a 5 palabras, "euros de regalo").
@@ -219,6 +221,12 @@ Tu trabajo:
    - "captura": SOLO con vídeos o fotos de apoyo. Una foto o captura de apoyo en una tarjeta con etiqueta, cuando
      habla de algo que se puede enseñar (su web, un resultado, un mensaje) (text: número del archivo, "2";
      subtitle: etiqueta corta, "Mi web").
+   - "moviles": SOLO con 2 o 3 vídeos de apoyo. Esos clips (p. ej. tus reels anteriores o tus vídeos del
+     destino) salen en marcos de móvil, en fila sobre la cabeza del creador, cuando habla de sus vídeos, de lo
+     que publica o de varios sitios a la vez (text: los números separados por comas, "1,2,3"). Una vez por reel.
+   - "mosaico": SOLO con vídeos de apoyo y hablando a cámara. Un mosaico de 9 azulejos con esos clips, oscurecido,
+     detrás del creador: cuando dice "he hecho más de 100 reels", "todos mis viajes", "esto es lo que publico"
+     (text: los números de los clips, o "-" para usarlos todos). Una vez por reel.
    - "collage": SOLO con 2 o más apoyos. Dos o tres fotos flotando con etiquetas, al enumerar sitios o productos
      (text: números separados por comas, "1,2,3"; subtitle: etiquetas separadas por "|", "Tokio|Kioto|Osaka").
    Efectos con las manos (Imán ve dónde están las manos del creador y los ajusta solo; si no las ve, salen igual):
@@ -460,7 +468,7 @@ def _look(kind: str, look: str) -> str:
         return look if look in COLORS else "rosa"
     if kind in ("detras", "fondo"):
         return look if look in COLORS else ""
-    if kind == "frase" and look == "enfoque":
+    if kind == "frase" and look in ("enfoque", "lineas"):
         return look
     return ""
 
