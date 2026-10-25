@@ -156,6 +156,7 @@
         <video id="preview" muted playsinline hidden></video>
         <div id="audio-picked" class="audio-picked" hidden></div>
       </label>
+      <p class="hint record-row"><button class="ghost" type="button" id="record-open">🎥 Grabar aquí, con teleprompter</button> <span>Con la cámara del ordenador: el guion pasa por delante de la cámara y la guía te mantiene centrado.</span></p>
       <p class="hint picked-row" id="picked-row" hidden><span id="picked-name"></span> · <a href="#" id="change-file">Cambiar de vídeo</a></p>
       <div class="broll" id="broll-box">
         <label class="broll-pick">
@@ -459,6 +460,32 @@
       </div>
     </section>
   </main>
+
+  <dialog id="recorder" class="wide">
+    <h2>Grabar aquí</h2>
+    <p class="hint">Mira al punto rojo (justo bajo la cámara) y lee el guion que pasa por delante. Cuando pares, Imán quita los silencios y los fallos como siempre.</p>
+    <div class="rec-stage">
+      <video id="rec-video" autoplay muted playsinline></video>
+      <div class="rec-guide" aria-hidden="true"><div class="rec-oval"></div><div class="rec-dot"></div></div>
+      <div class="rec-prompter" id="rec-prompter"><div id="rec-scroll"></div></div>
+      <div class="rec-count" id="rec-count" hidden>3</div>
+      <div class="rec-time" id="rec-time" hidden>● 0:00</div>
+      <p class="rec-warn" id="rec-warn" hidden></p>
+    </div>
+    <label>Guion para el teleprompter<textarea id="rec-script" rows="3" placeholder="Pega aquí el guion (o viene solo desde «Grabar esta →»)."></textarea></label>
+    <div class="row">
+      <label>Velocidad<input type="range" id="rec-speed" min="1" max="5" value="3"></label>
+      <label>Letra<input type="range" id="rec-size" min="22" max="48" value="32"></label>
+    </div>
+    <div class="row between">
+      <button class="ghost" type="button" id="rec-close">Cerrar</button>
+      <div class="row">
+        <button class="ghost" type="button" id="rec-retake" hidden>Repetir</button>
+        <button class="primary" type="button" id="rec-start">Grabar (3, 2, 1…)</button>
+        <button class="primary" type="button" id="rec-use" hidden>Usar este vídeo →</button>
+      </div>
+    </div>
+  </dialog>
 
   <dialog id="settings">
     <form method="dialog" id="settings-form" class="stack">

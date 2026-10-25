@@ -603,3 +603,18 @@ table.calendar th, table.calendar td { text-align: left; padding: 8px 6px; borde
 .kind { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: rgba(255,255,255,.08); white-space: nowrap; }
 .kind-venta { background: rgba(255,85,71,.25); } .kind-fecha { background: rgba(242,196,109,.25); }
 .hook-line { margin: 4px 0; }
+
+/* Grabar dentro de Imán, con teleprompter */
+.record-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+.rec-stage { position: relative; width: min(360px, 100%); aspect-ratio: 9 / 16; margin: 10px auto; background: #000; border-radius: 16px; overflow: hidden; }
+.rec-stage video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.rec-guide { position: absolute; inset: 0; pointer-events: none; }
+.rec-oval { position: absolute; left: 50%; top: 18%; width: 46%; aspect-ratio: 3 / 4; transform: translateX(-50%); border: 2px dashed rgba(255,255,255,.45); border-radius: 50%; }
+.rec-dot { position: absolute; left: 50%; top: 10px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: #FF5547; box-shadow: 0 0 12px #FF5547; }
+.rec-prompter { position: absolute; left: 0; right: 0; top: 0; height: 42%; overflow: hidden; background: linear-gradient(rgba(0,0,0,.75), rgba(0,0,0,.35) 70%, transparent); pointer-events: none; }
+.rec-prompter div { padding: 16px 18px 60px; color: #fff; font-weight: 700; line-height: 1.3; text-shadow: 0 2px 6px rgba(0,0,0,.8); white-space: pre-wrap; }
+.rec-count { position: absolute; inset: 0; display: grid; place-items: center; font-size: 120px; font-weight: 900; color: #fff; background: rgba(0,0,0,.45); }
+.rec-time { position: absolute; right: 12px; bottom: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(0,0,0,.6); color: #fff; font-size: 13px; }
+.rec-warn { position: absolute; left: 12px; right: 12px; bottom: 12px; margin: 0; padding: 8px 10px; border-radius: 10px; background: rgba(255,85,71,.85); color: #fff; font-size: 13px; }
+#recorder { max-height: 94vh; overflow: auto; }
+.rec-stage { max-height: 52vh; aspect-ratio: 9 / 16; width: auto; }

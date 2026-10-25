@@ -398,6 +398,7 @@ document.addEventListener("click", e => {
   const b = e.target.closest(".use-idea");
   if (!b) return;
   showHook(b.dataset.hook);
+  state.ideaScript = b.closest(".card")?.querySelector("p")?.textContent || "";  // para el teleprompter
   go("upload");
 });
 
@@ -436,6 +437,7 @@ $("#agency-form").onsubmit = async e => {
     out.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => { navigator.clipboard.writeText(r[b.dataset.copy] || ""); b.textContent = "Copiado"; });
     $("#agency-use").onclick = () => {
       showHook((r.hooks || [])[0] || "");
+      state.ideaScript = r.script || "";  // para el teleprompter
       const inst = $("#instructions");
       const route = r.route_text ? `Si cuento el recorrido, usa el efecto "viaje" con estas paradas: ${r.route_text}${body.dates ? ` (subtitle: ${body.dates})` : ""}.` : "";
       if (inst && route) inst.value = (inst.value ? inst.value + "\n" : "") + route;
@@ -1656,3 +1658,119 @@ $("#share-go").onclick = async () => {
   window.open(SHARE[which].url, "_blank", "noopener");
 };
 $("#share-folder").onclick = () => api(`/api/jobs/${state.job.id}/mostrar`, { method: "POST" }).catch(err => $("#share-help").textContent = err.message);
+
+
+// --- Grabar dentro de Imán: cámara del ordenador, teleprompter y guía de encuadre ----------------
+const rec = { stream: null, recorder: null, chunks: [], blob: null, timer: null, raf: null, t0: 0, prompterY: 0 };
+const recDialog = $("#recorder");
+function recUpdatePrompter() {
+  const box = $("#rec-scroll");
+  box.textContent = $("#rec-script").value || "Pega el guion abajo, o grábalo sin teleprompter.";
+  box.style.fontSize = `${$("#rec-size").value}px`;
+}
+$("#rec-script").oninput = recUpdatePrompter;
+$("#rec-size").oninput = recUpdatePrompter;
+async function recOpen() {
+  const script = $("#rec-script");
+  if (!script.value) script.value = [$("#hook-title").value, state.ideaScript || ""].filter(Boolean).join("\n\n");
+  recUpdatePrompter();
+  recReset();
+  recDialog.showModal();
+  const warn = $("#rec-warn");
+  if (!navigator.mediaDevices?.getUserMedia) {
+    warn.hidden = false; warn.textContent = "Este navegador no deja usar la cámara. Abre Imán en Chrome o Edge.";
+    return;
+  }
+  try {
+    rec.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 1080 }, height: { ideal: 1920 } }, audio: { echoCancellation: true, noiseSuppression: true } });
+  } catch (err) {
+    warn.hidden = false; warn.textContent = "No puedo abrir la cámara (" + err.message + "). Da permiso en el navegador y vuelve a abrir.";
+    return;
+  }
+  $("#rec-video").srcObject = rec.stream;
+  $("#rec-video").muted = true;
+  recWatchFraming();
+}
+function recReset() {
+  rec.chunks = []; rec.blob = null;
+  $("#rec-use").hidden = true; $("#rec-retake").hidden = true; $("#rec-start").hidden = false;
+  $("#rec-time").hidden = true; $("#rec-count").hidden = true;
+  $("#rec-scroll").style.transform = "";
+  const v = $("#rec-video");
+  v.controls = false; v.muted = true; v.style.transform = "";
+  if (rec.stream) { v.srcObject = rec.stream; v.play().catch(() => {}); }
+}
+function recClose() {
+  clearInterval(rec.timer); cancelAnimationFrame(rec.raf);
+  if (rec.recorder && rec.recorder.state !== "inactive") rec.recorder.stop();
+  if (rec.stream) rec.stream.getTracks().forEach(t => t.stop());
+  rec.stream = null;
+  recDialog.close();
+}
+// Guía de encuadre: si la cara (lo más claro y centrado) se va del óvalo, avisa. Sin modelos: compara el brillo
+// de la zona del óvalo con el de los lados cada medio segundo.
+function recWatchFraming() {
+  const v = $("#rec-video"), c = document.createElement("canvas"), g = c.getContext("2d", { willReadFrequently: true });
+  c.width = 36; c.height = 64;
+  const tick = () => {
+    if (!rec.stream) return;
+    try {
+      g.drawImage(v, 0, 0, c.width, c.height);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      const lum = (x, y) => { const i = (y * c.width + x) * 4; return 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2]; };
+      let center = 0, sides = 0, n1 = 0, n2 = 0;
+      for (let y = 10; y < 36; y++) for (let x = 0; x < c.width; x++) {
+        if (x >= 10 && x < 26) { center += lum(x, y); n1++; } else { sides += lum(x, y); n2++; }
+      }
+      const warn = $("#rec-warn");
+      const off = n1 && n2 && (center / n1) < (sides / n2) * 0.92;
+      warn.hidden = !off;
+      if (off) warn.textContent = "Parece que te sales del óvalo: céntrate y deja aire sobre la cabeza.";
+    } catch {}
+    rec.raf = setTimeout(() => requestAnimationFrame(tick), 500);
+  };
+  tick();
+}
+$("#record-open").onclick = recOpen;
+$("#rec-close").onclick = recClose;
+recDialog.addEventListener("cancel", e => { e.preventDefault(); recClose(); });
+$("#rec-retake").onclick = recReset;
+$("#rec-start").onclick = async () => {
+  if (!rec.stream) return;
+  const count = $("#rec-count");
+  for (const n of [3, 2, 1]) { count.hidden = false; count.textContent = n; await new Promise(r => setTimeout(r, 800)); }
+  count.hidden = true;
+  const type = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"].find(t => MediaRecorder.isTypeSupported(t)) || "";
+  rec.recorder = new MediaRecorder(rec.stream, type ? { mimeType: type, videoBitsPerSecond: 8_000_000 } : undefined);
+  rec.chunks = [];
+  rec.recorder.ondataavailable = e => { if (e.data.size) rec.chunks.push(e.data); };
+  rec.recorder.onstop = () => {
+    rec.blob = new Blob(rec.chunks, { type: rec.recorder.mimeType || "video/webm" });
+    const v = $("#rec-video");
+    v.srcObject = null; v.src = URL.createObjectURL(rec.blob); v.muted = false; v.controls = true; v.style.transform = "none"; v.play().catch(() => {});
+    $("#rec-use").hidden = false; $("#rec-retake").hidden = false; $("#rec-time").hidden = true;
+    $("#rec-scroll").style.transform = "";
+  };
+  rec.recorder.start(250);
+  rec.t0 = Date.now();
+  $("#rec-start").hidden = true; $("#rec-time").hidden = false;
+  const stopBtn = $("#rec-retake"); stopBtn.hidden = false; stopBtn.textContent = "■ Parar";
+  stopBtn.onclick = () => { stopBtn.textContent = "Repetir"; stopBtn.onclick = recReset; clearInterval(rec.timer); rec.recorder.stop(); };
+  // El guion sube solo, a la velocidad elegida (se puede cambiar mientras grabas).
+  rec.prompterY = 0;
+  const box = $("#rec-scroll");
+  rec.timer = setInterval(() => {
+    const s = Math.round((Date.now() - rec.t0) / 1000);
+    $("#rec-time").textContent = `● ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    rec.prompterY += +$("#rec-speed").value * 0.9;
+    const max = Math.max(0, box.scrollHeight - $("#rec-prompter").clientHeight + 40);
+    box.style.transform = `translateY(-${Math.min(rec.prompterY, max)}px)`;
+  }, 100);
+};
+$("#rec-use").onclick = () => {
+  if (!rec.blob) return;
+  const ext = rec.blob.type.includes("mp4") ? "mp4" : "webm";
+  const file = new File([rec.blob], `grabado-en-iman-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.${ext}`, { type: rec.blob.type });
+  recClose();
+  pick([file]);
+};
