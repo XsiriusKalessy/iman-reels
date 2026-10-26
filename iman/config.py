@@ -58,7 +58,8 @@ def memory_prompt(cfg: dict) -> str:
     mem = cfg.get("memory") or []
     if not mem:
         return ""
-    return "PREFERENCIAS GUARDADAS DEL CREADOR (aplícalas siempre):\n" + "\n".join(f"- {m}" for m in mem)
+    return ("PREFERENCIAS GUARDADAS DEL CREADOR (aplícalas siempre, salvo que las instrucciones de este reel digan "
+            "otra cosa):\n" + "\n".join(f"- {m}" for m in mem))
 
 
 def _stored() -> dict:

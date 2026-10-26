@@ -549,33 +549,70 @@ async function grabFrames(file) {
   } catch { return []; }
   finally { URL.revokeObjectURL(v.src); }
 }
-// En «cámara» se pueden elegir varias tomas: Imán las une en orden e iguala el color a la primera.
-function pick(files) {
+// En «cámara» se pueden elegir varias tomas: Imán las une en el orden de la lista e iguala el color a la primera.
+// El explorador de Windows devuelve los archivos en un orden caprichoso (el que tenía el foco va primero), así que
+// se ordenan por nombre como en la carpeta (VID_001, VID_002…) y el creador puede moverlas con las flechas.
+const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+function pick(files, add = false) {
   const ok = f => f && (f.type.startsWith("video") || (mode().startsWith("voz") && f.type.startsWith("audio")));
-  const list = [...(files || [])].filter(ok);
+  let list = [...(files || [])].filter(ok);
+  if (!list.length) return;
+  if (mode() === "camara") {
+    const videos = list.filter(f => f.type.startsWith("video")).sort(byName);
+    const current = add && state.file ? [state.file, ...state.takes] : [];
+    list = [...current, ...videos.filter(v => !current.some(c => c.name === v.name && c.size === v.size))].slice(0, 10);
+  } else {
+    list = list.slice(0, 1);
+  }
+  setTakes(list);
+}
+function setTakes(list) {
   const file = list[0];
   if (!file) return;
+  const changed = state.file !== file;
   state.file = file;
-  state.takes = mode() === "camara" ? list.slice(1, 10).filter(f => f.type.startsWith("video")) : [];
-  state.frames = [];
-  if (file.type.startsWith("video") && mode() === "camara") {
-    grabFrames(file).then(fr => { if (state.file === file) { state.frames = fr; if (state.styleList) renderStyles(state.styleList); } });
-  }
-  const v = $("#preview");
-  $(".drop-inner").hidden = true;
-  if (file.type.startsWith("audio")) {
-    v.hidden = true;
-    $("#audio-picked").hidden = false; $("#audio-picked").textContent = `🎙 ${file.name}`;
-  } else {
-    $("#audio-picked").hidden = true;
-    v.src = URL.createObjectURL(file); v.hidden = false; v.play();
+  state.takes = mode() === "camara" ? list.slice(1, 10) : [];
+  if (changed) {
+    state.frames = [];
+    if (file.type.startsWith("video") && mode() === "camara") {
+      grabFrames(file).then(fr => { if (state.file === file) { state.frames = fr; if (state.styleList) renderStyles(state.styleList); } });
+    }
+    const v = $("#preview");
+    $(".drop-inner").hidden = true;
+    if (file.type.startsWith("audio")) {
+      v.hidden = true;
+      $("#audio-picked").hidden = false; $("#audio-picked").textContent = `🎙 ${file.name}`;
+    } else {
+      $("#audio-picked").hidden = true;
+      v.src = URL.createObjectURL(file); v.hidden = false; v.play();
+    }
   }
   $("#picked-name").textContent = state.takes.length
-    ? `${file.name} + ${state.takes.length} toma${state.takes.length > 1 ? "s" : ""} más (se unen en orden con el mismo color)`
+    ? `${state.takes.length + 1} tomas (se unen en el orden de abajo, con el mismo color)`
     : file.name;
   $("#picked-row").hidden = false;
+  renderTakes();
   canGo();
 }
+function renderTakes() {
+  const all = state.file && mode() === "camara" ? [state.file, ...state.takes] : [];
+  $("#takes-box").hidden = all.length < 2;
+  $("#takes-list").innerHTML = all.length < 2 ? "" : all.map((f, i) => `
+    <li><span class="n">${i + 1}</span><span class="name">${esc(f.name)}</span><small>${(f.size / 1048576).toFixed(0)} MB</small>
+      <button type="button" data-take-up="${i}" title="Subir" ${i === 0 ? "disabled" : ""}>↑</button>
+      <button type="button" data-take-down="${i}" title="Bajar" ${i === all.length - 1 ? "disabled" : ""}>↓</button>
+      <button type="button" data-take-del="${i}" title="Quitar">✕</button></li>`).join("");
+}
+$("#takes-list").onclick = e => {
+  const b = e.target.closest("button"); if (!b) return;
+  const all = [state.file, ...state.takes];
+  if (b.dataset.takeUp != null) { const i = +b.dataset.takeUp; [all[i - 1], all[i]] = [all[i], all[i - 1]]; }
+  else if (b.dataset.takeDown != null) { const i = +b.dataset.takeDown; [all[i + 1], all[i]] = [all[i], all[i + 1]]; }
+  else if (b.dataset.takeDel != null) all.splice(+b.dataset.takeDel, 1);
+  if (!all.length) return clearUpload();
+  setTakes(all);
+};
+$("#add-takes").onclick = e => { e.preventDefault(); state.adding = true; $("#file").click(); };
 function renderBroll() {
   $("#broll-list").innerHTML = state.broll.map((f, i) => `
     <figure>${f.type.startsWith("image") ? `<img src="${URL.createObjectURL(f)}" alt="">` : `<video src="${URL.createObjectURL(f)}#t=0.5" muted></video>`}
@@ -591,7 +628,7 @@ $("#broll-list").onclick = e => {
   if (b) { state.broll.splice(+b.dataset.unbroll, 1); renderBroll(); }
 };
 setMode();
-$("#file").onchange = e => pick(e.target.files);
+$("#file").onchange = e => { pick(e.target.files, state.adding); state.adding = false; e.target.value = ""; };
 drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); pick(e.dataTransfer.files); };
@@ -599,7 +636,7 @@ $("#to-edit").onclick = () => go("edit");
 $("#go-quick").onclick = () => $("#go").click();  // todo automático: con lo que Imán elige por defecto
 // Empezar de cero: olvida el vídeo elegido y el reel abierto (el anterior sigue en «Mis reels»).
 function clearUpload() {
-  state.file = null; state.takes = []; state.frames = []; state.broll = []; renderBroll();
+  state.file = null; state.takes = []; state.frames = []; state.broll = []; renderBroll(); renderTakes();
   const v = $("#preview"); v.pause(); v.removeAttribute("src"); v.hidden = true;
   $("#audio-picked").hidden = true; $(".drop-inner").hidden = false; $("#picked-row").hidden = true;
   $("#file").value = ""; $("#music-file").value = "";

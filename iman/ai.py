@@ -321,12 +321,16 @@ Tu trabajo:
    en hook_title), "color" (golpe de color con la frase clave: energía, ofertas), "objeto" (cuando acerca algo a
    la cámara), "entrada" (cuando entra en plano andando), "mano" (cuando empieza con la mano tapando el
    objetivo), "comentario" (cuando responde a un comentario). gancho_why: por qué, en una frase.
-Respeta el idioma del vídeo. Sigue las instrucciones del creador si las hay."""
+Respeta el idioma del vídeo. Sigue las instrucciones del creador si las hay: mandan sobre todo lo demás. Si el creador
+escribe un texto literal (entre comillas o como lista), ponlo tal cual, sin reescribirlo, y en el orden que lo da."""
 
 REVISE_SYSTEM = EDIT_SYSTEM + """
 
 Ahora el reel ya está montado y el creador te pide cambios, como a su editor. Recibes el plan actual en JSON.
 Devuelve el plan COMPLETO actualizado: conserva todo lo que no te pide cambiar y aplica solo lo que pide.
+Si pide quitar un tipo de efecto (p. ej. «quita los textos de detrás», «sin etiquetas»), quita TODOS los efectos de
+ese tipo, y si era el efecto de arranque (word 0), pon gancho "titulo". Si pide que no se pisen o que haya menos
+efectos, deja como mucho uno cada 6 segundos.
 Si pide cambiar el ritmo o el estilo de subtítulos, indícalo en settings (si no, deja los campos vacíos).
 En reply, responde al creador en una frase corta diciendo qué has cambiado."""
 
@@ -437,14 +441,15 @@ def _ask_json(cfg: AIConfig, system: str, user: str, schema: dict, images: list[
 
 
 def plan_edit(cfg: AIConfig, words: list[Word], instructions: str = "", hook_template: str = "",
-              pack: str = "") -> EditPlan:
+              pack: str = "", takes: list[tuple[int, int]] | None = None) -> EditPlan:
+    """`takes`: rangos de palabras de cada toma unida; una toma entera fallida se puede quitar aunque sea larga."""
     if cfg.provider == "iman":
         from . import cloud
 
-        data = cloud.call(cfg, "plan", {"words": [w.__dict__ for w in words], "instructions": instructions,
+        data = cloud.call(cfg, "plan", {"words": [w.__dict__ for w in words], "instructions": instructions[:6000],
                                         "hook_template": hook_template, "pack": pack})
-        return _plan_from(data, len(words), "iman")
-    return _plan_from(plan_edit_raw(cfg, words, instructions, hook_template, pack), len(words), cfg.provider)
+        return _plan_from(data, len(words), "iman", takes)
+    return _plan_from(plan_edit_raw(cfg, words, instructions, hook_template, pack), len(words), cfg.provider, takes)
 
 
 def plan_edit_raw(cfg: AIConfig, words: list[Word], instructions: str = "", hook_template: str = "",
@@ -473,11 +478,13 @@ def _look(kind: str, look: str) -> str:
     return ""
 
 
-def _plan_from(data: dict, n: int, source: str) -> EditPlan:
+def _plan_from(data: dict, n: int, source: str, takes: list[tuple[int, int]] | None = None) -> EditPlan:
     drops, reasons = [], []
+    whole_take = lambda a, b: any(a >= ta and b <= tb for ta, tb in takes or [])  # noqa: E731
     for d in data.get("drop", []):
         a, b = int(d["from"]), int(d["to"])
-        if 0 <= a <= b < n and (b - a) < n * 0.5:  # nunca dejar que borre medio vídeo
+        # Nunca dejar que borre medio vídeo… salvo que sea una toma entera grabada aparte (la versión fallida).
+        if 0 <= a <= b < n and ((b - a) < n * 0.5 or (whole_take(a, b) and b - a < n - 3)):
             drops.append((a, b))
             reasons.append(d.get("reason", ""))
     effects = []

@@ -83,7 +83,7 @@ def _words(raw: list[dict]) -> list[Word]:
 
 class PlanIn(BaseModel):
     words: list[dict]
-    instructions: str = Field("", max_length=2000)
+    instructions: str = Field("", max_length=6000)
     hook_template: str = Field("", max_length=200)
     pack: str = Field("", max_length=20)
 

@@ -92,6 +92,26 @@ def word_of(fx: dict) -> int:
         return -1
 
 
+def dedupe_overlaps(effects: list[dict], clock: WordClock, min_gap: float = 1.0) -> list[dict]:
+    """Nunca dos efectos a la vez: si dos empiezan en el mismo momento (o a menos de `min_gap` s), se queda el
+    primero y el otro se quita; si no, salen etiquetas unas encima de otras. Las pegatinas flotantes no cuentan."""
+    out, last = [], None
+    order = sorted(range(len(effects)), key=lambda i: (clock.at(word_of(effects[i])) is None,
+                                                       clock.at(word_of(effects[i])) or 0.0))
+    kept = set()
+    for i in order:
+        fx = effects[i]
+        t = clock.at(word_of(fx))
+        if t is None or _floats(fx):
+            kept.add(i)
+            continue
+        if last is not None and t - last < min_gap:
+            continue
+        kept.add(i)
+        last = t
+    return [fx for i, fx in enumerate(effects) if i in kept]
+
+
 def assign_next(effects: list[dict], clock: WordClock) -> None:
     """Guarda en cada efecto cuándo empieza el siguiente (`_next`), una sola vez para las tres pasadas
     (subtítulos delante, subtítulos detrás y vídeo): si cada una lo calculara a su manera, el anillo o el

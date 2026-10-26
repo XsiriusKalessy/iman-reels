@@ -21,6 +21,30 @@ def test_retake_drops_first_attempt():
     assert detect_retakes(TAKE) == [(0, 5)]
 
 
+def test_take_retakes_keep_the_last_take():
+    from iman.rhythm import detect_take_retakes, take_ranges
+
+    # Dos archivos: el primero es un intento fallido de lo mismo (con una palabra distinta), el segundo es el bueno.
+    words = W([("Hoy", 0.2, 0.5), ("te", 0.55, 0.7), ("cuento", 0.75, 1.1), ("el", 1.15, 1.25), ("error", 1.3, 1.7),
+               ("tipico", 1.8, 2.2), ("de", 2.3, 2.4), ("Japon", 2.5, 3.0),
+               ("Hoy", 5.1, 5.35), ("te", 5.4, 5.5), ("cuento", 5.55, 5.9), ("el", 5.95, 6.05), ("error", 6.1, 6.5),
+               ("tipico", 6.6, 7.0), ("de", 7.1, 7.2), ("Japon.", 7.3, 7.8), ("Y", 8.2, 8.3), ("es", 8.35, 8.5), ("gratis.", 8.55, 9.0)])
+    tomas = [{"nombre": "a", "inicio": 0, "fin": 5}, {"nombre": "b", "inicio": 5, "fin": 10}]
+    takes = take_ranges(words, tomas)
+    assert takes == [(0, 7), (8, 18)]
+    assert detect_take_retakes(words, takes) == [(0, 7)]
+    # Tomas con contenido distinto no se tocan.
+    other = W([("Primero", 0.2, 0.5), ("vamos", 0.6, 0.9), ("a", 1.0, 1.1), ("Tokio", 1.2, 1.6), ("hoy", 1.7, 2.0),
+               ("Luego", 5.1, 5.4), ("vamos", 5.5, 5.8), ("a", 5.9, 6.0), ("Kioto", 6.1, 6.5), ("manana", 6.6, 7.0)])
+    assert detect_take_retakes(other, take_ranges(other, tomas)) == []
+    # La IA puede quitar una toma entera aunque sea más de la mitad del vídeo, pero no todo el vídeo.
+    from iman import ai
+    plan = ai._plan_from({"drop": [{"from": 0, "to": 11}]}, 19, "claude", takes=[(0, 11), (12, 18)])
+    assert plan.drop == [(0, 11)]
+    assert ai._plan_from({"drop": [{"from": 0, "to": 11}]}, 19, "claude").drop == []
+    assert ai._plan_from({"drop": [{"from": 0, "to": 18}]}, 19, "claude", takes=[(0, 18)]).drop == []
+
+
 def test_fillers():
     assert is_filler(TAKE, 5)
     assert not is_filler(TAKE, 0)
@@ -133,3 +157,37 @@ def test_review_lists_phrases_with_reasons():
     rows = review(TAKE, EditPlan(cut=[(16, 18)]), "rapido")
     last = rows[-1]
     assert last["state"] == "fuera" and last["reason"] == "La quitaste tú"
+
+
+def test_switches_and_removals_survive_rerenders():
+    """Lo que el creador apaga o pide quitar no vuelve: ni al volver a montar ni tras un cambio por chat."""
+    from iman import effects, ganchos, server
+    from iman.models import EditPlan
+
+    # El interruptor del efecto de arranque («Detrás de ti») sigue apagado al volver a montar con el mismo gancho.
+    plan = EditPlan(hook_title="3 errores en Japón", effects=[
+        {"type": "detras", "word": 0, "text": "JAPÓN", "_gancho": True, "off": True},
+        {"type": "lista", "word": 6, "items": [{"at_word": 6, "text": "a"}, {"at_word": 8, "text": "b"}]}])
+    ganchos.apply(plan, "detras", has_person=True)
+    assert plan.effects[0]["type"] == "detras" and plan.effects[0]["off"] is True
+    # Tras un chat, la IA devuelve los efectos sin los interruptores: se recuperan, y «quita los textos de
+    # detrás» se cumple aunque la IA los haya dejado; el gancho pasa a «titulo» para que no vuelvan.
+    old = EditPlan(effects=[{"type": "detras", "word": 0, "text": "JAPÓN", "_gancho": True},
+                            {"type": "etiqueta", "word": 10, "text": "Kioto", "off": True}])
+    new = EditPlan(gancho="detras", effects=[{"type": "detras", "word": 0, "text": "JAPÓN"},
+                                             {"type": "detras", "word": 12, "text": "GERO"},
+                                             {"type": "etiqueta", "word": 10, "text": "Kioto"}])
+    assert server._carry_switches(old, new, "quita los textos de detrás mía") is True
+    assert [fx["type"] for fx in new.effects] == ["etiqueta"] and new.effects[0]["off"] is True
+    assert new.gancho == "titulo"
+    # Sin petición de quitar, los efectos se quedan y el arranque sigue.
+    new2 = EditPlan(gancho="detras", effects=[{"type": "detras", "word": 0, "text": "JAPÓN"}])
+    assert server._carry_switches(old, new2, "el titular más corto") is False
+    # Nunca dos efectos a la vez: los que empiezan en el mismo momento se quedan en uno.
+    words = W([(f"w{i}", i * 0.5, i * 0.5 + 0.4) for i in range(20)])
+    clock = effects.WordClock(words, list(range(20)))
+    many = [{"type": "etiqueta", "word": 4, "text": "a"}, {"type": "etiqueta", "word": 4, "text": "b"},
+            {"type": "titular", "word": 5, "text": "c"}, {"type": "objeto", "word": 5, "text": "d"},
+            {"type": "cifra", "word": 12, "text": "e"}]
+    kept = effects.dedupe_overlaps(many, clock)
+    assert [fx["text"] for fx in kept] == ["a", "d", "e"]

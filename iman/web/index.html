@@ -182,6 +182,11 @@
       </label>
       <p class="hint record-row"><button class="ghost" type="button" id="record-open">🎥 Grabar aquí, con teleprompter</button> <span>Con la cámara del ordenador: el guion pasa por delante de la cámara y la guía te mantiene centrado.</span></p>
       <p class="hint picked-row" id="picked-row" hidden><span id="picked-name"></span> · <a href="#" id="change-file">Cambiar de vídeo</a></p>
+      <div class="takes" id="takes-box" hidden>
+        <p class="hint"><strong>Tus tomas, en este orden.</strong> Imán las une una detrás de otra e iguala el color a la primera. Si el orden no es el que quieres, muévelas con las flechas.</p>
+        <ol id="takes-list"></ol>
+        <p class="hint"><a href="#" id="add-takes">＋ Añadir más tomas</a> · En las instrucciones puedes decir «en la toma 2 pon el texto…»: Imán sabe dónde empieza y acaba cada una.</p>
+      </div>
       <div class="broll" id="broll-box">
         <label class="broll-pick">
           <input type="file" id="broll" accept="video/*,image/*" multiple hidden>

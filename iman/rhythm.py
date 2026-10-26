@@ -97,6 +97,37 @@ def detect_retakes(words: list[Word], ngram: int = 3, window: int = 30) -> list[
     return drops
 
 
+def take_ranges(words: list[Word], tomas: list[dict]) -> list[tuple[int, int]]:
+    """Qué palabras caen en cada toma unida (índices desde-hasta, ambos incluidos); una toma sin palabras no sale."""
+    out = []
+    for t in tomas:
+        idx = [i for i, w in enumerate(words) if t["inicio"] - 0.05 <= w.start < t["fin"]]
+        if idx:
+            out.append((idx[0], idx[-1]))
+    return out
+
+
+def detect_take_retakes(words: list[Word], takes: list[tuple[int, int]], overlap: float = 0.6) -> list[tuple[int, int]]:
+    """Tomas grabadas por separado que repiten lo mismo: se queda la última y las anteriores se quitan enteras.
+
+    Una toma es repetición de otra posterior si al menos `overlap` de sus grupos de 3 palabras vuelven a aparecer
+    en ella (el creador regrabó la escena en otro archivo en vez de cortar). Dos tomas con texto distinto no se tocan."""
+    def grams(a: int, b: int) -> set[tuple[str, ...]]:
+        norms = [w.norm for w in words[a:b + 1]]
+        return {tuple(norms[i:i + 3]) for i in range(len(norms) - 2) if all(norms[i:i + 3])}
+
+    drops = []
+    for k, (a, b) in enumerate(takes[:-1]):
+        mine = grams(a, b)
+        if len(mine) < 3:
+            continue
+        for a2, b2 in takes[k + 1:]:
+            if len(mine & grams(a2, b2)) >= overlap * len(mine):
+                drops.append((a, b))
+                break
+    return drops
+
+
 def _expand(ranges, n: int) -> set[int]:
     out: set[int] = set()
     for a, b in ranges:

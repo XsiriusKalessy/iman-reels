@@ -122,7 +122,9 @@ def apply(plan: EditPlan, key: str, has_person: bool = True, comentario: str = "
     prefijo y la entrada de cámara en plan.punch. Devuelve la clave que ha quedado (puede cambiar si el vídeo
     no da para ella: sin persona recortable no hay «detrás de ti»)."""
     g = get(key)
-    # Si el reel se vuelve a montar con otro gancho, fuera lo que dejó el anterior.
+    # Si el reel se vuelve a montar con otro gancho, fuera lo que dejó el anterior. Si el creador había apagado
+    # el efecto de arranque con su interruptor, el nuevo sale apagado también: su decisión manda.
+    was_off = any(fx.get("off") for fx in plan.effects if fx.get("_gancho"))
     plan.effects = [fx for fx in plan.effects if not fx.get("_gancho")]
     for pre in ("POV: ",):
         if plan.hook_title.startswith(pre) and g.prefix != pre:
@@ -157,7 +159,7 @@ def apply(plan: EditPlan, key: str, has_person: bool = True, comentario: str = "
         word = next((w.strip('«»"\'.,') for w in plan.hook_title.split() if w.isupper() and len(w) > 2), "")
         text = f"Comenta {word} y te lo mando" if word else plan.hook_title
     plan.effects.insert(0, {"type": g.effect, "word": 0, "text": text[:140], "subtitle": sub[:60], "title": "",
-                            "look": g.look, "until_word": None, "_gancho": True})
+                            "look": g.look, "until_word": None, "_gancho": True, "off": was_off})
     return g.key
 
 

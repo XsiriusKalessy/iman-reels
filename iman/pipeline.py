@@ -17,7 +17,7 @@ from . import ai, brand, captions, copystyle, effects, fondos, ganchos, gestos, 
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Span, Word
-from .rhythm import RHYTHMS, detect_retakes, is_filler, keep_spans, phrases, remap_words
+from .rhythm import RHYTHMS, detect_retakes, detect_take_retakes, is_filler, keep_spans, phrases, remap_words, take_ranges
 
 log = logging.getLogger(__name__)
 
@@ -67,6 +67,8 @@ class EditOptions:
     idioma: str = ""  # subtítulos y textos en otro idioma ("en", "fr"…): la voz se queda, los textos se traducen
     look: str = "auto"  # "auto" = el que recomienda la IA; o color y textura de un clic (media.LOOKS): "calido", "teal", "cine", "grano", "retro", "bn"…
     directo: bool = False  # vídeo largo que es un directo: los momentos se eligen también por la energía del audio
+    # Varias tomas unidas en orden: [{"nombre", "inicio", "fin"}] en segundos del vídeo unido (server._join_then).
+    tomas: list = field(default_factory=list)
 
 
 @dataclass
@@ -141,6 +143,20 @@ def broll_prompt(names: list[str]) -> str:
         return ""
     lines = "\n".join(f"{i + 1}: {n}" for i, n in enumerate(names))
     return f"VÍDEOS DE APOYO que ha subido el creador (úsalos con el efecto \"apoyo\"):\n{lines}"
+
+
+def takes_prompt(tomas: list[dict]) -> str:
+    """Varias tomas unidas: la IA sabe dónde empieza y acaba cada una (y cómo se llamaba el archivo), para que
+    «en la toma 2 pon el texto…» o «el vídeo del templo» caigan en el tramo correcto."""
+    if len(tomas) < 2:
+        return ""
+    lines = "\n".join(f"Toma {i + 1} «{t['nombre']}»: del segundo {t['inicio']:.1f} al {t['fin']:.1f}"
+                       for i, t in enumerate(tomas))
+    return ("EL VÍDEO SON VARIAS TOMAS UNIDAS, en el orden que ha elegido el creador (no lo cambies):\n" + lines +
+            "\nSi el creador habla de la toma 1, 2… o del vídeo por su nombre, se refiere a ese tramo de tiempo: "
+            "sus textos y efectos van dentro de ese tramo. Si pide un texto para cada toma, pon un texto por toma, "
+            "en su orden. Si una toma repite lo que dice otra, es una toma falsa: quita entera la versión fallida "
+            "(normalmente la primera) y deja la buena.")
 
 
 def visual_cuts(words: list[Word], every: float = 3.0) -> list[float]:
@@ -516,7 +532,8 @@ def run(
                 wants = f"{wants}\n\n{PEXELS_NOTE}".strip()
             if redes.get(opts.red).note:
                 wants = f"{wants}\n\n{redes.get(opts.red).note}".strip()
-            plan = ai.plan_edit(aicfg, words, wants, opts.hook_template, opts.pack)
+            plan = ai.plan_edit(aicfg, words, wants, opts.hook_template, opts.pack,
+                                takes=take_ranges(words, opts.tomas))
         except Exception as e:  # la IA es un extra: si falla, seguimos y lo avisamos
             ai_warning = ai.error_message(e)
     else:
@@ -555,6 +572,12 @@ def run(
 
     progress("Cortando silencios y tomas falsas", 0.55)
     rhythm = RHYTHMS[opts.rhythm]
+    if len(opts.tomas) > 1 and rhythm.remove_retakes:
+        # Una toma grabada aparte que repite otra posterior es una toma falsa: fuera entera, se queda la última.
+        for a, b in detect_take_retakes(words, take_ranges(words, opts.tomas)):
+            if (a, b) not in plan.drop:
+                plan.drop.append((a, b))
+                plan.drop_reasons.append("Toma repetida: me quedo con la última")
     spans, drops = keep_spans(words, info.duration, rhythm, plan.drop + plan.cut, plan.restore, plan.pauses)
     if plan.gancho == "mano" and spans and not voice_only:  # la mano tapa el objetivo: fuera el tramo a oscuras
         uncovered = media.dark_start(src)
@@ -604,6 +627,7 @@ def run(
     jsonfile.save(workdir / "plan.json", plan.to_dict(), indent=1)
 
     active = [dict(fx) for fx in plan.effects if not fx.get("off")]  # los que el creador ha apagado no salen
+    active = effects.dedupe_overlaps(active, effects.WordClock(kept, kept_idx))  # nunca dos a la vez
     gestos.attach(active, found, hand_frames, effects.WordClock(kept, kept_idx))
     effects.assign_next(active, effects.WordClock(kept, kept_idx))
     frames = None

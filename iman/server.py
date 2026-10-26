@@ -1077,10 +1077,11 @@ async def create_job(
     allowed, watermark = license.can_edit(_refresh_license())
     if not allowed:
         raise HTTPException(402, "Has usado tus reels de prueba. Activa tu licencia en Ajustes para seguir editando.")
+    # Las preferencias guardadas van delante y lo escrito para ESTE reel va entero al final (manda sobre ellas).
+    # Antes, al marcar «Recordarlo», el texto se guardaba recortado a 300 letras y este reel se quedaba sin él.
+    saved = "\n\n".join(p for p in (config.memory_prompt(config.load()), _learned_prompt()) if p)
     if remember and instructions.strip():
         config.remember(instructions)
-        instructions = ""  # ya va en las preferencias guardadas
-    saved = "\n\n".join(p for p in (config.memory_prompt(config.load()), _learned_prompt()) if p)
     if saved:
         instructions = f"{saved}\n\n{instructions}".strip()
     if plantilla:
@@ -1100,7 +1101,7 @@ async def create_job(
     job_id = uuid.uuid4().hex[:10]
     workdir = JOBS_DIR / job_id
     workdir.mkdir(parents=True, exist_ok=True)
-    takes = []
+    takes, take_names = [], []
     try:
         for k, up in enumerate(video[:MAX_TAKES]):
             suffix = Path(up.filename or "video.mp4").suffix.lower()
@@ -1108,6 +1109,7 @@ async def create_job(
             take = workdir / (f"original{suffix}" if len(video) == 1 else f"toma-{k + 1:02d}{suffix}")
             _save_upload(up, take, MAX_VIDEO)
             takes.append(take)
+            take_names.append(Path(up.filename or f"toma {k + 1}").stem[:60])
         names = _save_broll(workdir, broll or [])
         if background == "foto":
             if not background_photo or not _save_background(workdir, _read_upload(background_photo, MAX_PHOTO)):
@@ -1141,7 +1143,8 @@ async def create_job(
                         "options": asdict(opts), "created": time.time(), "trial": watermark, "cliente": clientes.activo()}
     target = _work_long if mode == "largo" else _work
     if len(takes) > 1:
-        threading.Thread(target=_join_then, args=(target, takes, job_id, src, workdir, opts), daemon=True).start()
+        threading.Thread(target=_join_then, args=(target, takes, take_names, job_id, src, workdir, opts),
+                         daemon=True).start()
     else:
         threading.Thread(target=target, args=(job_id, src, workdir, opts), daemon=True).start()
     return JOBS[job_id]
@@ -1150,13 +1153,26 @@ async def create_job(
 MAX_TAKES = 10
 
 
-def _join_then(target, takes: list[Path], job_id: str, src: Path, workdir: Path, opts) -> None:
-    """Varias tomas: se unen en orden con el color igualado a la primera y luego se edita como un vídeo."""
+def _join_then(target, takes: list[Path], names: list[str], job_id: str, src: Path, workdir: Path, opts) -> None:
+    """Varias tomas: se unen en el orden recibido con el color igualado a la primera y luego se edita como un
+    vídeo. La IA recibe dónde empieza y acaba cada toma, para seguir instrucciones como «en la toma 2…»."""
     try:
         _set(job_id, step=f"Uniendo tus {len(takes)} tomas e igualando el color", progress=0.02)
+        tomas, t0 = [], 0.0
+        for take, name in zip(takes, names):
+            d = media.probe(take).duration
+            tomas.append({"nombre": name, "inicio": round(t0, 2), "fin": round(t0 + d, 2)})
+            t0 += d
         media.join_takes(takes, src)
         for t in takes:
             t.unlink(missing_ok=True)
+        opts.instructions = f"{opts.instructions}\n\n{pipeline.takes_prompt(tomas)}".strip()
+        opts.tomas = tomas
+        with _lock:
+            if job_id in JOBS:
+                JOBS[job_id]["tomas"] = tomas
+                JOBS[job_id]["options"]["instructions"] = opts.instructions
+                JOBS[job_id]["options"]["tomas"] = tomas
     except Exception as e:  # noqa: BLE001
         log.exception("No se pudieron unir las tomas")
         (workdir / "error.log").write_text(str(e), encoding="utf-8")
@@ -1318,6 +1334,9 @@ def chat(job_id: str, body: ChatIn):
         raise HTTPException(502, f"La IA no ha podido aplicar el cambio. {ai.error_message(e)}")
     # Lo que el creador decidió a mano en "Revisa lo que dices" se mantiene.
     new_plan.cut, new_plan.restore = plan.cut, plan.restore
+    removed_hook = _carry_switches(plan, new_plan, body.message)
+    if removed_hook:
+        opts.gancho = "titulo"  # el efecto de arranque se ha quitado: que no vuelva por la opción guardada
     if body.remember:
         config.remember(body.message)
     if settings.get("rhythm") in RHYTHMS:
@@ -1331,6 +1350,31 @@ def chat(job_id: str, body: ChatIn):
          error=None, chat=history)
     threading.Thread(target=_work, args=(job_id, src, workdir, opts, new_plan), daemon=True).start()
     return JOBS[job_id]
+
+
+_QUITAR = re.compile(r"\b(quita|quítame|quitar|fuera|sin|elimina|eliminar|borra|borrar|no quiero|nada de)\b", re.I)
+_TIPOS_CHAT = {"detras": r"detr[aá]s", "etiqueta": r"etiquetas?", "lista": r"listas?", "anillo": r"anillos?",
+               "lluvia": r"lluvia|confeti", "notificaciones": r"notificaci(ón|ones|on)", "cifra": r"cifras?",
+               "palabra": r"palabras? gigantes?", "pexels": r"pexels|planos? de apoyo"}
+
+
+def _carry_switches(old: EditPlan, new: EditPlan, message: str) -> bool:
+    """Tras un cambio por chat: los interruptores que el creador apagó siguen apagados, y «quita los textos de
+    detrás» se cumple aunque la IA no lo haya hecho. Devuelve True si se ha quitado el efecto de arranque."""
+    off = {(fx.get("type"), int(fx.get("word", -1) or 0)) for fx in old.effects if fx.get("off")}
+    for fx in new.effects:
+        if (fx.get("type"), int(fx.get("word", -1) or 0)) in off:
+            fx["off"] = True
+    if _QUITAR.search(message):
+        for kind, pat in _TIPOS_CHAT.items():
+            if re.search(pat, message, re.I):
+                new.effects = [fx for fx in new.effects if fx.get("type") != kind]
+    hook = next((fx for fx in old.effects if fx.get("_gancho")), None)
+    if hook and not any(fx.get("type") == hook["type"] and int(fx.get("word", -1) or 0) == 0 and not fx.get("off")
+                        for fx in new.effects):
+        new.gancho = "titulo"
+        return True
+    return False
 
 
 @app.get("/api/jobs/{job_id}")

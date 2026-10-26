@@ -681,6 +681,11 @@ def test_api_accepts_several_takes(sample, tmp_path, monkeypatch):
     assert [p.name for p in work.glob("original.*")] == ["original.mp4"]
     assert abs(media.probe(work / "original.mp4").duration - 24) < 0.5
     assert not list(work.glob("toma-*"))
+    # El orden recibido se respeta y la IA recibe dónde empieza y acaba cada toma.
+    assert [t["nombre"] for t in job["tomas"]] == ["toma1", "toma2"]
+    assert job["tomas"][0]["inicio"] == 0 and abs(job["tomas"][1]["inicio"] - 12) < 0.3
+    assert "Toma 2 «toma2»" in job["options"]["instructions"]
+    assert pipeline.takes_prompt(job["tomas"][:1]) == ""
 
 
 def test_strong_noise_removal(tmp_path):
