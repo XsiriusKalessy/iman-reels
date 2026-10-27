@@ -228,9 +228,11 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx
             brd = int(8 * k_scale)
             parts.append(f"{cur}split[m{k}][p{k}]")
             parts.append(f"color=c=0x1B2A44:s={W}x{H}:r=30:d={b - a:.3f},setpts=PTS+{a:.3f}/TB[bgp{k}]")
-            # El recorte sigue a la cara (si se sabe dónde está); si no, algo por encima del centro.
+            # El recorte sigue a la cara (si se sabe dónde está); si no, algo por encima del centro. El número se
+            # calcula aquí: una expresión con comas dentro de un filtro rompe el filtergraph entero.
             fy = getattr(op, "face_y", None)
-            cy = f"clip(ih*{fy:.3f}-{ph}/2,0,ih-{ph})" if fy is not None else f"(ih-{ph})*0.3"
+            ih = max(ph, round(pw * H / W))  # alto del vídeo una vez escalado al ancho del marco
+            cy = str(int(min(max(ih * fy - ph / 2, 0), ih - ph))) if fy is not None else f"(ih-{ph})*0.3"
             parts.append(f"[p{k}]trim=start={a:.3f}:end={b:.3f},scale={pw}:{ph}:force_original_aspect_ratio=increase,"
                          f"crop={pw}:{ph}:(iw-{pw})/2:{cy},setsar=1,pad={pw + 2 * brd}:{ph + 2 * brd}:{brd}:{brd}:white[pv{k}]")
             parts.append(f"[bgp{k}][pv{k}]overlay={(W - pw) // 2 - brd}:{int(1060 * k_scale)}:eof_action=pass[pg{k}]")

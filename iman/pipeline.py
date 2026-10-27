@@ -814,7 +814,9 @@ def run(
                 raise
             log.warning("Falla el montaje con efectos de vídeo: %s", e)
             warnings.append("Un efecto de vídeo ha fallado y lo he quitado para que tu reel salga.")
-            media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice, zoom, overlays=[],
+            # Sin los efectos, pero con tu marca: el logo y el cierre no se van con ellos.
+            keep = [o for o in overlays if o.kind in ("logo", "endcard", "logo_end")]
+            media.render(src, out, spans, info, ass_path, opts.size, opts.fit, opts.voice, zoom, overlays=keep,
                          preset=final_preset, tail=tail, **{**av, "transitions": None})
     if red.loop:
         try:

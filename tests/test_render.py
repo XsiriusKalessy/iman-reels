@@ -1831,3 +1831,23 @@ def test_diagnostics_friendly_errors_and_timings(tmp_path, monkeypatch):
     t = server.JOBS["t1"]["timings"]
     assert set(t) == {"Preparando", "Escuchando"} and all(v >= 0 for v in t.values())
     server.JOBS.clear()
+
+
+def test_step_card_follows_the_face_and_brand_closing_survives(sample, tmp_path):
+    """El vídeo encogido del «paso» recorta donde está la cara y el montaje con efectos no se rompe (si se
+    rompiera, el cierre de marca se perdería con ellos: eso le pasó a nelson)."""
+    from PIL import Image
+
+    from iman.effects import VideoOp
+    from iman.models import Span
+
+    spans = [Span(0.0, 3.0)]
+    info = media.probe(sample)
+    ops = [VideoOp("paso", 0.2, 1.4, face_y=0.3), VideoOp("endcard", 2.0, 3.0, color="#FFD200")]
+    out = media.render(sample, tmp_path / "t.mp4", spans, info, None, preset="ultrafast", overlays=ops)
+    filters = (tmp_path / "t.filters.txt").read_text(encoding="utf-8")
+    assert "crop=900:700:(iw-900)/2:130," in filters  # 1600*0.3-350 = 130: un número, sin comas dentro del filtro
+    media.thumbnail(out, tmp_path / "end.jpg", 2.8)
+    with Image.open(tmp_path / "end.jpg") as im:
+        r, g, b = im.getpixel((540, 300))
+    assert r > 200 and g > 170 and b < 90  # el cierre de marca dorado está
