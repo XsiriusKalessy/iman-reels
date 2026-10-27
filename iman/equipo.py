@@ -12,8 +12,8 @@ import os
 import platform
 import shutil
 
-MIN_CORES = 4  # con 4 hilos o menos, mejor ligero
-MIN_RAM_GB = 8
+MIN_CORES = 2  # con 2 hilos o menos, mejor ligero (con 4 hilos y 8 GB un reel de 30 s sale en un par de minutos)
+MIN_RAM_GB = 6
 
 # Efectos que recortan o siguen a la persona en cada fotograma, o que dibujan en 3D: lo más pesado.
 HEAVY_EFFECTS = {"detras", "fondo", "desenfoque", "anillo", "lluvia", "texto3d", "particulas", "etiqueta", "mosaico"}
@@ -52,7 +52,7 @@ def gpu() -> bool:
 def info() -> dict:
     cores = os.cpu_count() or 2
     ram = round(ram_gb(), 1)
-    weak = cores <= MIN_CORES or ram < MIN_RAM_GB
+    weak = cores <= MIN_CORES or ram < MIN_RAM_GB or (cores <= 4 and ram < 8 and not gpu())
     return {"cores": cores, "ram_gb": ram, "gpu": gpu(), "weak": weak}
 
 

@@ -36,7 +36,7 @@ PACKS = {p.key: p for p in [
   efecto estrella del pack, úsalo siempre que el creador cuente por dónde pasa el viaje.
 - "cta" al final si invita a escribir o reservar.
 El gancho debe despertar ganas de viajar: un lugar concreto, un precio sorprendente o un secreto del destino.""",
-        style="editorial",
+        style="hormozi",
         hooks=("El destino que nadie te recomienda y deberías ver", "Así es viajar a X por menos de Y €",
                "3 errores que te hacen pagar de más en X", "Lo que no te cuentan antes de ir a X",
                "Ese viaje que llevas años aplazando", "X en 10 segundos", "Lo que incluye de verdad un viaje a X",
@@ -97,7 +97,7 @@ formato es y edítalo como tal:
   "contador" para el total y "precio" para lo más barato o lo más caro. Solo cifras que diga el creador.
 El gancho tiene que despertar ganas de ir o ahorrar un error: un sitio concreto, un precio real o un "no hagas
 esto". Cierre pidiendo guardar el vídeo para el viaje o comentar el destino siguiente.""",
-        style="editorial",
+        style="impacto",
         hooks=("Lo que gasté de verdad en X días en Y", "Qué ver en X si solo tienes un día",
                "Día 1 en X y ya me ha pasado esto", "No vayas a X sin saber esto"),
     ),

@@ -14,7 +14,7 @@ from . import config, jsonfile
 
 # Opciones del reel que viajan con la plantilla (lo demás, como el título del gancho o el vídeo, es de cada reel).
 FIELDS = ("rhythm", "style", "fit", "size", "hook", "gancho", "pack", "sfx", "punch", "barra", "transiciones",
-          "look", "letra", "red", "music", "background", "idioma")
+          "look", "letra", "red", "music", "background", "idioma", "intensidad")
 MAX = 30
 
 

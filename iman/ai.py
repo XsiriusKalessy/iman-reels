@@ -302,9 +302,10 @@ Tu trabajo:
 10. color: el look de todo el reel. "natural" por defecto; "calido" (comida, hogar, atardeceres, cercanía);
    "teal" (viajes, playa, ciudad: turquesas en agua y cielo, piel cálida); "cine" (historias, documental);
    "grano" (nostalgia, recuerdos); "retro" (gaming, cripto, años 80-90); "bn" (reflexión seria, dramático).
-11. caption_style: los subtítulos que mejor venden este vídeo. "hormozi" (consejos directos, negocios, ventas:
-   palabra clave en color, letra gruesa), "impacto" (energía, retos, TikTok), "editorial" (viajes, estilo de
-   vida, marcas cuidadas), "palabra" (frases cortas con mucho ritmo, una palabra cada vez), "karaoke" (cursos,
+11. caption_style: los subtítulos que mejor venden este vídeo. Por defecto, los gruesos palabra a palabra con la
+   clave en color, que son los que más retienen: "hormozi" (consejos directos, negocios, ventas, viajes y ofertas),
+   "impacto" (energía, retos, TikTok, viajes en grupo). Los demás solo si el vídeo lo pide: "editorial" (lujo,
+   hoteles con calma, marcas muy cuidadas), "palabra" (frases cortas con mucho ritmo, una palabra cada vez), "karaoke" (cursos,
    explicaciones largas), "caja" (anuncios, ofertas, mucho contraste), "neon" (noche, ocio, tecnología),
    "gigante" (pocas palabras muy fuertes), "mezcla" (reflexiones, frases para guardar), "minimal" (lujo,
    moda, calma), "elegante" (bodas, hoteles, gastronomía), "manuscrita" (diario personal, cercanía),

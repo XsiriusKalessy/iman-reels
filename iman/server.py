@@ -1067,6 +1067,7 @@ async def create_job(
     comentario_de: str = Form(""),
     plantilla: str = Form(""),
     directo: bool = Form(False),
+    intensidad: str = Form("alta"),
 ):
     if (pack and pack not in packs.PACKS) or mode not in ("camara", "voz", "largo") \
             or background not in pipeline.BACKGROUNDS:
@@ -1090,6 +1091,7 @@ async def create_job(
         hook, gancho, pack = bool(form.get("hook", hook)), form.get("gancho", gancho), form.get("pack", pack)
         sfx, punch, barra = bool(form.get("sfx", sfx)), bool(form.get("punch", punch)), bool(form.get("barra", barra))
         transiciones, look, letra, red = bool(form.get("transiciones", transiciones)), form.get("look", look), form.get("letra", letra), form.get("red", red)
+        intensidad = form.get("intensidad", intensidad)
         if not background and mode == "camara":
             background = form.get("background", "") if form.get("background", "") in pipeline.BACKGROUNDS else ""
         if music_style == "auto" and music_file is None:
@@ -1135,6 +1137,7 @@ async def create_job(
                                 red=red if red in redes.REDES else "instagram",
                                 comentario=" ".join(comentario.split())[:140],
                                 comentario_de=comentario_de.strip().lstrip("@")[:40], ligero=light,
+                                intensidad=intensidad if intensidad in pipeline.INTENSIDADES else "alta",
                                 gestures=not light, directo=bool(directo) and mode == "largo")
     if watermark:  # el reel de prueba se cuenta al crearlo (si falla, se devuelve)
         _count_trial(+1)

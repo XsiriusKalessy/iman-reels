@@ -165,17 +165,21 @@ def test_library_toggles_and_post(sample, tmp_path, monkeypatch):
     assert wait(jid)["options"]["pack"] == "viajes"
     plan_file = tmp_path / "jobs" / jid / "plan.json"
     plan = json.loads(plan_file.read_text())
-    plan["effects"] = [{"type": "palabra", "word": 6, "text": "YA"}, {"type": "plazas", "word": 11, "text": "Solo 3"}]
+    plan["effects"] = [{"type": "palabra", "word": 9, "text": "YA"}, {"type": "plazas", "word": 13, "text": "Solo 3"}]
     plan_file.write_text(json.dumps(plan))
 
     j = c.post(f"/api/jobs/{jid}/plan", json={"effects_off": [1], "hook_title": "Gancho nuevo"}).json()
     j = wait(jid)
     assert j["status"] == "done", j
-    assert [fx.get("off") for fx in j["result"]["plan"]["effects"]] == [False, True]
+    # (el efecto de arranque del gancho, si lo hay, va aparte)
+    assert [fx.get("off") for fx in j["result"]["plan"]["effects"] if not fx.get("_gancho")] == [False, True]
     ass = (tmp_path / "jobs" / jid / "subs.ass").read_text()
     assert "SOLO 3" not in ass
     assert "YA" in ass
-    assert "GANCHO NUEVO" in ass.upper()
+    # Con persona recortable el gancho es «detrás de ti»: la palabra clave del título va en el ASS de detrás.
+    behind = tmp_path / "jobs" / jid / "behind.ass"
+    both = ass.upper() + (behind.read_text().upper() if behind.exists() else "")
+    assert "GANCHO NUEVO" in both or "GANCHO" in both
 
     # Revisa lo que dices: recuperar la toma repetida y quitar la última frase.
     rows = c.get(f"/api/jobs/{jid}/review").json()["phrases"]

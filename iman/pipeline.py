@@ -69,6 +69,8 @@ class EditOptions:
     directo: bool = False  # vídeo largo que es un directo: los momentos se eligen también por la energía del audio
     # Varias tomas unidas en orden: [{"nombre", "inicio", "fin"}] en segundos del vídeo unido (server._join_then).
     tomas: list = field(default_factory=list)
+    # Cuánto espectáculo: "alta" (un efecto cada 3-5 s, los más vistosos primero), "media" o "baja" (solo si aportan).
+    intensidad: str = "alta"
 
 
 @dataclass
@@ -143,6 +145,20 @@ def broll_prompt(names: list[str]) -> str:
         return ""
     lines = "\n".join(f"{i + 1}: {n}" for i, n in enumerate(names))
     return f"VÍDEOS DE APOYO que ha subido el creador (úsalos con el efecto \"apoyo\"):\n{lines}"
+
+
+INTENSIDADES = ("alta", "media", "baja")
+INTENSITY_NOTE = {
+    "alta": ("INTENSIDAD ALTA (el estilo de los reels que más enganchan): pon un efecto cada 3 a 5 segundos (en un "
+             "reel de 60 s, de 12 a 18), empezando fuerte en el primer segundo, y que nunca pasen más de 5 s sin "
+             "un cambio en pantalla. Prioriza los más vistosos: detras, titular, palabra, cifra, texto3d, hueca, "
+             "color, lluvia, lista, bocadillo, notificaciones; los sutiles (foco, marco, progreso) solo de "
+             "acompañamiento. Textos cortos y grandes, con las palabras exactas que dice. De 6 a 10 zooms."),
+    "media": "",
+    "baja": ("INTENSIDAD BAJA: pocos efectos, uno cada 10 a 15 segundos y solo si aportan de verdad; textos "
+             "discretos. De 2 a 4 zooms."),
+}
+DEDUPE_GAP = {"alta": 0.6, "media": 1.0, "baja": 1.5}
 
 
 def takes_prompt(tomas: list[dict]) -> str:
@@ -532,6 +548,8 @@ def run(
                 wants = f"{wants}\n\n{PEXELS_NOTE}".strip()
             if redes.get(opts.red).note:
                 wants = f"{wants}\n\n{redes.get(opts.red).note}".strip()
+            if INTENSITY_NOTE.get(opts.intensidad):
+                wants = f"{wants}\n\n{INTENSITY_NOTE[opts.intensidad]}".strip()
             plan = ai.plan_edit(aicfg, words, wants, opts.hook_template, opts.pack,
                                 takes=take_ranges(words, opts.tomas))
         except Exception as e:  # la IA es un extra: si falla, seguimos y lo avisamos
@@ -566,6 +584,9 @@ def run(
     if opts.ligero:  # ordenador sencillo: fuera lo que recorta o sigue a la persona en cada fotograma
         from .equipo import HEAVY_EFFECTS
 
+        if any(fx.get("type") in HEAVY_EFFECTS for fx in plan.effects):
+            notices.append("Modo ligero: he dejado fuera los textos detrás de ti, el anillo y la lluvia para que "
+                           "salga rápido en este ordenador. Si quieres todo, en Ajustes pon «Modo ligero» en «no».")
         plan.effects = [fx for fx in plan.effects if fx.get("type") not in HEAVY_EFFECTS]
     if opts.red == "anuncio":  # estilo casero: fuera los efectos más llamativos
         plan.effects = [fx for fx in plan.effects if fx.get("type") not in redes.ANUNCIO_FUERA]
@@ -627,7 +648,8 @@ def run(
     jsonfile.save(workdir / "plan.json", plan.to_dict(), indent=1)
 
     active = [dict(fx) for fx in plan.effects if not fx.get("off")]  # los que el creador ha apagado no salen
-    active = effects.dedupe_overlaps(active, effects.WordClock(kept, kept_idx))  # nunca dos a la vez
+    active = effects.dedupe_overlaps(active, effects.WordClock(kept, kept_idx),  # nunca dos a la vez
+                                     DEDUPE_GAP.get(opts.intensidad, 1.0))
     gestos.attach(active, found, hand_frames, effects.WordClock(kept, kept_idx))
     effects.assign_next(active, effects.WordClock(kept, kept_idx))
     frames = None
