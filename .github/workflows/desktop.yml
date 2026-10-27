@@ -5,6 +5,9 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+permissions:
+  contents: write  # para publicar la versión de prueba en Releases de este repo
+
 jobs:
   build:
     strategy:
@@ -121,3 +124,26 @@ jobs:
             --repo XsiriusKalessy/iman-descargas \
             --title "Imán ${{ github.ref_name }}" \
             --notes "${NOTES:-Mejoras y correcciones.}"
+
+  # Siempre: una versión de prueba en Releases de este mismo repo, con los instaladores sueltos (.exe y .dmg).
+  # Las descargas de «Artifacts» son un zip grande que a veces no termina de bajar; un asset de Release es un
+  # archivo normal y se descarga a la primera.
+  prueba:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Publicar versión de prueba
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ github.event.head_commit.message }}
+        run: |
+          ls -R out
+          tag="${{ github.ref_type == 'tag' && github.ref_name || format('prueba-{0}', github.run_number) }}"
+          gh release create "$tag" $(find out -type f \( -name '*.exe' -o -name '*.dmg' \)) \
+            --repo "${{ github.repository }}" --target "${{ github.sha }}" --prerelease \
+            --title "Imán, versión de prueba $tag ($(date -u +%d/%m/%Y))" \
+            --notes "${NOTES:-Mejoras y correcciones.} Descarga el .exe (Windows) o el .dmg (Mac) de abajo."
