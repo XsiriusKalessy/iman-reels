@@ -1851,3 +1851,39 @@ def test_step_card_follows_the_face_and_brand_closing_survives(sample, tmp_path)
     with Image.open(tmp_path / "end.jpg") as im:
         r, g, b = im.getpixel((540, 300))
     assert r > 200 and g > 170 and b < 90  # el cierre de marca dorado está
+
+
+def test_silent_intro_with_action_opens_the_reel(sample, tmp_path):
+    from iman.models import Word
+    assert media.silences(sample) == []  # el tono suena todo el rato
+    assert media.motion_windows(sample, 4.0, 2.0)[2] < 8  # la carta de ajuste apenas se mueve: no es «escena»
+    moving = tmp_path / "movil.mp4"  # alguien haciendo algo delante de la cámara: mucho movimiento
+    subprocess.run([
+        "ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=gray:size=1280x720:rate=30",
+        "-f", "lavfi", "-i", "color=c=white:size=400x600:rate=30", "-f", "lavfi", "-i", "sine=frequency=220:duration=12",
+        "-filter_complex", "[0][1]overlay=x='mod(t*500,1280)':y=60", "-t", "12",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(moving),
+    ], check=True)
+    best = media.motion_windows(moving, 4.0, 2.0)
+    assert best and best[2] > 8 and best[1] <= 4.0
+    words = [Word(w.text, w.start + 3.0, w.end + 3.0) for w in TAKE]  # 3 s sin hablar al principio
+    cfg = {"provider": "none", "anthropic_key": "", "openai_key": "", "claude_model": "", "openai_model": ""}
+    res = pipeline.run(moving, tmp_path / "work", pipeline.EditOptions(), cfg, words=words)
+    assert res.plan.gancho == "escena"
+    assert any("sin hablar" in f for f in res.fixes)
+    quiet = pipeline.run(sample, tmp_path / "work2", pipeline.EditOptions(), cfg, words=words)
+    assert quiet.plan.gancho != "escena"
+    assert res.duration_out - quiet.duration_out == pytest.approx(2.0, abs=0.3)  # los 2 s de escena se suman
+    info = media.probe(res.video)
+    assert abs(info.duration - res.duration_out) < 0.3
+
+
+def test_silences_are_measured(tmp_path):
+    p = tmp_path / "pausa.mp4"
+    subprocess.run([
+        "ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=10:duration=6",
+        "-f", "lavfi", "-i", "sine=frequency=220:duration=6", "-af", "volume='if(between(t,2,4),0,1)':eval=frame",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(p),
+    ], check=True)
+    sil = media.silences(p)
+    assert len(sil) == 1 and abs(sil[0][0] - 2.0) < 0.2 and abs(sil[0][1] - 4.0) < 0.2

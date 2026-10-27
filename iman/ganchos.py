@@ -56,6 +56,11 @@ GANCHOS: dict[str, Gancho] = {g.key: g for g in [
            "Empiezas con la mano tapando el objetivo; al quitarla, el reel arranca con un latigazo.",
            "Tapa el objetivo con la mano, destápala y empieza a hablar. Imán quita el tramo tapado.",
            punch="seco", needs="manos"),
+    Gancho("escena", "Escena sin hablar",
+           "Empiezas haciendo algo sin decir nada (el móvil buscando wifi, abrir una maleta, entrar en plano) "
+           "y el título va encima; tu voz entra después. Imán lo detecta solo si lo grabas así.",
+           "Graba 2 o 3 segundos haciendo algo antes de empezar a hablar: eso es lo que se ve primero.",
+           punch=""),
     Gancho("entrada", "Entras en cuadro",
            "La cámara ya graba y tú entras en plano andando o asomándote: el movimiento engancha.",
            "Deja la cámara fija grabando y entra en plano desde un lado; empieza a hablar nada más llegar.",
@@ -97,7 +102,7 @@ def pick(hook_title: str, pack: str = "", comentario: str = "", has_person: bool
 
 def alternatives(chosen: str, pack: str = "", has_person: bool = True, n: int = 3) -> list[str]:
     """Otros ganchos para probar con un clic, los que lucen con este sector y este vídeo."""
-    order = ["titulo", "zoom_seco", "congelado", "detras", "numero", "pov", "aviso", "color", "objeto", "entrada", "mano"]
+    order = ["titulo", "zoom_seco", "congelado", "detras", "numero", "pov", "aviso", "color", "objeto", "escena", "entrada", "mano"]
     out = []
     for k in order:
         g = GANCHOS[k]

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from .models import EditPlan, Word
 
 GANCHO_KEYS = ("titulo", "zoom_seco", "congelado", "detras", "numero", "pov", "aviso", "color", "objeto", "entrada",
-               "mano", "comentario")
+               "mano", "comentario", "escena")
 
 CLAUDE_MODEL = "claude-opus-5-5"
 OPENAI_MODEL = "gpt-4o"
@@ -128,7 +128,9 @@ Tu trabajo:
    (quita SIEMPRE la versión fallida y deja la buena, normalmente la última), muletillas, "espera, lo repito",
    comentarios al equipo, ruido. Nunca quites contenido bueno. Si no hay nada que quitar, devuelve [].
 2. hook_title: el texto que aparece grande en pantalla al principio. Corto, concreto, que genere curiosidad,
-   con las palabras del propio creador cuando sea posible. Sin emojis ni comillas. Usa una de estas fórmulas,
+   con las palabras del propio creador cuando sea posible. Si el creador dice una frase-gancho con nombre, apodo o
+   choque («no seas el mendigo del wifi», «el error del turista novato»), ESA es el hook_title, tal cual: no la
+   sustituyas por una tuya. Sin emojis ni comillas. Si no la hay, usa una de estas fórmulas,
    la que mejor encaje con lo que dice: una cifra concreta ("3 errores que…"), un problema que duele ("Si te pasa
    esto…"), romper una creencia ("Nadie te dice que…") o una promesa clara ("Así ahorras…"). Nada genérico.
    El gancho le habla al cerebro instintivo (algo nuevo, un riesgo, una pérdida, "tú") y tiene que sonar a la
@@ -321,7 +323,9 @@ Tu trabajo:
    «comenta X» cuando el creador pide comentar una palabra para enviar algo; escribe esa palabra en MAYÚSCULAS
    en hook_title), "color" (golpe de color con la frase clave: energía, ofertas), "objeto" (cuando acerca algo a
    la cámara), "entrada" (cuando entra en plano andando), "mano" (cuando empieza con la mano tapando el
-   objetivo), "comentario" (cuando responde a un comentario). gancho_why: por qué, en una frase.
+   objetivo), "comentario" (cuando responde a un comentario), "escena" (si la transcripción dice que empieza con
+   varios segundos sin hablar haciendo algo: ese rato se ve primero con el título encima). gancho_why: por qué, en
+   una frase.
 Respeta el idioma del vídeo. Sigue las instrucciones del creador si las hay: mandan sobre todo lo demás. Si el creador
 escribe un texto literal (entre comillas o como lista), ponlo tal cual, sin reescribirlo, y en el orden que lo da."""
 
@@ -338,6 +342,8 @@ En reply, responde al creador en una frase corta diciendo qué has cambiado."""
 
 def transcript_for_prompt(words: list[Word]) -> str:
     out = []
+    if words and words[0].start >= 1.8:
+        out.append(f"(empieza con {words[0].start:.0f}s sin hablar, haciendo algo delante de la cámara)")
     for i, w in enumerate(words):
         if i:
             gap = w.start - words[i - 1].end

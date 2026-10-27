@@ -1,3 +1,4 @@
+import pytest
 from iman import ai
 from iman.captions import STYLES, build_ass, group_words
 from iman.models import Word
@@ -221,3 +222,22 @@ def test_effects_never_pile_up_and_lists_avoid_the_face():
     assert ops and ops[0].face == ""
     ops = effects.video_ops([tarj], clock, 20.0, accent="&H00FFD200", face=True)
     assert ops[0].face == "abajo"
+
+
+def test_words_do_not_stretch_into_silence():
+    from iman.rhythm import clip_to_silence
+    words = W([("Hola", 0.2, 0.5), ("mundo", 0.6, 3.4), ("eh", 4.0, 4.2), ("sigo", 6.0, 6.3)])
+    out = clip_to_silence(words, [(1.0, 5.0)])
+    assert [w.text for w in out] == ["Hola", "mundo", "sigo"]  # «eh» cae entero dentro del silencio
+    assert out[1].end == pytest.approx(1.05)  # «mundo» acaba donde empieza el silencio medido
+    assert out[0] is words[0] and out[2] is words[3]  # lo demás no se toca
+    assert clip_to_silence(words, []) == words
+
+
+def test_escena_is_a_known_hook():
+    from iman import ganchos
+    assert "escena" in ai.GANCHO_KEYS and "escena" in ganchos.GANCHOS
+    assert "escena" in ganchos.alternatives("titulo", n=20)
+    shifted = [Word(w.text, w.start + 3.0, w.end + 3.0) for w in TAKE]
+    assert ai.transcript_for_prompt(shifted).startswith("(empieza con 3s sin hablar")
+    assert not ai.transcript_for_prompt(TAKE).startswith("(empieza")

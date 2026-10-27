@@ -802,6 +802,71 @@ def join_takes(srcs: list[Path], dst: Path) -> Path:
     return dst
 
 
+def silences(src: Path, noise_db: float = -35.0, min_d: float = 0.5) -> list[tuple[float, float]]:
+    """Tramos sin voz del audio (silencedetect de ffmpeg): [(inicio, fin)] en segundos."""
+    cmd = [FFMPEG, "-v", "info", "-nostats", "-i", str(src), "-vn", "-af",
+           f"silencedetect=n={noise_db}dB:d={min_d}", "-f", "null", "-"]
+    try:
+        err = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                             timeout=300).stderr
+    except (OSError, subprocess.SubprocessError):
+        return []
+    out, start = [], None
+    for line in err.splitlines():
+        if "silence_start:" in line:
+            try:
+                start = float(line.split("silence_start:")[1].split()[0])
+            except (IndexError, ValueError):
+                start = None
+        elif "silence_end:" in line and start is not None:
+            try:
+                out.append((start, float(line.split("silence_end:")[1].split()[0])))
+            except (IndexError, ValueError):
+                pass
+            start = None
+    if start is not None:
+        out.append((start, duration_of(src) or start))
+    return out
+
+
+def motion_windows(src: Path, until: float, win: float = 2.0, fps: int = 4) -> tuple[float, float, float] | None:
+    """La ventana de `win` segundos con más movimiento entre 0 y `until`: (inicio, fin, movimiento medio).
+    Movimiento = brillo medio de la diferencia entre fotogramas consecutivos (a 4 por segundo, en pequeño)."""
+    if until < win:
+        return None
+    cmd = [FFMPEG, "-v", "info", "-nostats", "-t", f"{until:.2f}", "-i", str(src), "-vf",
+           f"fps={fps},scale=64:-2,tblend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-",
+           "-f", "null", "-"]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    frames: list[tuple[float, float]] = []
+    t = None
+    for line in out.splitlines():
+        if line.startswith("frame:"):
+            try:
+                t = float(line.split("pts_time:")[1].split()[0])
+            except (IndexError, ValueError):
+                t = None
+        elif "YAVG=" in line and t is not None:
+            try:
+                frames.append((t, float(line.split("YAVG=")[1])))
+            except ValueError:
+                pass
+    frames = frames[1:]  # el primero es la diferencia con nada
+    n = int(win * fps)
+    if len(frames) < n:
+        return None
+    best = None
+    for i in range(0, len(frames) - n + 1):
+        a = frames[i][0]
+        score = sum(v for _, v in frames[i:i + n]) / n
+        if best is None or score > best[2]:
+            best = (round(a, 2), round(a + win, 2), round(score, 2))
+    return best
+
+
 def dark_start(src: Path, limit: float = 3.0) -> float:
     """Segundo en el que deja de estar tapado el objetivo al empezar (gancho «mano»): 0.0 si el vídeo no
     empieza a oscuras. Mira el brillo medio de los primeros fotogramas, a 10 por segundo."""

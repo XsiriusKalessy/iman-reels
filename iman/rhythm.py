@@ -97,6 +97,26 @@ def detect_retakes(words: list[Word], ngram: int = 3, window: int = 30) -> list[
     return drops
 
 
+def clip_to_silence(words: list[Word], silences: list[tuple[float, float]], hallucination: float = 1.0) -> list[Word]:
+    """La transcripción a veces alarga la última palabra de una frase hasta el silencio que la sigue, y el
+    silencio se queda en el reel. Aquí cada palabra acaba donde empieza el silencio medido en el audio, y una
+    «palabra» que cae entera dentro de un silencio de más de `hallucination` s no existe: se quita."""
+    out = []
+    for w in words:
+        start, end = w.start, w.end
+        ghost = False
+        for ss, se in silences:
+            if ss <= start and end <= se and se - ss >= hallucination:
+                ghost = True
+                break
+            if start < ss < end - 0.15:
+                end = min(end, ss + 0.05)
+        if ghost:
+            continue
+        out.append(Word(w.text, start, max(end, start + 0.05)) if end != w.end else w)
+    return out
+
+
 def take_ranges(words: list[Word], tomas: list[dict]) -> list[tuple[int, int]]:
     """Qué palabras caen en cada toma unida (índices desde-hasta, ambos incluidos); una toma sin palabras no sale."""
     out = []

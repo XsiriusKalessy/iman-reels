@@ -17,7 +17,8 @@ from . import ai, brand, captions, copystyle, effects, fondos, ganchos, gestos, 
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Span, Word
-from .rhythm import RHYTHMS, detect_retakes, detect_take_retakes, is_filler, keep_spans, phrases, remap_words, take_ranges
+from .rhythm import (RHYTHMS, clip_to_silence, detect_retakes, detect_take_retakes, is_filler, keep_spans, phrases,
+                     remap_words, take_ranges)
 
 log = logging.getLogger(__name__)
 
@@ -328,6 +329,21 @@ def _music(choice, workdir: Path, total: float, drop_at: float | None = None) ->
     return None
 
 
+def _silent_intro(src: Path, first_word: float, win: float = 2.0, min_silence: float = 1.8,
+                  min_motion: float = 8.0) -> tuple[float, float] | None:
+    """Si el vídeo empieza con ≥ `min_silence` s sin hablar y en ese rato pasa algo (movimiento), los `win`
+    segundos con más acción, para usarlos de arranque."""
+    if first_word < min_silence:
+        return None
+    try:
+        best = media.motion_windows(src, min(first_word - 0.1, 12.0), win)
+    except Exception:  # noqa: BLE001
+        return None
+    if not best or best[2] < min_motion:
+        return None
+    return best[0], best[1]
+
+
 def _face_positions(active: list[dict], src: Path, spans, clock, workdir: Path) -> None:
     """Dónde está la cara cuando empieza una lista: la lista se coloca en la otra mitad de la pantalla.
     Un fotograma y el modelo de persona (iman/segment.py); si falla, la lista va donde siempre."""
@@ -557,6 +573,10 @@ def run(
         words = _transcribe(src, workdir, cfg, progress)
     transcript_file = workdir / "transcript.json"
     if jsonfile.load(transcript_file) is None:
+        if words and RHYTHMS[opts.rhythm].cut:
+            # Las palabras no se alargan hasta el silencio de después (así no se quedan huecos al final de cada
+            # frase ni al final del vídeo), y lo «oído» dentro de un silencio largo no cuenta.
+            words = clip_to_silence(words, media.silences(src))
         jsonfile.save(transcript_file, [w.__dict__ for w in words], indent=1)
 
     progress("Buscando fallos y el mejor gancho", 0.40)
@@ -626,6 +646,20 @@ def run(
                 plan.drop.append((a, b))
                 plan.drop_reasons.append("Toma repetida: me quedo con la última")
     spans, drops = keep_spans(words, info.duration, rhythm, plan.drop + plan.cut, plan.restore, plan.pauses)
+    scene_fixes: list[str] = []
+    if rhythm.cut and not voice_only and words and plan.gancho != "mano" and opts.hook:
+        # Empiezas haciendo algo sin hablar (el móvil buscando wifi, entrar en plano…): esos 2 s son el arranque,
+        # con el título encima, y la voz entra después. Sin esto, el corte de silencios se lo comía.
+        scene = _silent_intro(src, words[0].start)
+        if scene:
+            if spans and spans[0].start < scene[1] < spans[0].end - 0.12:
+                spans[0].start = scene[1]  # el relleno de la primera frase no repite lo de la escena
+            spans.insert(0, Span(*scene))
+            if plan.gancho in ("", "titulo", "detras", "zoom_seco", "congelado"):
+                plan.gancho = "escena"
+                plan.hook_shown = True
+            scene_fixes.append(f"Empiezas {words[0].start:.0f} s sin hablar: he dejado los 2 s con más acción "
+                               "como arranque, con el título encima, y tu voz entra después.")
     if plan.gancho == "mano" and spans and not voice_only:  # la mano tapa el objetivo: fuera el tramo a oscuras
         uncovered = media.dark_start(src)
         if uncovered and spans[0].start < uncovered < spans[0].end - 0.3:
@@ -836,7 +870,7 @@ def run(
         ai_warning=ai_warning,
         notices=warnings,
         checks=pre_publish(opts, plan, kept, total, active, kit, music is not None),
-        fixes=_fixes(info.duration, out_duration, drops, beats, active, clock),
+        fixes=scene_fixes + _fixes(info.duration, out_duration, drops, beats, active, clock),
         viral=viral.score(plan, kept, total, active, captions=opts.captions, music=music is not None, hook=opts.hook,
                           cta=any(fx.get("type") == "cta" for fx in active) or bool(kit and kit.active and kit.end_card)),
     )
