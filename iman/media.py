@@ -224,14 +224,16 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx
             parts.append(f"[bgp{k}][pv{k}]overlay={(W - pw) // 2}:{int(560 * k_scale)}:eof_action=pass[pg{k}]")
             parts.append(f"[m{k}][pg{k}]overlay=0:0:{on}:eof_action=pass[o{k}]")
         elif op.kind == "paso":
-            pw, ph = int(820 * k_scale) // 2 * 2, int(600 * k_scale) // 2 * 2
+            pw, ph = int(900 * k_scale) // 2 * 2, int(700 * k_scale) // 2 * 2
             brd = int(8 * k_scale)
             parts.append(f"{cur}split[m{k}][p{k}]")
             parts.append(f"color=c=0x1B2A44:s={W}x{H}:r=30:d={b - a:.3f},setpts=PTS+{a:.3f}/TB[bgp{k}]")
-            # Recorta más arriba del centro: ahí suele estar la cara.
+            # El recorte sigue a la cara (si se sabe dónde está); si no, algo por encima del centro.
+            fy = getattr(op, "face_y", None)
+            cy = f"clip(ih*{fy:.3f}-{ph}/2,0,ih-{ph})" if fy is not None else f"(ih-{ph})*0.3"
             parts.append(f"[p{k}]trim=start={a:.3f}:end={b:.3f},scale={pw}:{ph}:force_original_aspect_ratio=increase,"
-                         f"crop={pw}:{ph}:(iw-{pw})/2:(ih-{ph})*0.3,setsar=1,pad={pw + 2 * brd}:{ph + 2 * brd}:{brd}:{brd}:white[pv{k}]")
-            parts.append(f"[bgp{k}][pv{k}]overlay={(W - pw) // 2 - brd}:{int(1120 * k_scale)}:eof_action=pass[pg{k}]")
+                         f"crop={pw}:{ph}:(iw-{pw})/2:{cy},setsar=1,pad={pw + 2 * brd}:{ph + 2 * brd}:{brd}:{brd}:white[pv{k}]")
+            parts.append(f"[bgp{k}][pv{k}]overlay={(W - pw) // 2 - brd}:{int(1060 * k_scale)}:eof_action=pass[pg{k}]")
             parts.append(f"[m{k}][pg{k}]overlay=0:0:{on}:eof_action=pass[o{k}]")
         elif op.kind == "endcard":
             parts.append(f"color=c=0x{op.color.lstrip('#')}:s={W}x{H}:r=30:d={b - a:.3f},"
@@ -250,6 +252,11 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx
                     f"'(ih-oh)/2'") if still else ""
             parts.append(f"{images[id(op)]}{feed},scale={W}:{H}:force_original_aspect_ratio=increase,"
                          f"crop={W}:{H}{zoom},setsar=1,format=yuv420p,fade=t=in:st={a:.3f}:d=0.15[br{k}]")
+            face = getattr(op, "face", "")
+            if not face:  # sin círculo: el apoyo a pantalla completa (el creador sigue hablando debajo)
+                parts.append(f"{cur}[br{k}]overlay=0:0:{on}:eof_action=pass[o{k}]")
+                cur = f"[o{k}]"
+                continue
             dd = int(340 * k_scale) // 2 * 2
             ring = int(10 * k_scale)
             circle = "if(lt(hypot(X-W/2,Y-H/2),W/2-1),255,0)"
@@ -260,7 +267,8 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx
                          f"geq=r=255:g=255:b=255:a='{circle}'[rg{k}]")
             parts.append(f"[rg{k}][fc{k}]overlay={ring}:{ring}:shortest=1[bb{k}]")
             parts.append(f"[m{k}][br{k}]overlay=0:0:{on}:eof_action=pass[t{k}]")
-            parts.append(f"[t{k}][bb{k}]overlay=x=W-w-{int(48 * k_scale)}:y={int(250 * k_scale)}:{on}:eof_action=pass[o{k}]")
+            cy = int((1460 if face == "abajo" else 250) * k_scale)  # abajo: lejos de los títulos y de los subtítulos
+            parts.append(f"[t{k}][bb{k}]overlay=x=W-w-{int(48 * k_scale)}:y={cy}:{on}:eof_action=pass[o{k}]")
         elif op.kind == "objeto" and images and id(op) in images:
             # Pegatina del objeto que se nombra: entra subiendo y con fundido, alternando lado.
             n_obj = sum(1 for o in ops[:k] if o.kind == "objeto")
@@ -284,7 +292,7 @@ def _video_overlays(parts: list[str], ops: list, W: int, H: int, cur: str = "[vx
             fade = "" if op.kind == "logo" else f",fade=t=in:st={a:.3f}:d=0.35:alpha=1"
             parts.append(f"{images[id(op)]}scale={lw}:-1,format=rgba,colorchannelmixer=aa={alpha},"
                          f"loop=-1:1,fps=30,setpts=N/30/TB{fade}[lg{k}]")
-            pos = f"x=W-w-{int(40 * k_scale)}:y={int(210 * k_scale)}" if op.kind == "logo" else \
+            pos = f"x=W-w-{int(60 * k_scale)}:y={int(210 * k_scale)}" if op.kind == "logo" else \
                 f"x=(W-w)/2:y={int(860 * k_scale)}-h"
             parts.append(f"{cur}[lg{k}]overlay={pos}:{on}:shortest=1[o{k}]")
         else:

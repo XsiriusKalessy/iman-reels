@@ -49,6 +49,8 @@ class VideoOp:
     color: str = ""  # fondo liso (cierre de marca)
     ramp: bool = True  # rampa de velocidad en los vídeos de apoyo (el mapa va a su ritmo)
     paths: tuple[str, ...] = ()  # varios archivos (los clips de «moviles»)
+    face: str = ""  # el creador en un círculo sobre el vídeo de apoyo: "" no, "arriba" o "abajo" (bajo los títulos)
+    face_y: float | None = None  # dónde está la cara (0 arriba, 1 abajo) para que el vídeo encogido no la corte
 
 
 @dataclass
@@ -147,10 +149,16 @@ def lista_events(effect: dict, clock: WordClock, style: Style, duration: float) 
     end_idx = effect.get("until_word")
     end = clock.end_of(int(end_idx)) if end_idx is not None else None
     end = min(duration, max(end or times[-1] + 2.0, times[-1] + 1.2))
-    lines = [_dim(start, end)]
+    lines = [_dim(start, end, "A0")]  # oscurece poco: el creador se sigue viendo detrás
     title = effect.get("title", "").strip()
     n = len(items)
-    top = 960 - (n * 150) // 2 + (50 if title else 0)
+    # Lejos de la cara: si la cara está en la mitad de arriba, la lista va abajo (sobre los subtítulos, que se
+    # ocultan mientras dura); si está abajo o no se sabe, arriba.
+    face_y = effect.get("_face_y")
+    if face_y is not None and face_y < 0.5:
+        top = 1230 - n * 150  # bloque de abajo, acaba antes de la zona de los subtítulos
+    else:
+        top = 450 if title else 320  # bloque de arriba
     if title:
         t = _esc(title.upper())
         lines.append(
@@ -958,6 +966,9 @@ def pagina_events(effect: dict, clock: WordClock, style: Style, duration: float)
     return lines, Window(start, end)
 
 
+PASO_VIDEO_TOP = 1060  # donde empieza el vídeo encogido del efecto "paso" (media.py lo pinta ahí)
+
+
 def paso_events(effect: dict, clock: WordClock, style: Style, duration: float) -> tuple[list[str], Window | None]:
     """Paso de un tutorial: tarjeta clara arriba con el título del paso y sus puntos (los que empiezan por "x "
     salen tachados), la palabra que se dice en serif grande y el vídeo encogido abajo (lo pinta ffmpeg)."""
@@ -971,7 +982,10 @@ def paso_events(effect: dict, clock: WordClock, style: Style, duration: float) -
     if title and n and not title[:1].isdigit():
         title = f"{n} · {title}"
     items = [i.strip() for i in str(effect.get("subtitle", "")).split(";") if i.strip()][:5]
-    cx, cy, cw, ch = 80, 140, W - 160, 620
+    # La tarjeta mide lo que su contenido: sin hueco vacío debajo de los puntos.
+    cx, cy, cw = 60, 140, W - 120
+    ch = (50 + len(items) * 88 + 20 if items else 300) + (106 if title else 30)
+    word_y = (cy + ch + PASO_VIDEO_TOP) // 2
     lines = [f"Dialogue: 4,{t},Sub,,0,0,0,,{{\\an7\\pos({cx},{cy})\\bord0\\shad0\\1c{rgb('#F4ECDF')}&\\fad(200,200)\\p1}}"
              f"{_rect(0, 0, cw, ch, 30)}"]
     if items:
@@ -1012,7 +1026,7 @@ def paso_events(effect: dict, clock: WordClock, style: Style, duration: float) -
         if b - a < 0.08 or not txt:
             continue
         fs = textfit.fit(txt, "Playfair Display ExtraBold", 120, 960)
-        lines.append(f"Dialogue: 6,{_ts(a)},{_ts(b)},Sub,,0,0,0,,{{\\an5\\pos(540,1000)\\fnPlayfair Display ExtraBold\\fs{fs:.0f}"
+        lines.append(f"Dialogue: 6,{_ts(a)},{_ts(b)},Sub,,0,0,0,,{{\\an5\\pos(540,{word_y})\\fnPlayfair Display ExtraBold\\fs{fs:.0f}"
                      f"\\bord0\\shad3\\c&H00FFFFFF&\\fad(60,0)}}{_esc(txt)}")
     return lines, Window(start, end)
 
@@ -1023,9 +1037,10 @@ def _floats(fx: dict) -> bool:
 
 
 def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=None,
-              assets: dict[str, str] | None = None, accent: str = "") -> list[VideoOp]:
+              assets: dict[str, str] | None = None, accent: str = "", face: bool = False) -> list[VideoOp]:
     """Los efectos de vídeo de un plan, en tiempos del reel. `src_of(t)` da el segundo de la toma original.
-    `assets`: número de vídeo de apoyo ("1", "2"…) -> archivo."""
+    `assets`: número de vídeo de apoyo ("1", "2"…) -> archivo. `face`: el creador en un círculo sobre los apoyos
+    (solo si lo pide: tapaba títulos)."""
     ops = []
     effects = list(effects or [])
     if any("_next" not in fx for fx in effects):
@@ -1064,10 +1079,11 @@ def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=Non
                                        mapa.ass_hex(accent)))
             except Exception:  # noqa: BLE001 - sin mapa, el reel sigue con el itinerario dibujado
                 continue
-            ops.append(VideoOp("apoyo", span[0], span[1], path=path, ramp=False))
+            ops.append(VideoOp("apoyo", span[0], span[1], path=path, ramp=False, face="abajo" if face else ""))
             continue
         if kind == "tarjetas":
-            # Tarjetas con iconos a pantalla completa (como el mapa), con el creador en el círculo.
+            # Tarjetas con iconos a pantalla completa (como el mapa); el círculo con el creador, solo si lo pide,
+            # y abajo, lejos del título.
             from . import mapa, tarjetas
 
             entries = tarjetas.items(str(fx.get("text", "")))
@@ -1077,7 +1093,7 @@ def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=Non
                 path = str(tarjetas.cached(entries, span[1] - span[0], str(fx.get("title", "")), mapa.ass_hex(accent)))
             except Exception:  # noqa: BLE001 - sin tarjetas, el reel sigue sin ellas
                 continue
-            ops.append(VideoOp("apoyo", span[0], span[1], path=path, ramp=False))
+            ops.append(VideoOp("apoyo", span[0], span[1], path=path, ramp=False, face="abajo" if face else ""))
             continue
         if kind == "objeto":
             from . import stickers
@@ -1109,7 +1125,9 @@ def video_ops(effects: list[dict], clock: WordClock, duration: float, src_of=Non
                 continue
             except Exception:  # noqa: BLE001 - si falla, la foto entra con el zoom lento de siempre
                 pass
-        ops.append(VideoOp("apoyo" if kind == "pexels" else kind, span[0], span[1], max(0.0, src - 0.5), path=path))
+        ops.append(VideoOp("apoyo" if kind == "pexels" else kind, span[0], span[1], max(0.0, src - 0.5), path=path,
+                           face="arriba" if (face and kind in ("apoyo", "pexels")) else "",
+                           face_y=fx.get("_face_y") if kind == "paso" else None))
     return ops
 
 
@@ -1132,10 +1150,19 @@ def build_effects(effects: list[dict], clock: WordClock, style: Style, duration:
     effects = list(effects or [])
     if any("_next" not in fx for fx in effects):
         assign_next(effects, clock)
-    for fx in effects:
-        fx = {**fx, "_from": source_duration}
+    # En orden de aparición: un efecto que empieza mientras otro sigue en pantalla (una lista, unas tarjetas…)
+    # se salta, salvo las pegatinas de objetos. Si no, salen textos unos encima de otros.
+    order = sorted(range(len(effects)), key=lambda i: (clock.at(word_of(effects[i])) is None,
+                                                       clock.at(word_of(effects[i])) or 0.0))
+    busy_until = -1.0
+    for i in order:
+        fx = {**effects[i], "_from": source_duration}
         builder = BUILDERS.get(fx.get("type")) or _pack_builders().get(fx.get("type"))
         if not builder:
+            continue
+        start = clock.at(word_of(fx))
+        if start is not None and not _floats(fx) and start < busy_until - 0.05:
+            _log.info("Efecto %s saltado: empezaba encima de otro", fx.get("type"))
             continue
         try:
             ev, win = builder(fx, clock, style, duration)
@@ -1146,6 +1173,8 @@ def build_effects(effects: list[dict], clock: WordClock, style: Style, duration:
         lines += ev
         if win:
             windows.append(win)
+            if not _floats(fx):
+                busy_until = max(busy_until, win.end)
     return lines, windows
 
 

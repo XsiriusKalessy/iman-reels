@@ -693,6 +693,7 @@ $("#go").onclick = async () => {
   fd.append("transiciones", $("#transiciones").checked);
   fd.append("look", $("#look").value);
   fd.append("intensidad", $("#intensidad").value);
+  fd.append("circulo", $("#circulo").checked);
   fd.append("letra", $("input[name=letra]:checked")?.value || "normal");
   fd.append("red", $("input[name=red]:checked")?.value || "instagram");
   if (state.comment?.text) { fd.append("comentario", state.comment.text); fd.append("comentario_de", state.comment.author || ""); }

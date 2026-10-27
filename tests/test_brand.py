@@ -115,7 +115,7 @@ def test_reel_with_brand(tmp_path):
     media.thumbnail(res.video, mid, 0.8)
     im = Image.open(mid).convert("RGB")
     assert _close("#%02X%02X%02X" % im.getpixel((60, 1000)), (128, 128, 128), tol=40)
-    assert _close("#%02X%02X%02X" % im.getpixel((1080 - 40 - 60, 230)), (20, 110, 190), tol=45)
+    assert _close("#%02X%02X%02X" % im.getpixel((1080 - 60 - 60, 230)), (20, 110, 190), tol=45)
 
 
 def test_memory_is_saved_and_reaches_new_reels(tmp_path, monkeypatch):

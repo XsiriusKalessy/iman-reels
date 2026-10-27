@@ -191,3 +191,33 @@ def test_switches_and_removals_survive_rerenders():
             {"type": "cifra", "word": 12, "text": "e"}]
     kept = effects.dedupe_overlaps(many, clock)
     assert [fx["text"] for fx in kept] == ["a", "d", "e"]
+
+
+def test_effects_never_pile_up_and_lists_avoid_the_face():
+    """Un efecto que empieza mientras una lista sigue en pantalla se salta; la lista se pone lejos de la cara;
+    el círculo con el creador solo si se pide."""
+    from iman import effects
+    from iman.captions import STYLES
+
+    words = W([(f"w{i}", i * 0.5, i * 0.5 + 0.4) for i in range(40)])
+    clock = effects.WordClock(words, list(range(40)))
+    lista = {"type": "lista", "word": 2, "title": "2 tipos", "until_word": 20,
+             "items": [{"at_word": 2, "text": "Con eSIM"}, {"at_word": 10, "text": "Sin wifi"}]}
+    frase = {"type": "frase", "word": 8, "text": "Sin internet, nada"}
+    later = {"type": "titular", "word": 30, "text": "Luego"}
+    lines, wins = effects.build_effects([lista, frase, later], clock, STYLES["impacto"], 20.0)
+    text = "\n".join(lines)
+    assert "Con eSIM" in text and "Luego" in text and "nada" not in text
+    assert wins[0].start < 2 and wins[0].end > 10  # la ventana es la de la lista
+    # Cara arriba → lista abajo; cara abajo → lista arriba.
+    low, _ = effects.lista_events({**lista, "_face_y": 0.3}, clock, STYLES["impacto"], 20.0)
+    high, _ = effects.lista_events({**lista, "_face_y": 0.7}, clock, STYLES["impacto"], 20.0)
+    ys = lambda ev: [int(l.split("\\pos(250,")[1].split(")")[0]) for l in ev if "\\pos(250," in l]  # noqa: E731
+    assert min(ys(low)) > 900 and max(ys(low)) < 1250
+    assert max(ys(high)) < 900
+    # Círculo con el creador: solo si se pide.
+    tarj = {"type": "tarjetas", "word": 2, "text": "✈️ Vuelos|🏨 Hoteles|🚄 Trenes", "title": "Todo incluido", "until_word": 12}
+    ops = effects.video_ops([tarj], clock, 20.0, accent="&H00FFD200")
+    assert ops and ops[0].face == ""
+    ops = effects.video_ops([tarj], clock, 20.0, accent="&H00FFD200", face=True)
+    assert ops[0].face == "abajo"

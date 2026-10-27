@@ -1379,7 +1379,7 @@ def test_audit_fixes_and_guinda_ideas(tmp_path, monkeypatch):
     assert len(win3) == 1 and [op.kind for op in effects.video_ops(steps, clock, 3.0)] == ["paso"]
     parts = []
     media._video_overlays(parts, effects.video_ops(steps, clock, 3.0), 1080, 1920)
-    assert any("0x1B2A44" in pt for pt in parts) and any("pad=836:616" in pt for pt in parts)
+    assert any("0x1B2A44" in pt for pt in parts) and any("pad=916:716" in pt for pt in parts)
     # el servidor solo atiende a este ordenador y a nombres de archivo dentro de la carpeta
     c = TestClient(server.app, raise_server_exceptions=False)
     assert c.get("/api/options").status_code == 200

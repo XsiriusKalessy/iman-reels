@@ -101,10 +101,10 @@ def render(entries: list[tuple[str, str]], duration: float, dst: Path, title: st
         font = _font("Figtree ExtraBold", size)
         words = title.split()
         lines = [title]
-        if font.getlength(title) > 640 and len(words) > 1:  # en dos líneas, a la izquierda del círculo
+        if font.getlength(title) > 940 and len(words) > 1:  # en dos líneas
             half = len(words) // 2
             lines = [" ".join(words[:half]), " ".join(words[half:])]
-        while max(font.getlength(ln) for ln in lines) > 640 and size > 44:
+        while max(font.getlength(ln) for ln in lines) > 940 and size > 44:
             size -= 4
             font = _font("Figtree ExtraBold", size)
         for i, ln in enumerate(lines):
@@ -156,7 +156,7 @@ def render(entries: list[tuple[str, str]], duration: float, dst: Path, title: st
 def cached(entries: list[tuple[str, str]], duration: float, title: str = "", accent: str = "#FF5547") -> Path:
     from . import config
 
-    key = hashlib.sha1(json.dumps([entries, round(duration, 2), title, accent, 1]).encode()).hexdigest()[:16]
+    key = hashlib.sha1(json.dumps([entries, round(duration, 2), title, accent, 2]).encode()).hexdigest()[:16]
     out = config.HOME / "cache" / "tarjetas" / f"{key}.mp4"
     if not out.exists():
         tmp = out.with_suffix(".tmp.mp4")

@@ -71,6 +71,7 @@ class EditOptions:
     tomas: list = field(default_factory=list)
     # Cuánto espectáculo: "alta" (un efecto cada 3-5 s, los más vistosos primero), "media" o "baja" (solo si aportan).
     intensidad: str = "alta"
+    circulo: bool = False  # tu cara en un círculo sobre los vídeos de apoyo, el mapa y las tarjetas (tapaba títulos)
 
 
 @dataclass
@@ -325,6 +326,31 @@ def _music(choice, workdir: Path, total: float, drop_at: float | None = None) ->
     if choice in musica.STYLES:
         return musica.render(choice, total, workdir / "musica_iman.wav", seed=len(choice), drop_at=drop_at)
     return None
+
+
+def _face_positions(active: list[dict], src: Path, spans, clock, workdir: Path) -> None:
+    """Dónde está la cara cuando empieza una lista: la lista se coloca en la otra mitad de la pantalla.
+    Un fotograma y el modelo de persona (iman/segment.py); si falla, la lista va donde siempre."""
+    if not segment.available():
+        return
+    from PIL import Image
+
+    for fx in active:
+        if fx.get("type") not in ("lista", "bloques", "paso"):
+            continue
+        t = clock.at(effects.word_of(fx))
+        if t is None:
+            continue
+        try:
+            still = media.thumbnail(src, workdir / "cara.tmp.jpg", _source_time(spans, t))
+            with Image.open(still) as im:
+                pos = segment.subject(im)
+            if pos:
+                fx["_face_y"] = round(pos[1] + 0.12, 2)  # coronilla + media cabeza: el centro de la cara
+        except Exception:  # noqa: BLE001 - sin cara detectada, la lista va donde siempre
+            log.debug("No se pudo situar la cara para la lista")
+        finally:
+            (workdir / "cara.tmp.jpg").unlink(missing_ok=True)
 
 
 def _follow_head(active: list[dict], src: Path, info, spans, zoom, fit: str, clock, duration: float,
@@ -650,6 +676,8 @@ def run(
     active = [dict(fx) for fx in plan.effects if not fx.get("off")]  # los que el creador ha apagado no salen
     active = effects.dedupe_overlaps(active, effects.WordClock(kept, kept_idx),  # nunca dos a la vez
                                      DEDUPE_GAP.get(opts.intensidad, 1.0))
+    if not voice_only:
+        _face_positions(active, src, spans, effects.WordClock(kept, kept_idx), workdir)
     gestos.attach(active, found, hand_frames, effects.WordClock(kept, kept_idx))
     effects.assign_next(active, effects.WordClock(kept, kept_idx))
     frames = None
@@ -721,7 +749,7 @@ def run(
         if cfg.get("pexels_key") and not voice_only:
             _pexels(active, assets, cfg["pexels_key"], progress)
         overlays = effects.video_ops(active, effects.WordClock(kept, kept_idx), out_duration,
-                                     lambda t: _source_time(spans, t), assets, style.accent)
+                                     lambda t: _source_time(spans, t), assets, style.accent, face=opts.circulo)
     overlays += effects.brand_ops(kit, total)
     clock = effects.WordClock(kept, kept_idx)
     segs = effects.seg_ops(active, clock, out_duration, {str(i + 1): str(p) for i, p in enumerate(clips)}) if opts.effects else []
