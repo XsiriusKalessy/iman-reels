@@ -336,6 +336,10 @@ Devuelve el plan COMPLETO actualizado: conserva todo lo que no te pide cambiar y
 Si pide quitar un tipo de efecto (p. ej. «quita los textos de detrás», «sin etiquetas»), quita TODOS los efectos de
 ese tipo, y si era el efecto de arranque (word 0), pon gancho "titulo". Si pide que no se pisen o que haya menos
 efectos, deja como mucho uno cada 6 segundos.
+Si pide poner una frase, un texto o un título, AÑADE un efecto nuevo (frase, titular, cta, texto3d…) con ese texto tal
+cual, en la palabra donde lo dice o donde él indique (si no lo indica, donde mejor encaje), y si pide cambiar un texto
+que ya está, cámbialo en ese mismo efecto. Nunca devuelvas el plan sin cambios: si no entiendes qué quiere, haz el
+cambio más probable y dilo en reply.
 Si pide cambiar el ritmo o el estilo de subtítulos, indícalo en settings (si no, deja los campos vacíos).
 En reply, responde al creador en una frase corta diciendo qué has cambiado."""
 

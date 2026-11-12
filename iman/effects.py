@@ -97,20 +97,23 @@ def word_of(fx: dict) -> int:
 def dedupe_overlaps(effects: list[dict], clock: WordClock, min_gap: float = 1.0) -> list[dict]:
     """Nunca dos efectos a la vez: si dos empiezan en el mismo momento (o a menos de `min_gap` s), se queda el
     primero y el otro se quita; si no, salen etiquetas unas encima de otras. Las pegatinas flotantes no cuentan."""
-    out, last = [], None
     order = sorted(range(len(effects)), key=lambda i: (clock.at(word_of(effects[i])) is None,
                                                        clock.at(word_of(effects[i])) or 0.0))
-    kept = set()
-    for i in order:
-        fx = effects[i]
-        t = clock.at(word_of(fx))
-        if t is None or _floats(fx):
+    kept, starts = set(), []
+    # Primero lo que el creador pidió por chat (`pedido`): eso sale seguro y es lo demás lo que se aparta.
+    for wave in (True, False):
+        for i in order:
+            fx = effects[i]
+            if bool(fx.get("pedido")) != wave:
+                continue
+            t = clock.at(word_of(fx))
+            if t is None or _floats(fx):
+                kept.add(i)
+                continue
+            if any(abs(t - s) < min_gap for s in starts):
+                continue
             kept.add(i)
-            continue
-        if last is not None and t - last < min_gap:
-            continue
-        kept.add(i)
-        last = t
+            starts.append(t)
     return [fx for i, fx in enumerate(effects) if i in kept]
 
 
@@ -1161,7 +1164,7 @@ def build_effects(effects: list[dict], clock: WordClock, style: Style, duration:
         if not builder:
             continue
         start = clock.at(word_of(fx))
-        if start is not None and not _floats(fx) and start < busy_until - 0.05:
+        if start is not None and not _floats(fx) and start < busy_until - 0.05 and not fx.get("pedido"):
             _log.info("Efecto %s saltado: empezaba encima de otro", fx.get("type"))
             continue
         try:

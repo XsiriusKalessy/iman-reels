@@ -344,6 +344,22 @@ def _silent_intro(src: Path, first_word: float, win: float = 2.0, min_silence: f
     return best[0], best[1]
 
 
+def _make_room(active: list[dict]) -> list[dict]:
+    """Un efecto que el creador pidió por chat (`pedido`) no puede quedar tapado por una lista o unas tarjetas que
+    siguen en pantalla (until_word): el que estaba antes se acorta hasta la palabra del pedido."""
+    asked = [effects.word_of(fx) for fx in active if fx.get("pedido")]
+    if not asked:
+        return active
+    for fx in active:
+        if fx.get("pedido"):
+            continue
+        w0, until = effects.word_of(fx), fx.get("until_word")
+        covering = [w for w in asked if w0 < w <= (until if isinstance(until, int) else -1)]
+        if covering:
+            fx["until_word"] = min(covering) - 1
+    return active
+
+
 def _face_positions(active: list[dict], src: Path, spans, clock, workdir: Path) -> None:
     """Dónde está la cara cuando empieza una lista: la lista se coloca en la otra mitad de la pantalla.
     Un fotograma y el modelo de persona (iman/segment.py); si falla, la lista va donde siempre."""
@@ -708,6 +724,7 @@ def run(
     jsonfile.save(workdir / "plan.json", plan.to_dict(), indent=1)
 
     active = [dict(fx) for fx in plan.effects if not fx.get("off")]  # los que el creador ha apagado no salen
+    active = _make_room(active)
     active = effects.dedupe_overlaps(active, effects.WordClock(kept, kept_idx),  # nunca dos a la vez
                                      DEDUPE_GAP.get(opts.intensidad, 1.0))
     if not voice_only:

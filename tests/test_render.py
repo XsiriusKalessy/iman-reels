@@ -103,6 +103,35 @@ def test_chat_applies_revised_plan(sample, tmp_path, monkeypatch):
     assert j["status"] == "done", j
     assert j["options"]["style"] == "neon"
     assert j["result"]["plan"]["hook_title"] == "Nuevo gancho"
+    # La IA devuelve el mismo plan: no se vuelve a montar lo mismo en silencio, se le dice al creador.
+    monkeypatch.setattr(ai, "revise_plan", lambda *a: (EditPlan.from_dict(j["result"]["plan"]), {}, "Hecho."))
+    j2 = c.post(f"/api/jobs/{job['id']}/chat", json={"message": "haz cambios"}).json()
+    assert j2["status"] == "done" and "No he encontrado qué cambiar" in j2["chat"][-1]["text"]
+    # Una frase pedida por chat sale en los subtítulos aunque haya otro efecto cerca.
+    asked = EditPlan.from_dict(j["result"]["plan"])
+    asked.effects = asked.effects + [{"type": "frase", "word": 12, "text": "No seas el mendigo del wifi"}]
+    monkeypatch.setattr(ai, "revise_plan", lambda *a: (asked, {}, "Puesta la frase."))
+    j3 = c.post(f"/api/jobs/{job['id']}/chat", json={"message": "cuando digo comete pon la frase"}).json()
+    assert j3["status"] == "working"
+    j3 = wait(job["id"])
+    fx = [e for e in j3["result"]["plan"]["effects"] if e.get("text") == "No seas el mendigo del wifi"]
+    assert fx and fx[0].get("pedido")
+    ass = (tmp_path / "jobs" / job["id"] / "subs.ass").read_text(encoding="utf-8") if (tmp_path / "jobs" / job["id"] / "subs.ass").exists() else ""
+    assert "mendigo" in ass or any("mendigo" in p.read_text(encoding="utf-8", errors="ignore") for p in (tmp_path / "jobs" / job["id"]).glob("*.ass"))
+    # Instrucciones nuevas al volver a montar: se aplican (con IA, sobre el plan que ya hay).
+    seen = {}
+    def rev(cfg, words, plan, message, rhythm, style):
+        seen["msg"] = message
+        p = EditPlan.from_dict(plan.to_dict()); p.hook_title = "Desde instrucciones"; return p, {}, "Vale."
+    monkeypatch.setattr(ai, "revise_plan", rev)
+    r = c.post(f"/api/jobs/{job['id']}/reedit", json={"instructions": "pon el título Desde instrucciones"})
+    assert r.status_code == 200, r.text
+    j4 = wait(job["id"])
+    assert seen["msg"].startswith("pon el título") and j4["result"]["plan"]["hook_title"] == "Desde instrucciones"
+    # Volver a montar sin tocar las instrucciones no llama a la IA.
+    seen.clear()
+    c.post(f"/api/jobs/{job['id']}/reedit", json={"music": "sin"})
+    assert wait(job["id"])["status"] == "done" and not seen
 
 
 def test_text_behind_person_two_pass(sample, tmp_path):

@@ -241,3 +241,32 @@ def test_escena_is_a_known_hook():
     shifted = [Word(w.text, w.start + 3.0, w.end + 3.0) for w in TAKE]
     assert ai.transcript_for_prompt(shifted).startswith("(empieza con 3s sin hablar")
     assert not ai.transcript_for_prompt(TAKE).startswith("(empieza")
+
+
+def test_what_the_creator_asks_in_chat_wins():
+    """Un efecto pedido por chat («pon esta frase») sale aunque caiga donde ya había otro: el otro se aparta."""
+    from iman import effects, pipeline
+    from iman.captions import STYLES
+    from iman.models import EditPlan
+
+    words = W([(f"w{i}", i * 0.5, i * 0.5 + 0.4) for i in range(40)])
+    clock = effects.WordClock(words, list(range(40)))
+    lista = {"type": "lista", "word": 2, "title": "2 tipos", "until_word": 20,
+             "items": [{"at_word": 2, "text": "Con eSIM"}, {"at_word": 10, "text": "Sin wifi"}]}
+    frase = {"type": "frase", "word": 8, "text": "No seas el mendigo del wifi", "pedido": True}
+    # Sin la marca, la frase se saltaba; con ella sale, y la lista acaba antes de que empiece.
+    active = pipeline._make_room([dict(lista), dict(frase)])
+    assert active[0]["until_word"] == 7
+    lines, wins = effects.build_effects(active, clock, STYLES["impacto"], 20.0)
+    assert "mendigo" in "\n".join(lines)
+    # Dos efectos a la vez: se queda el pedido, no el que estaba primero en la lista.
+    auto = {"type": "titular", "word": 8, "text": "Automático"}
+    kept = effects.dedupe_overlaps([auto, dict(frase)], clock, 1.0)
+    assert [fx["type"] for fx in kept] == ["frase"]
+    # Qué ha cambiado entre el plan de antes y el revisado: lo nuevo lleva `pedido`; igual = nada que montar.
+    from iman.server import _mark_requested
+    old = EditPlan(hook_title="A", effects=[dict(auto)])
+    same = EditPlan(hook_title="A", effects=[dict(auto)])
+    assert _mark_requested(old, same) is False
+    new = EditPlan(hook_title="A", effects=[dict(auto), {"type": "frase", "word": 20, "text": "Nueva"}])
+    assert _mark_requested(old, new) is True and new.effects[1]["pedido"] and "pedido" not in new.effects[0]

@@ -1272,9 +1272,13 @@ def _work(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions, pla
         if JOBS[job_id].pop("trial", False) and not prev:
             _count_trial(-1)
         if prev:
-            # Un cambio que falla no se lleva el reel que ya estaba hecho.
+            # Un cambio que falla no se lleva el reel que ya estaba hecho, y se dice en el chat, no solo en un aviso.
+            msg = f"No he podido aplicar el último cambio. {_friendly(e)}"
+            chat = list(JOBS[job_id].get("chat") or [])
+            if chat and chat[-1].get("role") == "iman":
+                chat.append({"role": "iman", "text": msg})
             _set(job_id, status="done", error=None, options=JOBS[job_id].get("prev_options") or JOBS[job_id]["options"],
-                 result={**prev, "notices": [f"No he podido aplicar el último cambio. {_friendly(e)}"]})
+                 result={**prev, "notices": [msg]}, chat=chat)
         else:
             _set(job_id, status="error", error=_friendly(e))
 
@@ -1289,12 +1293,32 @@ def reedit(job_id: str, body: dict):
     src = _original(workdir)
     merged = {**job["options"], **_edit_fields(body)}
     opts = pipeline.EditOptions(**merged)
+    prev_status, prev_text = job["status"], str(job["options"].get("instructions", "")).strip()
     _claim(job_id, step="Aplicando cambios", progress=0.0, options=asdict(opts), error=None)
     plan_file = workdir / "plan.json"
     saved = jsonfile.load(plan_file)  # si se guardó mal, se vuelve a planificar desde cero
     plan = EditPlan.from_dict(saved) if saved is not None else None
     if plan is not None and "hook_title" in body:
         plan.hook_title = body["hook_title"]
+    new_text = opts.instructions.strip()
+    if plan is not None and new_text and new_text != prev_text:
+        # Instrucciones nuevas al volver a montar: no se ignoran. Con IA se aplican sobre el plan que ya hay (como
+        # un cambio por chat); sin IA, se planifica de cero con ellas.
+        aicfg = config.ai_config(config.load())
+        if aicfg.enabled:
+            try:
+                words = _saved_words(workdir)
+                new_plan, _settings, _reply = ai.revise_plan(aicfg, words, plan, new_text, opts.rhythm,
+                                                             opts.style if opts.style in STYLES else plan.caption_style)
+                new_plan.cut, new_plan.restore = plan.cut, plan.restore
+                _carry_switches(plan, new_plan, new_text)
+                _mark_requested(plan, new_plan)
+                plan = new_plan
+            except Exception as e:  # noqa: BLE001
+                _set(job_id, status=prev_status, options=job.get("prev_options") or job["options"])
+                raise HTTPException(502, f"La IA no ha podido aplicar las instrucciones. {ai.error_message(e)}")
+        else:
+            plan = None
     threading.Thread(target=_work, args=(job_id, src, workdir, opts, plan), daemon=True).start()
     return JOBS[job_id]
 
@@ -1345,10 +1369,20 @@ def chat(job_id: str, body: ChatIn):
         opts.gancho = "titulo"  # el efecto de arranque se ha quitado: que no vuelva por la opción guardada
     if body.remember:
         config.remember(body.message)
-    if settings.get("rhythm") in RHYTHMS:
+    changed = _mark_requested(plan, new_plan)
+    if settings.get("rhythm") in RHYTHMS and settings["rhythm"] != opts.rhythm:
         opts.rhythm = settings["rhythm"]
-    if settings.get("style") in STYLES:
+        changed = True
+    if settings.get("style") in STYLES and settings["style"] != opts.style:
         opts.style = settings["style"]
+        changed = True
+    if not changed:
+        # La IA ha devuelto el mismo plan: no se vuelve a montar lo mismo en silencio, se dice.
+        reply = ("No he encontrado qué cambiar con eso. Dímelo con la palabra exacta que digo en el vídeo o el texto "
+                 "entre comillas, por ejemplo: «cuando digo wifi, pon la frase “No seas el mendigo del wifi”».")
+        history = job.get("chat", []) + [{"role": "user", "text": body.message}, {"role": "iman", "text": reply}]
+        _set(job_id, chat=history)
+        return JOBS[job_id]
     opts.hook_title = ""  # el gancho lo decide ahora el plan revisado
     history = job.get("chat", []) + [{"role": "user", "text": body.message}, {"role": "iman", "text": reply}]
     src = _original(workdir)
@@ -1356,6 +1390,30 @@ def chat(job_id: str, body: ChatIn):
          error=None, chat=history)
     threading.Thread(target=_work, args=(job_id, src, workdir, opts, new_plan), daemon=True).start()
     return JOBS[job_id]
+
+
+def _fx_key(fx: dict) -> tuple:
+    """Lo que identifica un efecto para saber si el chat lo ha añadido o cambiado (sin las marcas internas)."""
+    return (fx.get("type"), int(fx.get("word", -1) or 0), str(fx.get("text", "")), str(fx.get("title", "")),
+            json.dumps(fx.get("items"), ensure_ascii=False, sort_keys=True) if fx.get("items") else "",
+            fx.get("until_word"), fx.get("look", ""))
+
+
+def _mark_requested(old: EditPlan, new: EditPlan) -> bool:
+    """Marca con `pedido` los efectos que el chat ha añadido o cambiado: esos salen sí o sí, aunque pisen a otro
+    (el otro se aparta). Devuelve si el plan nuevo cambia en algo respecto al anterior."""
+    before = {_fx_key(fx) for fx in old.effects}
+    changed = len(new.effects) != len(old.effects)
+    for fx in new.effects:
+        if _fx_key(fx) not in before:
+            fx["pedido"] = True
+            changed = True
+    for a, b in ((old.hook_title, new.hook_title), (old.drop, new.drop), (old.zooms, new.zooms), (old.pauses, new.pauses),
+                 (old.silence, new.silence), (old.music, new.music), (old.caption_style, new.caption_style),
+                 (old.gancho, new.gancho), (old.emphasis, new.emphasis)):  # color lo rellena el montaje
+        if a != b:
+            changed = True
+    return changed
 
 
 _QUITAR = re.compile(r"\b(quita|quítame|quitar|fuera|sin|elimina|eliminar|borra|borrar|no quiero|nada de)\b", re.I)
