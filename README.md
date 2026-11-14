@@ -58,4 +58,6 @@ Las claves también se pueden pasar con `ANTHROPIC_API_KEY` u `OPENAI_API_KEY`.
 pip install -e ".[dev]" && pytest
 ```
 
+Las canciones de `iman/assets/musica` están hechas con Suno (plan de pago, con uso comercial) por Viajes Xsirius y se pueden usar en reels, también comerciales.
+
 Las fuentes de `iman/assets/fonts` son de Google Fonts, con licencia SIL OFL 1.1 (ver los `OFL-*.txt`).

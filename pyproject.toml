@@ -31,4 +31,4 @@ build-backend = "setuptools.build_meta"
 include = ["iman*"]
 
 [tool.setuptools.package-data]
-iman = ["web/*", "assets/fonts/*", "assets/models/*"]
+iman = ["web/*", "assets/fonts/*", "assets/models/*", "assets/musica/*"]
