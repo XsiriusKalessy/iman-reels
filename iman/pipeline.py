@@ -324,6 +324,8 @@ def _music(choice, workdir: Path, total: float, drop_at: float | None = None) ->
     """La música del reel: la tuya (subida como musica.*) o una de Imán generada a la medida del reel."""
     if choice is True or choice == "mia":
         return next((p for p in sorted(workdir.glob("musica.*")) if p.suffix.lower() in AUDIO_EXT), None)
+    if isinstance(choice, str) and choice in musica.CANCIONES:  # una de las canciones que trae Imán
+        return musica.cancion(choice)
     if choice in musica.STYLES:
         return musica.render(choice, total, workdir / "musica_iman.wav", seed=len(choice), drop_at=drop_at)
     return None
@@ -470,7 +472,7 @@ def _music_grid(choice, workdir: Path, duration: float, drop_at: float | None) -
     """Golpes de la música elegida en segundos del reel (vacío sin música o si tu canción no tiene pulso claro)."""
     if choice in musica.STYLES:
         return musica.style_grid(choice, duration, drop_at)
-    song = _music(choice, workdir, duration) if (choice is True or choice == "mia") else None
+    song = _music(choice, workdir, duration) if (choice is True or choice == "mia" or choice in musica.CANCIONES) else None
     if song is None:
         return []
     try:

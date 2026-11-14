@@ -494,3 +494,29 @@ def beat_grid(path: Path, duration: float, lo_bpm: float = 70, hi_bpm: float = 1
             if score > best_score:
                 best_score, beat, first = score, b, f
     return [round(float(first + k * beat), 3) for k in range(int((duration - first) / beat) + 1)]
+
+
+# ---- Canciones hechas con Suno (plan de pago, con uso comercial): van con Imán para cualquier reel ----
+# A diferencia de los estilos de arriba, no se generan: se usan como «tu música» (baja sola cuando hablas y los cortes
+# caen en sus golpes). Clave «lib-<archivo>»; el archivo está en iman/assets/musica/.
+CANCIONES_DIR = Path(__file__).parent / "assets" / "musica"
+CANCIONES: dict[str, str] = {
+    "lib-epic-climax": "Epic Climax (épica, tráiler)",
+    "lib-epic-surge": "Epic Surge (épica)",
+    "lib-triumph-in-motion": "Triumph in Motion (épica, 32 s)",
+    "lib-triumphal-surge": "Triumphal Surge (energía todo el rato, 32 s)",
+    "lib-hopeful-rise": "Hopeful Rise (emocional, sube poco a poco)",
+    "lib-nordic-dawn": "Nordic Dawn (paisajes, amanecer)",
+    "lib-despegue": "Despegue (épica, con pausa y vuelta)",
+    "lib-despegue-remix": "Despegue · remix (más movida)",
+    "lib-despegue-remix-2": "Despegue · remix 2 (fuerte desde el segundo 4)",
+    "lib-despegue-remix-3": "Despegue · remix 3",
+}
+
+
+def cancion(key: str) -> Path | None:
+    """El archivo de una de las canciones de Imán, o None si no lo es (o no está instalado)."""
+    if key not in CANCIONES:
+        return None
+    p = CANCIONES_DIR / f"{key[4:]}.mp3"
+    return p if p.exists() else None

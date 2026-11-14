@@ -1017,12 +1017,16 @@ def _save_music(workdir: Path, upload: UploadFile) -> bool:
 
 @app.get("/api/music")
 def music_styles():
-    return [{"key": k, "label": st.label} for k, st in musica.STYLES.items()]
+    return [{"key": k, "label": st.label} for k, st in musica.STYLES.items()] + \
+        [{"key": k, "label": f"Canción: {lab}"} for k, lab in musica.CANCIONES.items() if musica.cancion(k)]
 
 
 @app.get("/api/music/{key}.wav")
 def music_preview(key: str):
     """20 segundos del estilo para escucharlo antes de elegir (se guarda en caché)."""
+    song = musica.cancion(key)
+    if song:  # las canciones de Imán se escuchan tal cual
+        return FileResponse(song, media_type="audio/mpeg")
     if key not in musica.STYLES:
         raise HTTPException(404, "Ese estilo no existe")
     dst = config.HOME / "cache" / "musica" / f"{key}-v3.wav"  # v3: si cambia el sonido, no sirve la vieja
@@ -1123,7 +1127,7 @@ async def create_job(
         raise
     src = takes[0] if len(takes) == 1 else workdir / "original.mp4"
     music = "mia" if music_file and _save_music(workdir, music_file) else \
-        (music_style if music_style in musica.STYLES or music_style == "auto" else "")
+        (music_style if music_style in musica.STYLES or music_style in musica.CANCIONES or music_style == "auto" else "")
     if names and mode == "camara":  # en "solo voz" los vídeos ya son la imagen de todo el reel
         instructions = f"{instructions}\n\n{pipeline.broll_prompt(names)}".strip()
     light = equipo.ligero(config.load().get("ligero", "auto"))
