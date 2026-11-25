@@ -293,3 +293,40 @@ def media_ok(p):
 
     info = media.probe(p)
     return (info.width, info.height) == (1080, 1920) and info.has_audio
+
+
+def test_cinema_trailer_from_photos(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from PIL import Image
+
+    from iman import config, server, trailer
+
+    monkeypatch.setattr(config, "HOME", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    config.save({"provider": "none"})
+    fotos = []
+    for i, col in enumerate(["#335577", "#aa5533", "#228844"]):
+        p = tmp_path / f"f{i}.jpg"
+        Image.new("RGB", (1000, 1500), col).save(p)
+        fotos.append(p)
+    c = TestClient(server.app)
+    one = [("fotos", ("a.jpg", fotos[0].read_bytes(), "image/jpeg"))]
+    assert c.post("/api/trailer", data={"title": "X"}, files=one).status_code == 400  # hacen falta 2
+    files = [("fotos", (p.name, p.read_bytes(), "image/jpeg")) for p in fotos]
+    job = c.post("/api/trailer", files=files, data={"title": "Japón 2027", "tagline": "Treinta viajeros, un destino",
+                                                    "fecha": "Noviembre", "cta": "Reserva", "estilo": "epico"}).json()
+    for _ in range(400):
+        j = c.get(f"/api/jobs/{job['id']}").json()
+        if j["status"] != "working":
+            break
+        time.sleep(0.5)
+    assert j["status"] == "done", j
+    assert j["result"]["trailer"]["cards"][0] == "NOVIEMBRE"
+    from iman import media
+
+    info = media.probe(tmp_path / "jobs" / job["id"] / "reel.mp4")
+    assert (info.width, info.height) == (1080, 1920) and info.has_audio and info.duration > 10
+    assert any(r["id"] == job["id"] for r in c.get("/api/reels").json()["reels"])
+    sc = trailer.script("Lanzamiento", "Algo nuevo. Llega pronto")
+    assert sc["cards"] == ["ALGO NUEVO", "LLEGA PRONTO"] and sc["final"] == "MUY PRONTO"

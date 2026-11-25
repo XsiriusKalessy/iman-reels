@@ -1511,7 +1511,8 @@ function showResult(j) {
   const v = $("#out");
   v.hidden = false; $("#working").hidden = true;
   state.bust = bust;
-  $("#view-tabs").hidden = j.mode === "voz" || j.mode === "largo" || j.mode === "ilustrado";
+  $("#view-tabs").hidden = j.mode === "voz" || j.mode === "largo" || j.mode === "ilustrado" || j.mode === "trailer";
+  $("#pro-open").hidden = j.mode === "trailer";  // el tráiler no tiene palabras ni línea de tiempo de reel
   setView("reel");
   $("#download").href = `/api/jobs/${j.id}/reel.mp4`;
   $("#download-wa").href = `/api/jobs/${j.id}/whatsapp.zip`;
@@ -2434,3 +2435,24 @@ $("#movil-open").onclick = async () => {
 };
 $("#movil-close").onclick = () => $("#movil").close();
 $("#movil-stop").onclick = async () => { await api("/api/movil", { method: "DELETE" }); $("#movil").close(); };
+
+// --- Tráiler o anuncio de cine con tus fotos ---
+$("#trailer-open").onclick = () => { $("#tr-msg").textContent = ""; $("#trailer").showModal(); };
+$("#tr-cancel").onclick = () => $("#trailer").close();
+$("#trailer-form").onsubmit = async e => {
+  e.preventDefault();
+  const files = [...$("#tr-fotos").files];
+  if (files.length < 2) { $("#tr-msg").textContent = "Elige al menos 2 fotos (mejor de 4 a 8)."; return; }
+  const fd = new FormData();
+  files.forEach(f => fd.append("fotos", f));
+  for (const [k, id] of [["title", "#tr-title"], ["tagline", "#tr-tagline"], ["fecha", "#tr-fecha"], ["cta", "#tr-cta"], ["idea", "#tr-idea"], ["estilo", "#tr-estilo"]]) fd.append(k, $(id).value);
+  if ($("#tr-voz").files[0]) fd.append("voz", $("#tr-voz").files[0]);
+  if (!$("#up-brand-row").hidden) fd.append("cliente", $("#up-brand").value);
+  const btn = $("#tr-go"); btn.disabled = true; $("#tr-msg").textContent = "Subiendo tus fotos…";
+  try {
+    const j = await api("/api/trailer", { method: "POST", body: fd });
+    $("#trailer").close();
+    state.job = j; go("result"); showWorking(j.step, 0); poll();
+  } catch (err) { $("#tr-msg").textContent = err.message; }
+  finally { btn.disabled = false; }
+};

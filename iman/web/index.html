@@ -181,6 +181,7 @@
         <div id="audio-picked" class="audio-picked" hidden></div>
       </label>
       <p class="hint record-row"><button class="ghost" type="button" id="record-open">🎥 Grabar aquí, con teleprompter</button> <span>Con la cámara del ordenador: el guion pasa por delante de la cámara y la guía te mantiene centrado.</span></p>
+      <p class="hint record-row"><button class="ghost" type="button" id="trailer-open">🎬 Tráiler o anuncio de cine</button> <span>Para un lanzamiento, un producto o un viaje: con tus fotos, carteles de cine, música de tráiler y golpes de sonido.</span></p>
       <p class="hint record-row"><button class="ghost" type="button" id="movil-open">📱 Enviar desde el móvil</button> <span>Escanea un QR, manda el vídeo desde el móvil y el reel montado vuelve al móvil.</span></p>
       <p class="hint picked-row" id="picked-row" hidden><span id="picked-name"></span> · <a href="#" id="change-file">Cambiar de vídeo</a></p>
       <div class="takes" id="takes-box" hidden>
@@ -599,6 +600,30 @@
       <div id="pro-tracks"></div>
       <div class="pro-head" id="pro-head"></div>
     </div>
+  </dialog>
+
+  <dialog id="trailer" class="wide">
+    <form method="dialog" id="trailer-form" class="stack">
+      <h2>Tráiler o anuncio de cine</h2>
+      <p class="hint">Con tus fotos (de 4 a 8 va genial): cada una se mueve en 2.5D, entre carteles en negro como en el cine, con música de tráiler y golpes de sonido. Al final, el título, la fecha y tu llamada a la acción con tu marca.</p>
+      <label>Tus fotos (o clips cortos) <input type="file" id="tr-fotos" accept="image/*,video/*" multiple required></label>
+      <label>Qué anuncias (título) <input id="tr-title" maxlength="60" required placeholder="Ej.: Japón 2027"></label>
+      <label>La frase del tráiler <input id="tr-tagline" maxlength="200" placeholder="Ej.: Treinta viajeros, un solo destino que cambia la vida"></label>
+      <div class="row tight wrap">
+        <label class="grow">Fecha <input id="tr-fecha" maxlength="40" placeholder="Ej.: Noviembre 2027"></label>
+        <label class="grow">Llamada a la acción <input id="tr-cta" maxlength="80" placeholder="Ej.: Reserva tu plaza"></label>
+      </div>
+      <label>Algo más para la IA (opcional) <textarea id="tr-idea" rows="2" maxlength="1000" placeholder="Ej.: es un viaje en grupo de 12 días, ryokan con onsen, plazas limitadas"></textarea></label>
+      <div class="row tight wrap">
+        <label class="grow">Estilo <select id="tr-estilo"><option value="epico">Épico</option><option value="misterio">Misterio</option><option value="emotivo">Emotivo</option><option value="accion">Acción</option><option value="lujo">Lujo</option></select></label>
+        <label class="grow">Tu voz en off (opcional) <input type="file" id="tr-voz" accept="audio/*,video/*"></label>
+      </div>
+      <p class="hint" id="tr-msg"></p>
+      <div class="row between">
+        <button class="ghost" type="button" id="tr-cancel">Cancelar</button>
+        <button class="primary" type="submit" id="tr-go">✦ Montar el tráiler</button>
+      </div>
+    </form>
   </dialog>
 
   <dialog id="movil">

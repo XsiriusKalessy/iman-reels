@@ -1581,6 +1581,74 @@ def edit_plan(job_id: str, body: PlanEditIn):
     return JOBS[job_id]
 
 
+# --- Tráileres y anuncios de cine con tus imágenes (iman/trailer.py) ---
+@app.post("/api/trailer")
+async def make_trailer(fotos: list[UploadFile] = File(...), title: str = Form(...), tagline: str = Form(""),
+                       fecha: str = Form(""), cta: str = Form(""), idea: str = Form(""), estilo: str = Form("epico"),
+                       voz: UploadFile | None = File(None), use_brand: bool = Form(True), cliente: str = Form("activo")):
+    from . import trailer
+
+    allowed, watermark = license.can_edit(_refresh_license())
+    if not allowed:
+        raise HTTPException(402, "Has usado tus reels de prueba. Activa tu licencia en Ajustes para seguir editando.")
+    if not title.strip():
+        raise HTTPException(400, "Ponle título: qué anuncias")
+    job_id = uuid.uuid4().hex[:10]
+    workdir = JOBS_DIR / job_id
+    (workdir / "fotos").mkdir(parents=True, exist_ok=True)
+    photos = []
+    try:
+        for k, up in enumerate([f for f in fotos if f.filename][:15]):
+            ext = Path(up.filename).suffix.lower()
+            if ext not in trailer.STILL + (".mp4", ".mov", ".m4v", ".webm"):
+                continue
+            dst = workdir / "fotos" / f"{k + 1:02d}{ext}"
+            _save_upload(up, dst, MAX_MEDIA)
+            photos.append(dst)
+        voice = None
+        if voz is not None and voz.filename:
+            voice = workdir / f"voz{Path(voz.filename).suffix.lower() or '.m4a'}"
+            _save_upload(voz, voice, MAX_MEDIA)
+    except HTTPException:
+        shutil.rmtree(workdir, ignore_errors=True)
+        raise
+    if len(photos) < 2:
+        shutil.rmtree(workdir, ignore_errors=True)
+        raise HTTPException(400, "Sube al menos 2 fotos (mejor de 4 a 8)")
+    cliente = _cliente(cliente)
+    form = {"title": title.strip()[:60], "tagline": tagline.strip()[:200], "fecha": fecha.strip()[:40],
+            "cta": cta.strip()[:80], "idea": idea.strip()[:1000], "estilo": estilo if estilo in trailer.ESTILOS else "epico"}
+    if watermark:
+        _count_trial(+1)
+    with _lock:
+        JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0, "mode": "trailer",
+                        "options": {**asdict(pipeline.EditOptions(cliente=cliente, brand=use_brand)), "trailer": form},
+                        "created": time.time(), "trial": watermark, "cliente": cliente}
+
+    def work():
+        try:
+            with brand.using(cliente):
+                kit = brand.load() if use_brand else None
+                info = trailer.render(photos, workdir / "reel.mp4", form["title"], form["tagline"], form["fecha"],
+                                      form["cta"], form["idea"], form["estilo"], voice, kit,
+                                      config.ai_config(config.load()), lambda m, p: _set(job_id, step=m, progress=p))
+            JOBS[job_id].pop("trial", None)
+            _set(job_id, status="done", result={
+                "video": "reel.mp4", "plan": {"hook_title": form["title"], "effects": [], "hook_options": []},
+                "duration_in": info["duration"], "duration_out": info["duration"], "removed_words": [], "cuts": 0,
+                "ai_warning": "", "notices": [], "checks": [], "fixes": [
+                    "Carteles: " + " / ".join(info["cards"]), f"{info['shots']} imágenes en movimiento 2.5D"],
+                "viral": {}, "trailer": info})
+        except Exception as e:  # noqa: BLE001
+            log.exception("Falla el tráiler %s", job_id)
+            if JOBS[job_id].pop("trial", False):
+                _count_trial(-1)
+            _set(job_id, status="error", error=_friendly(e))
+
+    threading.Thread(target=work, daemon=True).start()
+    return JOBS[job_id]
+
+
 # --- Enviar desde el móvil: página en la wifi con QR (iman/movil.py) ---
 @app.get("/api/movil")
 def phone_status():
