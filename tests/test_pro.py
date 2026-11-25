@@ -147,3 +147,34 @@ def test_each_reel_keeps_its_brand(tmp_path, monkeypatch):
         assert brand.brand_dir() == tmp_path / "marca"
     with brand.using("activo"):
         assert brand.brand_dir() == clientes.dir_for(b["id"]) / "marca"
+
+
+def test_prompter_follows_the_voice():
+    from iman.apuntador import locate
+
+    s = "Hoy te cuento los tres errores que cometen todos al viajar a Japón por primera vez".split()
+    assert locate(s, "te cuento los tres errores", 0) == 6
+    assert locate(s, "al viajar a Japón por", 5) == 14
+    assert locate(s, "hoy te cuento hoy te cuento los", 0) == 4  # repetir no adelanta
+    assert locate(s, "patata frita con queso", 3) is None
+
+
+def test_prompter_endpoint_answers(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from iman import apuntador, config, server
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(apuntador, "hear", lambda pcm, *a, **k: "los tres errores")
+    c = TestClient(server.app)
+    r = c.post("/api/apuntador?cursor=2", files={"audio": ("voz.pcm", b"\0" * 32000, "application/octet-stream")},
+               data={"script": "Hoy te cuento los tres errores que cometen todos"})
+    assert r.status_code == 200 and r.json() == {"heard": "los tres errores", "at": 6}
+
+    def boom(*a, **k):
+        raise RuntimeError("sin modelo")
+
+    monkeypatch.setattr(apuntador, "hear", boom)
+    r = c.post("/api/apuntador", files={"audio": ("voz.pcm", b"\0" * 32000, "application/octet-stream")},
+               data={"script": "Hola"})
+    assert r.status_code == 503

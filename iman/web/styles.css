@@ -715,3 +715,5 @@ dialog.pro { width: min(1280px, 98vw); max-height: 96vh; padding: 16px 18px; ove
 .pro-head { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; pointer-events: none; z-index: 3; }
 .pro-addhook { margin: 3px 6px; }
 @media (max-width: 760px) { .pro-top { grid-template-columns: 1fr; } .pro-screen { height: 36vh; margin: 0 auto; } }
+.rec-prompter span.read { opacity: .4; }
+.rec-prompter span.now { color: var(--accent); }

@@ -2008,8 +2008,78 @@ const rec = { stream: null, recorder: null, chunks: [], blob: null, timer: null,
 const recDialog = $("#recorder");
 function recUpdatePrompter() {
   const box = $("#rec-scroll");
-  box.textContent = $("#rec-script").value || "Pega el guion abajo, o grábalo sin teleprompter.";
+  const text = $("#rec-script").value || "Pega el guion abajo, o grábalo sin teleprompter.";
+  // Cada palabra en su <span>: así el guion puede marcar lo ya leído y colocarse donde vas.
+  let k = 0;
+  box.innerHTML = text.split(/(\s+)/).map(part => !part || /^\s+$/.test(part) ? esc(part) : `<span data-k="${k++}">${esc(part)}</span>`).join("");
+  rec.words = k;
   box.style.fontSize = `${$("#rec-size").value}px`;
+}
+// --- Teleprompter que sigue la voz (todo en este ordenador) ---
+// Oye el micro: mientras hablas, el guion avanza a ritmo de habla; cada 1,5 s Imán escucha los últimos 4 s y dice
+// por qué palabra vas exactamente (si no puede, se queda el avance por voz). Si te callas, el guion se para.
+function recFollowStart() {
+  rec.cursor = 0; rec.cursorF = 0; rec.lastAt = 0; rec.listenOff = false; rec.busy = false; rec.prompterY = 0;
+  const track = rec.stream?.getAudioTracks()[0];
+  if (!track) return;
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const srcNode = ctx.createMediaStreamSource(new MediaStream([track]));
+  const proc = ctx.createScriptProcessor(4096, 1, 1);
+  const ratio = ctx.sampleRate / 16000;
+  rec.ring = new Int16Array(16000 * 4); rec.ringPos = 0; rec.ringFull = false; rec.level = 0;
+  proc.onaudioprocess = e => {
+    const x = e.inputBuffer.getChannelData(0);
+    let sum = 0;
+    for (let i = 0; i < x.length; i++) sum += x[i] * x[i];
+    rec.level = 0.8 * rec.level + 0.2 * Math.sqrt(sum / x.length);
+    for (let i = 0; i < x.length; i += ratio) {  // de 44,1/48 kHz a 16 kHz (para la voz basta)
+      const v = Math.max(-1, Math.min(1, x[Math.floor(i)]));
+      rec.ring[rec.ringPos++] = v * 32767;
+      if (rec.ringPos >= rec.ring.length) { rec.ringPos = 0; rec.ringFull = true; }
+    }
+  };
+  srcNode.connect(proc); proc.connect(ctx.destination);
+  rec.audio = { ctx, srcNode, proc };
+  rec.listen = setInterval(recListen, 1500);
+}
+function recFollowStop() {
+  clearInterval(rec.listen);
+  if (rec.audio) { try { rec.audio.proc.disconnect(); rec.audio.srcNode.disconnect(); rec.audio.ctx.close(); } catch {} }
+  rec.audio = null;
+}
+async function recListen() {
+  if (rec.listenOff || rec.busy || !rec.ring || rec.level < 0.01) return;
+  const n = rec.ringFull ? rec.ring.length : rec.ringPos;
+  if (n < 16000) return;
+  const out = new Int16Array(n);
+  if (rec.ringFull) { out.set(rec.ring.subarray(rec.ringPos)); out.set(rec.ring.subarray(0, rec.ringPos), rec.ring.length - rec.ringPos); }
+  else out.set(rec.ring.subarray(0, n));
+  const fd = new FormData();
+  fd.append("audio", new Blob([out.buffer], { type: "application/octet-stream" }), "voz.pcm");
+  fd.append("script", $("#rec-script").value);
+  rec.busy = true;
+  try {
+    const r = await fetch(`/api/apuntador?cursor=${Math.round(rec.cursor)}`, { method: "POST", body: fd });
+    if (r.status === 503) { rec.listenOff = true; return; }
+    const d = await r.json();
+    if (Number.isInteger(d.at)) { rec.cursor = d.at; rec.cursorF = d.at; rec.lastAt = Date.now(); }
+  } catch { /* la siguiente vez */ } finally { rec.busy = false; }
+}
+function recFollowStep(dt) {
+  // Mientras se oye voz avanza a unas 2,3 palabras por segundo, sin adelantarse más de 5 a lo último oído.
+  // Si Imán no puede escucharte (o lleva rato sin reconocer el guion), manda solo el avance por voz.
+  const lost = (Date.now() - (rec.lastAt || rec.t0)) / 1000;
+  const cap = rec.listenOff ? Infinity : rec.cursor + 5 + Math.max(0, lost - 4) * 2;
+  if (rec.level > 0.015) rec.cursorF = Math.min(rec.cursorF + 2.3 * dt, cap);
+  const k = Math.max(0, Math.min((rec.words || 1) - 1, Math.floor(rec.cursorF)));
+  const box = $("#rec-scroll");
+  $$("span", box).forEach(s => { s.classList.toggle("read", +s.dataset.k < k); s.classList.toggle("now", +s.dataset.k === k); });
+  const cur = box.querySelector(`span[data-k="${k}"]`);
+  if (cur) {
+    const y = Math.max(0, cur.offsetTop - $("#rec-prompter").clientHeight * 0.3);
+    rec.prompterY += (y - rec.prompterY) * 0.25;
+    box.style.transform = `translateY(-${rec.prompterY}px)`;
+  }
 }
 $("#rec-script").oninput = recUpdatePrompter;
 $("#rec-size").oninput = recUpdatePrompter;
@@ -2044,7 +2114,7 @@ function recReset() {
   if (rec.stream) { v.srcObject = rec.stream; v.play().catch(() => {}); }
 }
 function recClose() {
-  clearInterval(rec.timer); cancelAnimationFrame(rec.raf);
+  clearInterval(rec.timer); cancelAnimationFrame(rec.raf); recFollowStop();
   if (rec.recorder && rec.recorder.state !== "inactive") rec.recorder.stop();
   if (rec.stream) rec.stream.getTracks().forEach(t => t.stop());
   rec.stream = null;
@@ -2096,15 +2166,18 @@ $("#rec-start").onclick = async () => {
   };
   rec.recorder.start(250);
   rec.t0 = Date.now();
+  rec.follow = $("#rec-follow").checked;
+  if (rec.follow) recFollowStart();
   $("#rec-start").hidden = true; $("#rec-time").hidden = false;
   const stopBtn = $("#rec-retake"); stopBtn.hidden = false; stopBtn.textContent = "■ Parar";
-  stopBtn.onclick = () => { stopBtn.textContent = "Repetir"; stopBtn.onclick = recReset; clearInterval(rec.timer); rec.recorder.stop(); };
+  stopBtn.onclick = () => { stopBtn.textContent = "Repetir"; stopBtn.onclick = recReset; clearInterval(rec.timer); recFollowStop(); rec.recorder.stop(); };
   // El guion sube solo, a la velocidad elegida (se puede cambiar mientras grabas).
   rec.prompterY = 0;
   const box = $("#rec-scroll");
   rec.timer = setInterval(() => {
     const s = Math.round((Date.now() - rec.t0) / 1000);
     $("#rec-time").textContent = `● ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    if (rec.follow) return recFollowStep(0.1);
     rec.prompterY += +$("#rec-speed").value * 0.9;
     const max = Math.max(0, box.scrollHeight - $("#rec-prompter").clientHeight + 40);
     box.style.transform = `translateY(-${Math.min(rec.prompterY, max)}px)`;

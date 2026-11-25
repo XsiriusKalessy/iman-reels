@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import logging
@@ -15,7 +16,7 @@ import uuid
 from dataclasses import asdict, fields, replace
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -1536,6 +1537,29 @@ def edit_plan(job_id: str, body: PlanEditIn):
     _claim(job_id, step="Aplicando cambios", progress=0.0, options=asdict(opts), error=None)
     threading.Thread(target=_work, args=(job_id, src, workdir, opts, plan), daemon=True).start()
     return JOBS[job_id]
+
+
+@app.post("/api/apuntador")
+async def prompter_listen(request: Request, cursor: int = 0):
+    """Teleprompter que sigue tu voz: recibe los últimos segundos de audio (PCM 16 bits, 16 kHz) y el guion, y
+    devuelve lo oído y por qué palabra del guion vas. Todo en este ordenador."""
+    from . import apuntador
+
+    form = await request.form()
+    audio = form.get("audio")
+    script = str(form.get("script") or "")[:20000]
+    if audio is None or not hasattr(audio, "read"):
+        raise HTTPException(400, "Falta el audio")
+    pcm = await audio.read(apuntador.RATE * apuntador.MAX_SECONDS * 2 + 1)
+    words = script.split()
+    near = " ".join(words[max(0, cursor - 10): cursor + 25])
+    cfg = config.load()
+    try:
+        heard = await asyncio.to_thread(apuntador.hear, pcm, cfg.get("whisper_model", "small"), "es", near)
+    except Exception as e:  # noqa: BLE001 - sin modelo, la app hace avanzar el guion mientras hablas
+        log.warning("El teleprompter no puede escuchar: %s", e)
+        raise HTTPException(503, "No puedo escucharte ahora; el guion avanzará mientras hablas") from None
+    return {"heard": heard, "at": apuntador.locate(words, heard, max(0, cursor))}
 
 
 @app.get("/api/jobs/{job_id}/linea")
