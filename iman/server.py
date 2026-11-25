@@ -1579,6 +1579,31 @@ def edit_plan(job_id: str, body: PlanEditIn):
     return JOBS[job_id]
 
 
+# --- Enviar desde el móvil: página en la wifi con QR (iman/movil.py) ---
+@app.get("/api/movil")
+def phone_status():
+    from . import movil
+
+    return movil.status()
+
+
+@app.post("/api/movil")
+def phone_start():
+    from . import movil
+
+    try:
+        return movil.start()
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, f"No he podido abrir la página para el móvil: {e}") from None
+
+
+@app.delete("/api/movil")
+def phone_stop():
+    from . import movil
+
+    return movil.stop()
+
+
 @app.post("/api/apuntador")
 async def prompter_listen(request: Request, cursor: int = 0):
     """Teleprompter que sigue tu voz: recibe los últimos segundos de audio (PCM 16 bits, 16 kHz) y el guion, y

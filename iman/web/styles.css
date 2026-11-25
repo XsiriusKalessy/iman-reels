@@ -720,3 +720,5 @@ dialog.pro { width: min(1280px, 98vw); max-height: 96vh; padding: 16px 18px; ove
 .copy-report { display: block; margin-top: 8px; }
 .copy-report ul { margin: 4px 0 8px; padding-left: 4px; list-style: none; }
 .copy-report li { margin: 2px 0; }
+.movil-qr { display: grid; place-items: center; margin: 12px auto; width: 220px; min-height: 160px; background: #fff; border-radius: 16px; padding: 10px; }
+.movil-qr svg { width: 200px; height: 200px; }

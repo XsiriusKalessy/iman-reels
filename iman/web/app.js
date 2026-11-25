@@ -2417,3 +2417,17 @@ $("#pro-apply").onclick = async () => {
   finally { btn.textContent = "Aplicar y montar"; }
 };
 $("#pro-open").onclick = () => proOpen();
+
+// --- Enviar desde el móvil: Imán abre una página en la wifi y enseña su QR ---
+$("#movil-open").onclick = async () => {
+  $("#movil-msg").textContent = ""; $("#movil-qr").innerHTML = `<div class="spinner"></div>`; $("#movil-url").textContent = "";
+  $("#movil").showModal();
+  try {
+    const r = await postJSON("/api/movil", {});
+    $("#movil-qr").innerHTML = r.qr;  // SVG generado por Imán
+    $("#movil-url").textContent = r.url;
+    if (r.url.includes("//127.0.0.1")) $("#movil-msg").textContent = "No encuentro la wifi de este ordenador: conéctalo a la misma red que el móvil y vuelve a abrir esto.";
+  } catch (err) { $("#movil-qr").innerHTML = ""; $("#movil-msg").textContent = err.message; }
+};
+$("#movil-close").onclick = () => $("#movil").close();
+$("#movil-stop").onclick = async () => { await api("/api/movil", { method: "DELETE" }); $("#movil").close(); };

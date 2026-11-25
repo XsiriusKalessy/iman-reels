@@ -181,6 +181,7 @@
         <div id="audio-picked" class="audio-picked" hidden></div>
       </label>
       <p class="hint record-row"><button class="ghost" type="button" id="record-open">🎥 Grabar aquí, con teleprompter</button> <span>Con la cámara del ordenador: el guion pasa por delante de la cámara y la guía te mantiene centrado.</span></p>
+      <p class="hint record-row"><button class="ghost" type="button" id="movil-open">📱 Enviar desde el móvil</button> <span>Escanea un QR, manda el vídeo desde el móvil y el reel montado vuelve al móvil.</span></p>
       <p class="hint picked-row" id="picked-row" hidden><span id="picked-name"></span> · <a href="#" id="change-file">Cambiar de vídeo</a></p>
       <div class="takes" id="takes-box" hidden>
         <p class="hint"><strong>Tus tomas, en este orden.</strong> Imán las une una detrás de otra e iguala el color a la primera. Si el orden no es el que quieres, muévelas con las flechas.</p>
@@ -586,6 +587,19 @@
       <div class="pro-ruler" id="pro-ruler"></div>
       <div id="pro-tracks"></div>
       <div class="pro-head" id="pro-head"></div>
+    </div>
+  </dialog>
+
+  <dialog id="movil">
+    <h2>Enviar desde el móvil</h2>
+    <p class="hint">Escanea el código con la cámara del móvil. Se abre una página de Imán: graba o elige el vídeo, dale a «Enviar» y aquí se monta. Cuando esté listo, el reel vuelve al móvil para guardarlo o compartirlo. Sin instalar nada.</p>
+    <div class="movil-qr" id="movil-qr"></div>
+    <p class="center"><code id="movil-url"></code></p>
+    <p class="hint">El móvil y este ordenador tienen que estar en la <b>misma wifi</b> y Imán abierto. Si el ordenador pregunta si deja a Imán usar la red, di que sí (solo red privada). Lo que mandes sale también en «Mis reels».</p>
+    <p class="hint" id="movil-msg"></p>
+    <div class="row between">
+      <button class="ghost" type="button" id="movil-stop" title="Nadie más podrá abrir la página hasta que la vuelvas a activar">Apagar la página del móvil</button>
+      <button class="primary" type="button" id="movil-close">Cerrar</button>
     </div>
   </dialog>
 

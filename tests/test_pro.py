@@ -225,3 +225,35 @@ def test_clips_ask_for_30_to_60_seconds():
                       {"from": 130, "to": 299, "title": "largo"}]}
     out = ai.clean_clips(data, words, 5)
     assert [c["title"] for c in out] == ["bien"]
+
+
+def test_send_from_the_phone(sample, tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from iman import config, movil, server
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    real_run = pipeline.run
+    monkeypatch.setattr(pipeline, "run", lambda *a, **k: real_run(*a, **{**k, "words": TAKE}))
+    monkeypatch.setitem(movil._state, "token", "clave-secreta")
+    monkeypatch.setitem(movil._state, "jobs", [])
+    c = TestClient(movil.app)
+    assert c.get("/m/otra").status_code == 404
+    assert c.get("/api/options").status_code == 404  # en la wifi solo existe la página del móvil
+    assert "Enviar a Imán" in c.get("/m/clave-secreta").text
+    with sample.open("rb") as f:
+        r = c.post("/m/clave-secreta/subir", files={"video": ("movil.mp4", f, "video/mp4")},
+                   data={"instructions": "corto", "red": "tiktok"})
+    assert r.status_code == 200, r.text
+    jid = r.json()["id"]
+    for _ in range(240):
+        st = c.get(f"/m/clave-secreta/estado/{jid}").json()
+        if st["status"] != "working":
+            break
+        time.sleep(0.5)
+    assert st["status"] == "done", st
+    assert c.get(f"/m/clave-secreta/reel/{jid}.mp4").status_code == 200
+    assert server.JOBS[jid]["options"]["red"] == "tiktok"
+    assert c.get("/m/clave-secreta/estado/otro1234").status_code == 404  # solo los reels mandados desde el móvil
+    assert "<svg" in movil.qr_svg("http://192.168.1.5:8770/m/x")
