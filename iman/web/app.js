@@ -531,10 +531,12 @@ const MODES = {
     broll: "＋ Fotos o vídeos para acompañar (opcional)", brollHint: "Sin ellos, tu voz va sobre un fondo con tus colores y subtítulos grandes." },
   vozclips: { title: "Arrastra tu voz aquí", hint: "una nota de voz o un vídeo del que solo quieres la voz", accept: "audio/*,video/*",
     broll: "＋ Tus vídeos y fotos", brollHint: "Imán va cambiando de plano al ritmo de lo que dices." },
+  ilustrado: { title: "Arrastra tu voz aquí", hint: "una nota de voz o un vídeo del que solo quieres la voz · M4A, MP3, WAV, MP4", accept: "audio/*,video/*",
+    broll: "＋ Tus fotos (opcional)", brollHint: "Si subes fotos, salen primero, en orden. Si no, Imán pone imágenes que cuentan lo que dices." },
   largo: { title: "Arrastra tu vídeo largo aquí", hint: "un directo, una clase o un podcast · Imán saca los mejores momentos", accept: "video/*" },
 };
 const mode = () => $("input[name=mode]:checked").value;
-document.querySelectorAll("input[name=mode]").forEach(r => r.addEventListener("change", () => { $("#directo-row").hidden = $("#largo-row").hidden = mode() !== "largo"; canGo(); }));
+document.querySelectorAll("input[name=mode]").forEach(r => r.addEventListener("change", () => { $("#directo-row").hidden = $("#largo-row").hidden = mode() !== "largo"; $("#ilustrado-row").hidden = mode() !== "ilustrado"; canGo(); }));
 // Vídeo largo: también vale un enlace de YouTube del propio creador.
 const ytUrl = () => mode() === "largo" && /^https?:\/\/(www\.|m\.)?(youtube\.com\/|youtu\.be\/)\S+$/i.test($("#yt-url").value.trim()) ? $("#yt-url").value.trim() : "";
 function canGo() {
@@ -581,7 +583,7 @@ async function grabFrames(file) {
 // se ordenan por nombre como en la carpeta (VID_001, VID_002…) y el creador puede moverlas con las flechas.
 const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
 function pick(files, add = false) {
-  const ok = f => f && (f.type.startsWith("video") || (mode().startsWith("voz") && f.type.startsWith("audio")));
+  const ok = f => f && (f.type.startsWith("video") || ((mode().startsWith("voz") || mode() === "ilustrado") && f.type.startsWith("audio")));
   let list = [...(files || [])].filter(ok);
   if (!list.length) return;
   if (mode() === "camara") {
@@ -695,6 +697,7 @@ $("#go").onclick = async () => {
   if (state.file) fd.append("video", state.file);
   else { fd.append("youtube", ytUrl()); fd.append("youtube_mio", $("#yt-mio").checked); }
   if (mode() === "largo") fd.append("reels", $("#reels-n").value);
+  if (mode() === "ilustrado") fd.append("imagenes", $("#imagenes").value);
   if (mode() === "camara") for (const t of state.takes || []) fd.append("video", t);
   fd.append("rhythm", $("input[name=rhythm]:checked")?.value ?? "rapido");
   fd.append("style", $("input[name=style]:checked")?.value ?? "auto");
@@ -1508,7 +1511,7 @@ function showResult(j) {
   const v = $("#out");
   v.hidden = false; $("#working").hidden = true;
   state.bust = bust;
-  $("#view-tabs").hidden = j.mode === "voz" || j.mode === "largo";
+  $("#view-tabs").hidden = j.mode === "voz" || j.mode === "largo" || j.mode === "ilustrado";
   setView("reel");
   $("#download").href = `/api/jobs/${j.id}/reel.mp4`;
   $("#download-wa").href = `/api/jobs/${j.id}/whatsapp.zip`;

@@ -78,6 +78,8 @@ class EditOptions:
     # Marca con la que se monta: "activo" (la del cliente elegido al montar), "" (la propia) o el id de un cliente.
     cliente: str = "activo"
     reels: int = 4  # vídeo largo: cuántos reels sacar (de 1 a 10)
+    # Reel sin salir tú (mode "ilustrado"): de dónde salen las imágenes de cada escena (escenas.SOURCES).
+    imagenes: str = "auto"
 
 
 @dataclass
@@ -575,7 +577,7 @@ def _run(
         opts.style = "auto"
     progress("Preparando tu vídeo", 0.03)
     (workdir / "previa.mp4").unlink(missing_ok=True)  # la vista previa es de este montaje, no del anterior
-    voice_only = opts.mode == "voz"
+    voice_only = opts.mode in ("voz", "ilustrado")
     notices = []
     if opts.ruido:
         progress("Quitando el ruido de fondo de tu voz", 0.04)
@@ -594,7 +596,13 @@ def _run(
             progress("Montando tus vídeos con tu voz", 0.25)
             kit0 = brand.load() if opts.brand else None
             bg = kit0.primary if kit0 is not None and kit0.active and brand.is_hex(kit0.primary or "") else "#141518"
-            media.voice_canvas(src, canvas, visual_cuts(words), clips, bg, size=opts.size)
+            pictures = clips
+            if opts.mode == "ilustrado":  # sin salir tú: una imagen por escena que cuenta lo que dices
+                from . import escenas
+
+                pictures = escenas.clips(words, visual_cuts(words), workdir, cfg, kit0, clips, opts.imagenes,
+                                         ai_config(cfg), lambda m, p: progress(m, 0.25 + 0.1 * p))
+            media.voice_canvas(src, canvas, visual_cuts(words), pictures, bg, size=opts.size)
         src = canvas
     info = media.probe(src)
     if not info.has_audio:

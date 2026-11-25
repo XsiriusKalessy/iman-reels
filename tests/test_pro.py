@@ -257,3 +257,39 @@ def test_send_from_the_phone(sample, tmp_path, monkeypatch):
     assert server.JOBS[jid]["options"]["red"] == "tiktok"
     assert c.get("/m/clave-secreta/estado/otro1234").status_code == 404  # solo los reels mandados desde el móvil
     assert "<svg" in movil.qr_svg("http://192.168.1.5:8770/m/x")
+
+
+def test_reel_without_me_over_pictures(tmp_path, monkeypatch):
+    from iman import config, escenas
+    from PIL import Image
+
+    from .test_render import _api, _wait
+
+    monkeypatch.setattr(config, "HOME", tmp_path)
+    voz = tmp_path / "voz.m4a"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=200:duration=11",
+                    "-c:a", "aac", str(voz)], check=True)
+    foto = tmp_path / "japon.jpg"
+    Image.new("RGB", (900, 1400), "#3366aa").save(foto)
+    c, _ = _api(tmp_path, monkeypatch, TAKE)
+    with voz.open("rb") as v, foto.open("rb") as b:
+        job = c.post("/api/jobs", data={"mode": "ilustrado", "imagenes": "auto"}, files=[
+            ("video", ("voz.m4a", v, "audio/mp4")), ("broll", ("japon.jpg", b, "image/jpeg"))]).json()
+    job = _wait(c, job)
+    assert job["status"] == "done", job.get("error")
+    work = tmp_path / "jobs" / job["id"]
+    assert (work / "lienzo.mp4").exists() and job["options"]["mode"] == "ilustrado"
+    laminas = sorted((work / "escenas").glob("lamina-*.jpg"))
+    assert laminas  # la primera escena es tu foto; las demás, láminas con tu marca (sin Pexels ni IA)
+    assert media_ok(work / "reel.mp4")
+    # Las escenas siguen lo que dices.
+    scn = escenas.scenes(TAKE, [3.0, 7.5])
+    assert len(scn) == 3 and "gratis" in scn[-1]["text"]
+    assert escenas.keywords("Hoy te cuento el error que comete todo el mundo") == "cuento error comete"
+
+
+def media_ok(p):
+    from iman import media
+
+    info = media.probe(p)
+    return (info.width, info.height) == (1080, 1920) and info.has_audio

@@ -1079,6 +1079,7 @@ async def create_job(
     youtube: str = Form(""),
     youtube_mio: bool = Form(False),
     reels: int = Form(4),
+    imagenes: str = Form("auto"),
 ):
     from . import youtube as yt
 
@@ -1096,7 +1097,7 @@ async def create_job(
             raise HTTPException(400, "Marca que el vídeo es tuyo o que tienes permiso para usarlo")
         if not yt.available():
             raise HTTPException(400, "Esta versión de Imán no puede bajar vídeos de YouTube: descárgalo y súbelo")
-    if (pack and pack not in packs.PACKS) or mode not in ("camara", "voz", "largo") \
+    if (pack and pack not in packs.PACKS) or mode not in ("camara", "voz", "largo", "ilustrado") \
             or background not in pipeline.BACKGROUNDS:
         raise HTTPException(400, "Opción no válida")
     copystyle.register()
@@ -1158,7 +1159,8 @@ async def create_job(
     gancho = gancho if gancho in ganchos.GANCHOS else "auto"
     opts = pipeline.EditOptions(rhythm, style, size, fit, hook, hook_title, hook_template, gancho, instructions,
                                 voice=voice, ruido=ruido, watermark=watermark, brand=use_brand, pack=pack,
-                                mode="voz" if mode == "voz" else "camara", background=background,
+                                mode=mode if mode in ("voz", "ilustrado") else "camara", background=background,
+                                imagenes=imagenes if imagenes in ("auto", "fotos", "pexels", "openai", "laminas") else "auto",
                                 sfx=sfx, music=music, punch=punch, barra=barra, transiciones=transiciones,
                                 look=look if look in media.LOOKS or look == "auto" else "",
                                 letra=letra if letra in captions_mod.SIZES else "normal",

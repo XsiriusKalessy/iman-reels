@@ -202,7 +202,18 @@
         <label class="choice"><input type="radio" name="mode" value="camara" checked><span>🎥 Hablo a cámara<small>Tu toma de siempre</small></span></label>
         <label class="choice"><input type="radio" name="mode" value="voz"><span>🎙 Solo mi voz<small>Sin salir en cámara</small></span></label>
         <label class="choice"><input type="radio" name="mode" value="vozclips"><span>🎞 Mi voz sobre mis vídeos<small>Tus clips con tu voz encima</small></span></label>
+        <label class="choice"><input type="radio" name="mode" value="ilustrado"><span>🖼 Sin salir yo<small>Tu voz sobre imágenes que cuentan lo que dices</small></span></label>
         <label class="choice"><input type="radio" name="mode" value="largo"><span>✂️ Vídeo largo → varios reels<small>Un directo, una clase, un podcast</small></span></label>
+      </div>
+      <div id="ilustrado-row" class="stack" hidden>
+        <label>¿De dónde saco las imágenes? <select id="imagenes">
+          <option value="auto" selected>Tus fotos primero, luego Pexels (con tu clave) y si no, láminas con tu marca</option>
+          <option value="pexels">Fotos de Pexels (con tu clave gratuita de Ajustes)</option>
+          <option value="openai">Ilustraciones con tu clave de OpenAI (las cobra tu cuenta de OpenAI)</option>
+          <option value="laminas">Láminas de diseño con tu marca y la idea de cada escena</option>
+          <option value="fotos">Solo mis fotos</option>
+        </select></label>
+        <p class="hint">Una imagen cada ~3 s, en movimiento, con tus subtítulos, música y efectos. Sin avatares ni voces inventadas: la voz es la tuya.</p>
       </div>
       <div id="largo-row" class="stack" hidden>
         <label>¿Cuántos reels saco? <select id="reels-n"><option>3</option><option selected>5</option><option>8</option><option>10</option></select></label>
