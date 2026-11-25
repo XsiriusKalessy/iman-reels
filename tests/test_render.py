@@ -223,7 +223,7 @@ def test_library_toggles_and_post(sample, tmp_path, monkeypatch):
 
     # Carrusel e historias, sin IA: salen de las frases del vídeo.
     kit = c.post(f"/api/jobs/{jid}/kit", json={}).json()
-    assert len(kit["carousel"]) >= 2 and len(kit["stories"]) == 3
+    assert len(kit["carousel"]) == 8 and len(kit["stories"]) == 4  # la 4.ª, con hueco para enlace o encuesta
     r = c.get(f"/api/jobs/{jid}/kit/{kit['carousel'][0]}")
     assert r.status_code == 200 and r.headers["content-type"] == "image/png"
     assert c.get(f"/api/jobs/{jid}/kit/kit.zip").status_code == 200
