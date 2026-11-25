@@ -105,13 +105,60 @@ def build(a: dict) -> Style:
     )
 
 
-def save(name: str, analysis: dict, rhythm: str) -> dict:
+# Qué recurso del otro reel se reproduce con qué de Imán (para el informe de «qué se copia»).
+EFFECT_MAP = {
+    "zoom": "zooms en los cortes", "transiciones": "transiciones (barrido y glitch)", "titulares": "titulares",
+    "palabra_gigante": "palabra gigante", "emojis": "pegatinas y emojis", "apoyo": "vídeos de apoyo (los tuyos)",
+    "texto_detras": "texto detrás de ti", "listas": "listas animadas", "cifras": "cifras grandes",
+    "barra_progreso": "barra de progreso", "fondo_liso": "fondo de color",
+}
+NOT_COPIED = [
+    "Lo que se dice y las ideas del vídeo (eso es suyo; tu reel cuenta lo tuyo).",
+    "La persona, su cara y su voz.",
+    "Logotipos, marcas y la tipografía exacta (se usa la más parecida de las que trae Imán).",
+    "La canción concreta (se elige una de Imán con el mismo ambiente).",
+    "Imágenes o vídeos que salen en ese reel.",
+]
+
+
+def extras(analysis: dict, rate: float) -> dict:
+    """Ajustes de edición que imitan al reel: intensidad, transiciones, color, barra y música."""
+    fx = set(analysis.get("effects") or [])
+    energy = analysis.get("energy") if analysis.get("energy") in ("alta", "media", "baja") else (
+        "alta" if rate >= 0.45 else "media" if rate >= 0.2 else "baja")
+    out = {"intensidad": energy, "transiciones": "transiciones" in fx, "barra": "barra_progreso" in fx}
+    if analysis.get("look") in media.LOOKS:
+        out["look"] = analysis["look"]
+    music = str(analysis.get("music") or "")
+    from . import musica
+
+    if music in musica.STYLES:
+        out["music"] = music
+    return out
+
+
+def report(analysis: dict, rate: float, rhythm: str) -> dict:
+    """Qué se ha copiado del reel y qué no (y por qué), para enseñárselo al creador."""
+    copied = ["Letra, tamaño, mayúsculas y posición de los subtítulos",
+              "Colores del texto y de la palabra destacada" + (", y la caja de detrás" if analysis.get("box") else ""),
+              f"Ritmo de cortes: {rate * 60:.0f} cortes por minuto → ritmo «{rhythm}»"]
+    fx = [EFFECT_MAP[f] for f in analysis.get("effects") or [] if f in EFFECT_MAP]
+    if fx:
+        copied.append("Recursos de edición: " + ", ".join(fx))
+    if analysis.get("look") in media.LOOKS and analysis.get("look") != "natural":
+        copied.append(f"Color del vídeo: «{analysis['look']}»")
+    if analysis.get("energy"):
+        copied.append(f"Cantidad de efectos: {analysis['energy']}")
+    return {"copied": copied, "not_copied": NOT_COPIED}
+
+
+def save(name: str, analysis: dict, rhythm: str, rate: float = 0.0) -> dict:
     data = custom()
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower().translate(str.maketrans("áéíóúñü", "aeiounu"))).strip("-")[:24]
     key = f"mio-{slug or len(data) + 1}"
     style = replace(build(analysis), key=key, label=name.strip()[:30] or "Mi estilo")
     data[key] = {"style": asdict(style), "rhythm": rhythm, "notes": str(analysis.get("notes", ""))[:200],
-                 "analysis": analysis}
+                 "analysis": analysis, "extras": extras(analysis, rate), "report": report(analysis, rate, rhythm)}
     store().parent.mkdir(parents=True, exist_ok=True)
     store().write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     register()

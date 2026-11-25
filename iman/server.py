@@ -283,7 +283,8 @@ def _styles() -> list[dict]:
     copystyle.register()
     mine = copystyle.custom()
     return [{"key": s.key, "label": s.label, "mine": s.key in mine, "rhythm": mine.get(s.key, {}).get("rhythm", ""),
-             "notes": mine.get(s.key, {}).get("notes", ""), "look": _style_look(s)} for s in STYLES.values()]
+             "notes": mine.get(s.key, {}).get("notes", ""), "extras": mine.get(s.key, {}).get("extras") or {},
+             "look": _style_look(s)} for s in STYLES.values()]
 
 
 def _hex(ass: str) -> str:
@@ -323,11 +324,11 @@ async def copy_style(file: UploadFile = File(...), name: str = Form("")):
         except Exception as e:
             raise HTTPException(502, f"La IA no ha podido analizar el reel. {ai.error_message(e)}")
         saved = copystyle.save(name.strip() or analysis.get("name") or "Mi estilo", analysis,
-                               copystyle.rhythm_for(rate))
+                               copystyle.rhythm_for(rate), rate)
     finally:
         src.unlink(missing_ok=True)
     return {"key": saved["key"], "label": saved["style"]["label"], "rhythm": saved["rhythm"], "notes": saved["notes"],
-            "styles": _styles()}
+            "extras": saved["extras"], "report": saved["report"], "styles": _styles()}
 
 
 @app.delete("/api/styles/{key}")

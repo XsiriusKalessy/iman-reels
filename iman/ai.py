@@ -840,6 +840,12 @@ def post_copy(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "", ct
 # --- Copiar el estilo de un reel ------------------------------------------------------
 
 STYLE_FONTS = ["Moderna", "Impacto", "Condensada", "Elegante", "Manuscrita"]
+# Lo que Imán sabe reproducir de la edición de otro reel (copystyle.EFFECT_MAP dice con qué).
+STYLE_EFFECTS = ["zoom", "transiciones", "titulares", "palabra_gigante", "emojis", "apoyo", "texto_detras", "listas",
+                 "cifras", "barra_progreso", "fondo_liso"]
+STYLE_LOOKS = ["natural", "calido", "teal", "cine", "grano", "retro", "bn"]
+STYLE_MUSIC = ["", "epica", "tranquila", "inspiracional", "alegre", "phonk", "cinematica", "emotiva", "corporativa",
+               "tropical", "suspense", "piano"]
 STYLE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -856,9 +862,16 @@ STYLE_SCHEMA = {
         "box_color": {"type": "string", "description": "#RRGGBB o vacío"},
         "pop": {"type": "boolean", "description": "la palabra que se dice crece o salta"},
         "notes": {"type": "string", "description": "En una frase: cómo es el estilo (letra, colores, ritmo, efectos)."},
+        "effects": {"type": "array", "items": {"type": "string", "enum": STYLE_EFFECTS},
+                    "description": "Recursos de edición que se ven en los fotogramas."},
+        "look": {"type": "string", "enum": STYLE_LOOKS, "description": "Color del vídeo que más se parece."},
+        "energy": {"type": "string", "enum": ["alta", "media", "baja"],
+                   "description": "Cuánto pasa en pantalla: alta = algo nuevo cada 2-4 s."},
+        "music": {"type": "string", "enum": STYLE_MUSIC, "description": "Tipo de música que pega (si se adivina)."},
     },
     "required": ["name", "font", "uppercase", "words_per_line", "position", "size", "text_color",
-                 "highlight_color", "outline", "box", "box_color", "pop", "notes"],
+                 "highlight_color", "outline", "box", "box_color", "pop", "notes", "effects", "look", "energy",
+                 "music"],
     "additionalProperties": False,
 }
 
@@ -866,8 +879,10 @@ STYLE_SYSTEM = """Eres diseñador de reels. Te paso fotogramas de un reel que le
 estilo de los subtítulos y los textos en pantalla, no en el contenido ni en la persona: qué tipo de letra es
 (Moderna = sans limpia; Impacto = sans muy gruesa; Condensada = alta y estrecha; Elegante = con serifa;
 Manuscrita = a mano), si va en mayúsculas, cuántas palabras se ven a la vez, dónde está, de qué tamaño, los
-colores (texto y palabra destacada), si lleva borde o caja detrás y si la palabra activa salta. Inspírate en el
-estilo; no copies logotipos ni marcas. Si no hay subtítulos visibles, deduce un estilo limpio que encaje."""
+colores (texto y palabra destacada), si lleva borde o caja detrás y si la palabra activa salta. Mira también la
+edición: qué recursos se ven (effects), el color del vídeo (look), cuánta energía tiene (energy) y qué música
+pegaría (music, vacío si no se adivina). Inspírate en el estilo; no copies logotipos ni marcas. Si no hay
+subtítulos visibles, deduce un estilo limpio que encaje."""
 
 
 def style_from_frames(cfg: AIConfig, frames: list[bytes], extra: str = "") -> dict:

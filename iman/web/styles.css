@@ -717,3 +717,6 @@ dialog.pro { width: min(1280px, 98vw); max-height: 96vh; padding: 16px 18px; ove
 @media (max-width: 760px) { .pro-top { grid-template-columns: 1fr; } .pro-screen { height: 36vh; margin: 0 auto; } }
 .rec-prompter span.read { opacity: .4; }
 .rec-prompter span.now { color: var(--accent); }
+.copy-report { display: block; margin-top: 8px; }
+.copy-report ul { margin: 4px 0 8px; padding-left: 4px; list-style: none; }
+.copy-report li { margin: 2px 0; }

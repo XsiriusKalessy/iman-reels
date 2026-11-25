@@ -140,7 +140,7 @@ function renderStyles(list, select) {
   const cur = select || $("input[name=style]:checked")?.value;
   $("#styles").innerHTML = autoStyleCard(list, cur) + list.map(s => `
     <label class="choice style-card ${s.mine ? "mine" : ""}" ${s.notes ? `title="${esc(s.notes)}"` : ""}>
-      <input type="radio" name="style" value="${s.key}" data-rhythm="${s.rhythm || ""}" ${cur && s.key === cur ? "checked" : ""}>
+      <input type="radio" name="style" value="${s.key}" data-rhythm="${s.rhythm || ""}" data-extras="${esc(JSON.stringify(s.extras || {}))}" ${cur && s.key === cur ? "checked" : ""}>
       <span>${stylePreview(s)}${esc(s.label)}${s.mine ? `<small>Copiado de un reel</small><button type="button" class="link forget" data-style-del="${s.key}" title="Borrar">✕</button>` : ""}</span></label>`).join("");
 }
 $("#styles").onclick = async e => {
@@ -150,9 +150,19 @@ $("#styles").onclick = async e => {
   if (!confirm("¿Borrar este estilo?")) return;
   renderStyles((await api(`/api/styles/${del.dataset.styleDel}`, { method: "DELETE" })).styles);
 };
+// Un estilo copiado trae también su edición: ritmo, cantidad de efectos, transiciones, color, barra y música.
+function applyStyleExtras(x) {
+  if (!x) return;
+  if (x.intensidad && $(`#intensidad option[value="${x.intensidad}"]`)) $("#intensidad").value = x.intensidad;
+  if ("transiciones" in x) $("#transiciones").checked = !!x.transiciones;
+  if ("barra" in x) $("#barra").checked = !!x.barra;
+  if (x.look && $(`#look option[value="${x.look}"]`)) $("#look").value = x.look;
+  if (x.music && $(`#music-style option[value="${x.music}"]`)) $("#music-style").value = x.music;
+}
 $("#styles").onchange = e => {
   const r = e.target.dataset.rhythm && $(`input[name=rhythm][value="${e.target.dataset.rhythm}"]`);
   if (r) r.checked = true;  // el estilo copiado trae su ritmo
+  try { applyStyleExtras(JSON.parse(e.target.dataset.extras || "{}")); } catch {}
 };
 $("#copy-style-btn").onclick = () => { $("#copy-style-box").hidden = !$("#copy-style-box").hidden; };
 $("#copy-style-go").onclick = async () => {
@@ -166,7 +176,10 @@ $("#copy-style-go").onclick = async () => {
     const r = await api("/api/styles/copy", { method: "POST", body: fd });
     renderStyles(r.styles, r.key);
     const rh = $(`input[name=rhythm][value="${r.rhythm}"]`); if (rh) rh.checked = true;
-    msg.textContent = `Listo: «${r.label}». ${r.notes}`;
+    applyStyleExtras(r.extras);
+    msg.innerHTML = `Listo: «${esc(r.label)}». ${esc(r.notes)}`
+      + (r.report ? `<span class="copy-report"><b>Copiado</b><ul>${r.report.copied.map(t => `<li>✓ ${esc(t)}</li>`).join("")}</ul>`
+        + `<b>No se copia</b><ul>${r.report.not_copied.map(t => `<li>✕ ${esc(t)}</li>`).join("")}</ul></span>` : "");
     $("#copy-style-file").value = ""; $("#copy-style-name").value = "";
   } catch (err) { msg.textContent = err.message; }
   finally { btn.disabled = false; btn.textContent = "Sacar el estilo"; }
