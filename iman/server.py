@@ -1041,7 +1041,7 @@ def music_preview(key: str):
 
 @app.post("/api/jobs")
 async def create_job(
-    video: list[UploadFile] = File(...),
+    video: list[UploadFile] | None = File(None),
     rhythm: str = Form("rapido"),
     style: str = Form("auto"),
     size: str = Form("1080"),
@@ -1076,8 +1076,26 @@ async def create_job(
     intensidad: str = Form("alta"),
     circulo: bool = Form(False),
     cliente: str = Form("activo"),
+    youtube: str = Form(""),
+    youtube_mio: bool = Form(False),
+    reels: int = Form(4),
 ):
+    from . import youtube as yt
+
     cliente = _cliente(cliente)
+    video = [v for v in video or [] if v.filename]
+    youtube = youtube.strip()
+    if not video:
+        if not youtube:
+            raise HTTPException(400, "Falta el vídeo")
+        if mode != "largo":
+            raise HTTPException(400, "Los enlaces de YouTube son para «Vídeo largo → varios reels»")
+        if not yt.valid(youtube):
+            raise HTTPException(400, "Ese enlace no es de un vídeo de YouTube")
+        if not youtube_mio:
+            raise HTTPException(400, "Marca que el vídeo es tuyo o que tienes permiso para usarlo")
+        if not yt.available():
+            raise HTTPException(400, "Esta versión de Imán no puede bajar vídeos de YouTube: descárgalo y súbelo")
     if (pack and pack not in packs.PACKS) or mode not in ("camara", "voz", "largo") \
             or background not in pipeline.BACKGROUNDS:
         raise HTTPException(400, "Opción no válida")
@@ -1129,7 +1147,7 @@ async def create_job(
     except HTTPException:
         shutil.rmtree(workdir, ignore_errors=True)
         raise
-    src = takes[0] if len(takes) == 1 else workdir / "original.mp4"
+    src = takes[0] if len(takes) == 1 else workdir / "original.mp4"  # (sin tomas: lo baja _youtube_then)
     music = "mia" if music_file and _save_music(workdir, music_file) else \
         (music_style if music_style in musica.STYLES or music_style in musica.CANCIONES or music_style == "auto" else "")
     if names and mode == "camara":  # en "solo voz" los vídeos ya son la imagen de todo el reel
@@ -1148,7 +1166,7 @@ async def create_job(
                                 comentario=" ".join(comentario.split())[:140],
                                 comentario_de=comentario_de.strip().lstrip("@")[:40], ligero=light,
                                 intensidad=intensidad if intensidad in pipeline.INTENSIDADES else "alta",
-                                circulo=bool(circulo), cliente=cliente,
+                                circulo=bool(circulo), cliente=cliente, reels=max(1, min(10, int(reels))),
                                 gestures=not light, directo=bool(directo) and mode == "largo")
     if watermark:  # el reel de prueba se cuenta al crearlo (si falla, se devuelve)
         _count_trial(+1)
@@ -1156,7 +1174,9 @@ async def create_job(
         JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0, "mode": mode,
                         "options": asdict(opts), "created": time.time(), "trial": watermark, "cliente": cliente}
     target = _work_long if mode == "largo" else _work
-    if len(takes) > 1:
+    if not takes:  # vídeo de YouTube: primero se baja y luego sigue como si lo hubieras subido
+        threading.Thread(target=_youtube_then, args=(target, youtube, job_id, workdir, opts), daemon=True).start()
+    elif len(takes) > 1:
         threading.Thread(target=_join_then, args=(target, takes, take_names, job_id, src, workdir, opts),
                          daemon=True).start()
     else:
@@ -1204,13 +1224,32 @@ def _join_then(target, takes: list[Path], names: list[str], job_id: str, src: Pa
     target(job_id, src, workdir, opts)
 
 
+def _youtube_then(target, url: str, job_id: str, workdir: Path, opts) -> None:
+    """Vídeo largo desde un enlace de YouTube (del propio creador): se baja y sigue como uno subido."""
+    from . import youtube as yt
+
+    try:
+        _set(job_id, step="Bajando tu vídeo de YouTube", progress=0.01)
+        src = yt.download(url, workdir, lambda pct: _set(job_id, step="Bajando tu vídeo de YouTube",
+                                                         progress=round(0.01 + 0.04 * pct, 3)))
+    except Exception as e:  # noqa: BLE001
+        log.exception("No se pudo bajar de YouTube")
+        msg = str(e) if isinstance(e, ValueError) else ("No he podido bajar ese vídeo de YouTube. Comprueba el enlace "
+                                                        "y la conexión, o descárgalo y súbelo.")
+        if JOBS[job_id].pop("trial", False):
+            _count_trial(-1)
+        _set(job_id, status="error", error=msg)
+        return
+    target(job_id, src, workdir, opts)
+
+
 def _work_long(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions) -> None:
     """Vídeo largo → varios reels: cada momento elegido es un reel normal que aparece en la biblioteca."""
     try:
         cfg = config.load()
         words, picks = pipeline.long_video_clips(src, workdir, cfg,
                                                  lambda msg, pct: _set(job_id, step=msg, progress=pct * 0.3),
-                                                 directo=opts.directo)
+                                                 n=max(1, min(10, opts.reels)), directo=opts.directo)
         if not picks:
             raise ValueError("No he encontrado momentos de al menos 12 segundos en los que hables")
         made = []

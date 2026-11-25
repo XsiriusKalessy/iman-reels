@@ -534,10 +534,15 @@ const MODES = {
   largo: { title: "Arrastra tu vídeo largo aquí", hint: "un directo, una clase o un podcast · Imán saca los mejores momentos", accept: "video/*" },
 };
 const mode = () => $("input[name=mode]:checked").value;
-document.querySelectorAll("input[name=mode]").forEach(r => r.addEventListener("change", () => { $("#directo-row").hidden = mode() !== "largo"; }));
+document.querySelectorAll("input[name=mode]").forEach(r => r.addEventListener("change", () => { $("#directo-row").hidden = $("#largo-row").hidden = mode() !== "largo"; canGo(); }));
+// Vídeo largo: también vale un enlace de YouTube del propio creador.
+const ytUrl = () => mode() === "largo" && /^https?:\/\/(www\.|m\.)?(youtube\.com\/|youtu\.be\/)\S+$/i.test($("#yt-url").value.trim()) ? $("#yt-url").value.trim() : "";
 function canGo() {
-  $("#to-edit").disabled = $("#go-quick").disabled = !state.file || (mode() === "vozclips" && !state.broll.length);
+  const has = state.file || (ytUrl() && $("#yt-mio").checked);
+  $("#to-edit").disabled = $("#go-quick").disabled = !has || (mode() === "vozclips" && !state.broll.length);
 }
+$("#yt-url").oninput = canGo;
+$("#yt-mio").onchange = canGo;
 function setMode() {
   const m = MODES[mode()];
   $("#drop-title").textContent = m.title; $("#drop-hint").textContent = m.hint;
@@ -682,12 +687,14 @@ $("#change-file").onclick = e => { e.preventDefault(); clearUpload(); $("#file")
 
 // ---------- 2. editar ----------
 $("#go").onclick = async () => {
-  if (!state.file) return go("upload");
+  if (!state.file && !(ytUrl() && $("#yt-mio").checked)) return go("upload");
   if (state.uploading) return;  // un doble clic no debe crear dos reels
   state.uploading = true;
   $("#go").disabled = $("#go-quick").disabled = true;
   const fd = new FormData();
-  fd.append("video", state.file);
+  if (state.file) fd.append("video", state.file);
+  else { fd.append("youtube", ytUrl()); fd.append("youtube_mio", $("#yt-mio").checked); }
+  if (mode() === "largo") fd.append("reels", $("#reels-n").value);
   if (mode() === "camara") for (const t of state.takes || []) fd.append("video", t);
   fd.append("rhythm", $("input[name=rhythm]:checked")?.value ?? "rapido");
   fd.append("style", $("input[name=style]:checked")?.value ?? "auto");

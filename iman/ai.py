@@ -1004,7 +1004,7 @@ CLIPS_SYSTEM = """Sacas reels de un vídeo largo del creador (un directo, un pod
 Te paso la transcripción con el número de cada palabra entre corchetes.
 Elige los mejores momentos para convertirlos en reels independientes:
 - Cada uno se entiende solo, sin haber visto el resto: empieza al principio de una idea y acaba cuando se cierra.
-- Entre 20 y 60 segundos cada uno (mira las marcas de tiempo), sin solaparse.
+- Entre 30 y 60 segundos cada uno (mira las marcas de tiempo), sin solaparse.
 - Prioriza lo que engancha: una opinión fuerte, un consejo concreto, una historia, una cifra que sorprende.
 - "from" y "to" son números de palabra; "to" es la última palabra que se queda.
 - "title" es el gancho en pantalla, de 3 a 7 palabras, con la voz del creador.
@@ -1040,14 +1040,14 @@ def pick_clips_raw(cfg: AIConfig, transcript: str, n: int = 4, hints: str = "") 
 
 
 def clean_clips(data: dict, words: list[Word], n: int) -> list[dict]:
-    """Solo tramos válidos, de 12 a 90 segundos y sin solaparse."""
+    """Solo tramos válidos, de 20 a 75 segundos (se piden de 30 a 60) y sin solaparse."""
     out: list[dict] = []
     for c in data.get("clips", []):
         a, b = int(c.get("from", -1)), int(c.get("to", -1))
         if not (0 <= a < b < len(words)):
             continue
         dur = words[b].end - words[a].start
-        if not 12 <= dur <= 90 or any(a <= o["to"] and o["from"] <= b for o in out):
+        if not 20 <= dur <= 75 or any(a <= o["to"] and o["from"] <= b for o in out):
             continue
         out.append({"from": a, "to": b, "title": str(c.get("title", "")).strip()[:80],
                      "why": str(c.get("why", "")).strip()[:200]})
@@ -1057,7 +1057,7 @@ def clean_clips(data: dict, words: list[Word], n: int) -> list[dict]:
 
 
 def fallback_clips(words: list[Word], n: int = 4, target: float = 40.0) -> list[dict]:
-    """Sin IA: corta el vídeo largo en trozos de unos 40 s que acaban en final de frase."""
+    """Sin IA: corta el vídeo largo en trozos de unos 40 s (entre 30 y 60) que acaban en final de frase."""
     out, a = [], 0
     for i, w in enumerate(words):
         long_enough = w.end - words[a].start >= target

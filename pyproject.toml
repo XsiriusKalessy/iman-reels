@@ -13,6 +13,8 @@ dependencies = [
   "openai>=1.40",
     "fonttools>=4.40",
     "pillow>=10",
+    "yt-dlp>=2025.1.1",  # vídeo largo desde un enlace de YouTube del propio creador (Unlicense)
+    "segno>=1.6",  # código QR para abrir Imán desde el móvil (BSD)
 ]
 
 [project.optional-dependencies]

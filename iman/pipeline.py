@@ -77,6 +77,7 @@ class EditOptions:
     sfx_fuera: list = field(default_factory=list)  # segundos del reel de los sonidos quitados en el Editor Pro
     # Marca con la que se monta: "activo" (la del cliente elegido al montar), "" (la propia) o el id de un cliente.
     cliente: str = "activo"
+    reels: int = 4  # vídeo largo: cuántos reels sacar (de 1 a 10)
 
 
 @dataclass

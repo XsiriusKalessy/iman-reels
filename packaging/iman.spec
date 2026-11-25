@@ -22,7 +22,8 @@ binaries = [
     *collect_dynamic_libs("mediapipe"),
     *[(str(bin_dir / f"{t}{exe}"), "bin") for t in ("ffmpeg", "ffprobe") if (bin_dir / f"{t}{exe}").exists()],
 ]
-hidden = [*collect_submodules("uvicorn"), *collect_submodules("iman"), "multipart"]
+hidden = [*collect_submodules("uvicorn"), *collect_submodules("iman"), "multipart", "segno",
+          *collect_submodules("yt_dlp")]
 
 a = Analysis([str(Path(SPECPATH) / "iman_desktop.py")], pathex=[str(root)], datas=datas, binaries=binaries,
              hiddenimports=hidden, excludes=["tkinter", "IPython"])

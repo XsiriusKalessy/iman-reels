@@ -178,3 +178,50 @@ def test_prompter_endpoint_answers(monkeypatch, tmp_path):
     r = c.post("/api/apuntador", files={"audio": ("voz.pcm", b"\0" * 32000, "application/octet-stream")},
                data={"script": "Hola"})
     assert r.status_code == 503
+
+
+def test_long_video_from_my_youtube(sample, tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from iman import config, server, youtube
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(server, "JOBS_DIR", tmp_path / "jobs")
+    got = {}
+
+    def fake_download(url, folder, progress=lambda p: None):
+        got["url"] = url
+        dst = folder / "original.mp4"
+        shutil.copy(sample, dst)
+        return dst
+
+    def fake_long(job_id, src, workdir, opts):
+        got.update(src=src, reels=opts.reels)
+        server._set(job_id, status="done", result={"clips": []})
+
+    monkeypatch.setattr(youtube, "download", fake_download)
+    monkeypatch.setattr(youtube, "available", lambda: True)
+    monkeypatch.setattr(server, "_work_long", fake_long)
+    c = TestClient(server.app)
+    url = "https://www.youtube.com/watch?v=abc123"
+    assert c.post("/api/jobs", data={"mode": "largo", "youtube": url}).status_code == 400  # sin «es mío»
+    assert c.post("/api/jobs", data={"mode": "largo", "youtube": "https://vimeo.com/1", "youtube_mio": "true"}).status_code == 400
+    assert c.post("/api/jobs", data={"mode": "camara", "youtube": url, "youtube_mio": "true"}).status_code == 400
+    assert c.post("/api/jobs", data={"mode": "largo"}).status_code == 400
+    job = c.post("/api/jobs", data={"mode": "largo", "youtube": url, "youtube_mio": "true", "reels": "3"}).json()
+    for _ in range(40):
+        if c.get(f"/api/jobs/{job['id']}").json()["status"] != "working":
+            break
+        time.sleep(0.1)
+    assert got["url"] == url and got["reels"] == 3 and got["src"].name == "original.mp4"
+    assert youtube.valid("https://youtu.be/xyz") and not youtube.valid("https://evil.com/youtube.com/watch?v=1")
+
+
+def test_clips_ask_for_30_to_60_seconds():
+    from iman import ai
+
+    words = [Word(f"w{i}", i * 0.5, i * 0.5 + 0.4) for i in range(300)]
+    data = {"clips": [{"from": 0, "to": 20, "title": "corto"}, {"from": 30, "to": 120, "title": "bien"},
+                      {"from": 130, "to": 299, "title": "largo"}]}
+    out = ai.clean_clips(data, words, 5)
+    assert [c["title"] for c in out] == ["bien"]

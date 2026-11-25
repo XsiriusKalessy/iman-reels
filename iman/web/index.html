@@ -203,6 +203,12 @@
         <label class="choice"><input type="radio" name="mode" value="vozclips"><span>🎞 Mi voz sobre mis vídeos<small>Tus clips con tu voz encima</small></span></label>
         <label class="choice"><input type="radio" name="mode" value="largo"><span>✂️ Vídeo largo → varios reels<small>Un directo, una clase, un podcast</small></span></label>
       </div>
+      <div id="largo-row" class="stack" hidden>
+        <label>¿Cuántos reels saco? <select id="reels-n"><option>3</option><option selected>5</option><option>8</option><option>10</option></select></label>
+        <label>O pega el enlace de YouTube de tu vídeo <input id="yt-url" type="url" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off"></label>
+        <label class="check small"><input type="checkbox" id="yt-mio"> Es mi vídeo (o tengo permiso de quien lo grabó para usarlo)</label>
+        <p class="hint">Cada reel sale de 30 a 60 segundos, empieza al principio de una idea y se entiende solo.</p>
+      </div>
       <label class="check" id="directo-row" hidden><input type="checkbox" id="directo"> Es un directo o una charla con público: busca también los momentos con más energía (risas, subidas de voz, reacciones)</label>
       </details>
       <p class="hint plantilla-row" id="plantilla-row" hidden>
