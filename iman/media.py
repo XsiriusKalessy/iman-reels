@@ -369,6 +369,7 @@ def build_filtergraph(
     look: str = "",
     transitions: dict[int, str] | None = None,
     framing: list[float] | None = None,
+    music_gain: float = 1.0,
 ) -> str:
     """`framing`: centro x (0-1) de la cabeza en cada tramo; con vídeos horizontales el recorte vertical
     va centrado en ella y en todos los cortes queda en el mismo sitio (los saltos casan).
@@ -459,7 +460,7 @@ def build_filtergraph(
         # En bucle solo lo que dura el reel (una canción larga no se carga entera en memoria) y con fundido al final.
         parts.append(f"[{nxt}:a]aloop=loop=-1:size={int(48000 * (reel_len + 1)):d},aresample=48000,"
                      f"aformat=channel_layouts=stereo,atrim=duration={reel_len:.3f},"
-                     f"volume=0.22,afade=t=in:d=0.6,afade=t=out:st={max(0.0, reel_len - 0.9):.3f}:d=0.9{_hush(hush)}[mu]")
+                     f"volume={0.22 * music_gain:.3f},afade=t=in:d=0.6,afade=t=out:st={max(0.0, reel_len - 0.9):.3f}:d=0.9{_hush(hush)}[mu]")
         parts.append(f"{audio}asplit[vk][vs]")
         parts.append("[mu][vs]sidechaincompress=threshold=0.02:ratio=6:attack=30:release=500[md]")
         parts.append("[vk][md]amix=inputs=2:duration=first:normalize=0[vm]")
@@ -493,9 +494,10 @@ def render(
     look: str = "",
     transitions: dict[int, str] | None = None,
     framing: list[float] | None = None,
+    music_gain: float = 1.0,
 ) -> Path:
     graph = build_filtergraph(spans, info, ass_path, size, fit, voice, zooms, overlays, tail, sfx_bed, music, punch,
-                              hush, look, transitions, framing)
+                              hush, look, transitions, framing, music_gain)
     script = dst.with_suffix(".filters.txt")
     script.write_text(graph, encoding="utf-8")
     extra, _ = _image_inputs(overlays, 1)

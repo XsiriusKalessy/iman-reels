@@ -889,7 +889,7 @@ KIT_SCHEMA = {
     "properties": {
         "carousel": {
             "type": "array",
-            "description": "De 5 a 8 diapositivas. La primera es la portada (gancho), la última la llamada a la acción.",
+            "description": "8 diapositivas. La primera es la portada (gancho), la última la llamada a la acción.",
             "items": {
                 "type": "object",
                 "properties": {"title": {"type": "string"}, "body": {"type": "string"}},
@@ -899,11 +899,13 @@ KIT_SCHEMA = {
         },
         "stories": {
             "type": "array",
-            "description": "3 historias para anunciar el reel.",
+            "description": "4 historias verticales para anunciar el reel; la 4.ª deja sitio para el enlace o la encuesta.",
             "items": {
                 "type": "object",
-                "properties": {"text": {"type": "string"}, "sticker": {"type": "string"}},
-                "required": ["text", "sticker"],
+                "properties": {"text": {"type": "string"}, "sticker": {"type": "string"},
+                               "kind": {"type": "string", "enum": ["normal", "enlace", "encuesta"]},
+                               "options": {"type": "array", "items": {"type": "string"}}},
+                "required": ["text", "sticker", "kind", "options"],
                 "additionalProperties": False,
             },
         },
@@ -914,11 +916,14 @@ KIT_SCHEMA = {
 }
 
 KIT_SYSTEM = """Preparas, a partir de un reel ya editado, el resto de piezas para publicarlo con la voz del creador.
-CARRUSEL de Instagram (5 a 8 diapositivas): la 1 es la portada con un gancho fuerte (título de 3 a 8 palabras,
+CARRUSEL de Instagram (8 diapositivas): la 1 es la portada con un gancho fuerte (título de 3 a 8 palabras,
 body vacío o una línea); las del medio cuentan las ideas del vídeo, una por diapositiva (título corto de 2 a 7
 palabras y body de 1 a 3 frases, máximo 220 caracteres); la última invita a actuar (usa la llamada a la acción
-del creador si la hay). HISTORIAS (3): textos muy cortos para anunciar el reel (máx. 90 caracteres) y un sticker
-de 1 a 3 palabras ("Nuevo reel", "¿Te pasa?", "Link en bio"…). Nada de inventar datos que no diga el vídeo.
+del creador si la hay). HISTORIAS (4): textos muy cortos para anunciar el reel (máx. 90 caracteres) y un sticker
+de 1 a 3 palabras ("Nuevo reel", "¿Te pasa?", "Link en bio"…). Las 3 primeras con kind "normal" y options vacío;
+la 4.ª deja hueco para un sticker de Instagram: kind "encuesta" (text = la pregunta, options = 2 respuestas de
+1 a 3 palabras) si el vídeo plantea una duda o una elección, o kind "enlace" (text = por qué tocar el enlace,
+sticker = el texto del botón, options vacío) si hay algo que reservar, comprar o leer. Nada de inventar datos que no diga el vídeo.
 Si te pasan un KIT ACTUAL y un CAMBIO, devuelve el kit completo con solo ese cambio aplicado
 ("en la diapositiva 3…" = la tercera, contando desde 1). En reply, una frase corta con lo que has hecho.""" + "\n\n" + COPY_RULES
 
@@ -951,7 +956,9 @@ def kit_copy_raw(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "",
 def clean_kit(data: dict) -> dict:
     slides = [{"title": str(s.get("title", "")).strip()[:90], "body": str(s.get("body", "")).strip()[:260]}
               for s in data.get("carousel", []) if str(s.get("title", "")).strip()][:10]
-    stories = [{"text": str(s.get("text", "")).strip()[:120], "sticker": str(s.get("sticker", "")).strip()[:30]}
+    stories = [{"text": str(s.get("text", "")).strip()[:120], "sticker": str(s.get("sticker", "")).strip()[:30],
+                "kind": s.get("kind") if s.get("kind") in ("enlace", "encuesta") else "normal",
+                "options": [str(o).strip()[:24] for o in s.get("options") or [] if str(o).strip()][:4]}
                for s in data.get("stories", []) if str(s.get("text", "")).strip()][:5]
     return {"carousel": slides, "stories": stories, "reply": str(data.get("reply", "")).strip()[:300]}
 

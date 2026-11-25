@@ -213,7 +213,56 @@ def _photo_slide(i: int, n: int, slide: dict, look: Look, frame: Image.Image, fa
     return img
 
 
+SLIDES = 8
+STORIES = 4
+FILLERS = [{"title": "¿Lo habías pensado?", "body": "Cuéntamelo en comentarios: te leo."},
+           {"title": "Guárdalo para luego", "body": "Te va a hacer falta cuando menos lo esperes."},
+           {"title": "Compártelo", "body": "Seguro que conoces a alguien a quien le viene bien."},
+           {"title": "Hay más", "body": "Sígueme y no te pierdas los próximos."},
+           {"title": "En resumen", "body": "Lo importante cabe en una frase: ponlo en práctica hoy."},
+           {"title": "Tu turno", "body": "Prueba una sola cosa de estas esta semana."},
+           {"title": "¿Te ha servido?", "body": "Guárdalo y compártelo con quien lo necesite."}]
+# Hueco que se deja libre en la historia de enlace o encuesta para poner ahí el sticker de Instagram.
+STICKER_BOX = (140, 1080, 940, 1440)
+
+
+def sticker_story(story_: dict, look: Look, frame: Image.Image | None) -> Image.Image:
+    """Historia con hueco para el sticker de enlace o de encuesta: la pregunta arriba, el hueco en el centro
+    (vacío, con una flecha discreta que lo señala) y la cara, si la hay, en la parte de arriba del fondo."""
+    W, H = STORY
+    kind = story_.get("kind")
+    text = _clean(story_.get("text", ""), look.title)
+    if frame is not None:
+        img = _shade(_cover(frame, STORY, _face(frame), (0.5, 0.22)), top=0.15, strength=245)
+    else:
+        img = Image.new("RGB", STORY, INK)
+    d = ImageDraw.Draw(img)
+    x0, y0, x1, y1 = STICKER_BOX
+    tf, tl, tlh = _fit(d, text, look.title, 92, W - 2 * MARGIN, 330)
+    y = y0 - 80 - len(tl) * tlh
+    for ln in tl:
+        d.text((W // 2, y), ln, font=tf, fill="#FFFFFF", anchor="ma")
+        y += tlh
+    hint = "👇 Pon aquí la encuesta" if kind == "encuesta" else "👇 Pon aquí el enlace"
+    sticker = _clean(story_.get("sticker", ""), BODY_FONT)
+    sf = _font(BODY_FONT, 40)
+    # Solo una pista pequeña en el borde del hueco: el sticker de verdad se pone en Instagram al publicarla.
+    d.text((W // 2, y0 - 46), _clean(hint, BODY_FONT), font=sf, fill=look.accent, anchor="ma")
+    opts = [o for o in story_.get("options") or [] if o][:2]
+    if kind == "encuesta" and opts:
+        d.text((W // 2, y1 + 40), "  ·  ".join(_clean(o, BODY_FONT) for o in opts), font=sf, fill="#FFFFFF",
+               anchor="ma")
+    elif sticker:
+        sw = d.textlength(sticker, font=sf) + 52
+        _pill(d, ((W - sw) // 2, y1 + 30), sticker, sf, look.accent, look.on_accent)
+    if look.handle:
+        d.text((W // 2, H - 260), look.handle, font=_font(BODY_FONT, 40), fill="#FFFFFF", anchor="ma")
+    return img
+
+
 def story(story_: dict, look: Look, frame: Image.Image | None) -> Image.Image:
+    if story_.get("kind") in ("enlace", "encuesta"):
+        return sticker_story(story_, look, frame)
     W, H = STORY
     story_ = {"text": _clean(story_.get("text", ""), look.title), "sticker": _clean(story_.get("sticker", ""), BODY_FONT)}
     face = _face(frame)
@@ -248,14 +297,52 @@ def fallback(words: list[Word], hook: str, cta: str = "") -> dict:
     """Sin IA: el carrusel sale de las frases del vídeo."""
     from .rhythm import phrases
 
-    rows = [p.text for p in phrases(words, set()) if len(p.text.split()) >= 4][:5]
+    rows = [p.text for p in phrases(words, set()) if len(p.text.split()) >= 4][:SLIDES - 2]
     slides = [{"title": hook or (rows[0] if rows else "Mi nuevo reel"), "body": ""}]
-    slides += [{"title": " ".join(r.split()[:6]).rstrip(",.;:") + "…", "body": r} for r in rows[:5]]
+    slides += [{"title": " ".join(r.split()[:6]).rstrip(",.;:") + "…", "body": r} for r in rows]
     slides.append({"title": cta or "¿Te ha servido?", "body": "Guárdalo y compártelo con quien lo necesite."})
-    stories = [{"text": hook or "Nuevo reel", "sticker": "Nuevo reel"},
-               {"text": rows[0] if rows else "Te cuento algo que no sabías", "sticker": "¿Te pasa?"},
-               {"text": "Lo tienes entero en mi perfil", "sticker": "Míralo"}]
-    return {"carousel": slides, "stories": stories, "reply": ""}
+    stories = [{"text": hook or "Nuevo reel", "sticker": "Nuevo reel", "kind": "normal", "options": []},
+               {"text": rows[0] if rows else "Te cuento algo que no sabías", "sticker": "¿Te pasa?", "kind": "normal",
+                "options": []},
+               {"text": "Lo tienes entero en mi perfil", "sticker": "Míralo", "kind": "normal", "options": []},
+               {"text": "¿Te ha pasado alguna vez?", "sticker": "", "kind": "encuesta", "options": ["Sí", "Nunca"]}]
+    return complete({"carousel": slides, "stories": stories, "reply": ""}, words, hook, cta)
+
+
+def complete(data: dict, words: list[Word], hook: str = "", cta: str = "") -> dict:
+    """Siempre 8 diapositivas y 4 historias (la última con hueco para enlace o encuesta), aunque la IA dé menos."""
+    from .rhythm import phrases
+
+    slides = list(data.get("carousel") or [])[:SLIDES]
+    if len(slides) < SLIDES:
+        rows = [p.text for p in phrases(words, set()) if len(p.text.split()) >= 4]
+        used = {s.get("body", "") for s in slides}
+        extra = [{"title": " ".join(r.split()[:6]).rstrip(",.;:") + "…", "body": r} for r in rows if r not in used]
+        last = slides.pop() if len(slides) >= 2 else None
+        slides += extra[:SLIDES - len(slides) - (1 if last else 0)]
+        if last:
+            slides.append(last)
+        fillers = iter(FILLERS)
+        while len(slides) < SLIDES:
+            slides.insert(len(slides) - 1 if len(slides) > 1 else len(slides), dict(next(fillers, FILLERS[0])))
+    stories = list(data.get("stories") or [])[:STORIES]
+    for s in stories:
+        s.setdefault("kind", "normal")
+        s.setdefault("options", [])
+    normal = [s for s in stories if s.get("kind") not in ("enlace", "encuesta")]
+    special = [s for s in stories if s.get("kind") in ("enlace", "encuesta")][:1]
+    pads = iter([{"text": hook or "Nuevo reel", "sticker": "Nuevo reel"},
+                 {"text": "Te cuento algo que no sabías", "sticker": "¿Te pasa?"},
+                 {"text": "Lo tienes entero en mi perfil", "sticker": "Míralo"}])
+    while len(normal) < STORIES - 1:
+        normal.append({**next(pads, {"text": "Nuevo reel", "sticker": "Míralo"}), "kind": "normal", "options": []})
+    stories = normal[:STORIES - 1] + special
+    if not any(s.get("kind") in ("enlace", "encuesta") for s in stories):
+        ask = {"text": "¿Quieres más como este?", "sticker": "", "kind": "encuesta", "options": ["¡Sí!", "Otro tema"]}
+        if cta:
+            ask = {"text": cta, "sticker": "Más info", "kind": "enlace", "options": []}
+        stories = stories[:STORIES - 1] + [ask]
+    return {**data, "carousel": slides, "stories": stories}
 
 
 def render(data: dict, outdir: Path, b: brand_mod.Brand, frames: list[Path]) -> dict:

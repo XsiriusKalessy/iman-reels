@@ -1073,7 +1073,9 @@ async def create_job(
     directo: bool = Form(False),
     intensidad: str = Form("alta"),
     circulo: bool = Form(False),
+    cliente: str = Form("activo"),
 ):
+    cliente = _cliente(cliente)
     if (pack and pack not in packs.PACKS) or mode not in ("camara", "voz", "largo") \
             or background not in pipeline.BACKGROUNDS:
         raise HTTPException(400, "Opción no válida")
@@ -1144,13 +1146,13 @@ async def create_job(
                                 comentario=" ".join(comentario.split())[:140],
                                 comentario_de=comentario_de.strip().lstrip("@")[:40], ligero=light,
                                 intensidad=intensidad if intensidad in pipeline.INTENSIDADES else "alta",
-                                circulo=bool(circulo),
+                                circulo=bool(circulo), cliente=cliente,
                                 gestures=not light, directo=bool(directo) and mode == "largo")
     if watermark:  # el reel de prueba se cuenta al crearlo (si falla, se devuelve)
         _count_trial(+1)
     with _lock:
         JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0, "mode": mode,
-                        "options": asdict(opts), "created": time.time(), "trial": watermark, "cliente": clientes.activo()}
+                        "options": asdict(opts), "created": time.time(), "trial": watermark, "cliente": cliente}
     target = _work_long if mode == "largo" else _work
     if len(takes) > 1:
         threading.Thread(target=_join_then, args=(target, takes, take_names, job_id, src, workdir, opts),
@@ -1161,6 +1163,14 @@ async def create_job(
 
 
 MAX_TAKES = 10
+
+
+def _cliente(value: str) -> str:
+    """Para qué marca es el reel: el id de un cliente, "" (la propia) o "activo" (el elegido ahora)."""
+    value = (value or "").strip()
+    if value == "activo":
+        return clientes.activo()
+    return value if value and any(c["id"] == value for c in clientes.listar()) else ""
 
 
 def _join_then(target, takes: list[Path], names: list[str], job_id: str, src: Path, workdir: Path, opts) -> None:
@@ -1528,6 +1538,50 @@ def edit_plan(job_id: str, body: PlanEditIn):
     return JOBS[job_id]
 
 
+@app.get("/api/jobs/{job_id}/linea")
+def get_timeline(job_id: str):
+    """Editor Pro: la línea de tiempo del reel (pistas de vídeo, apoyo, textos, subtítulos, música y sonidos)."""
+    job = _done_job(job_id)
+    line = jsonfile.load(_dir(job_id) / "linea.json")
+    if not isinstance(line, dict):
+        raise HTTPException(409, "Este reel se montó con una versión anterior: dale a «Aplicar» una vez y ya podrás "
+                                 "editarlo en la línea de tiempo")
+    return {**line, "music_styles": sorted(musica.STYLES), "canciones": sorted(musica.CANCIONES),
+            "options": {k: job["options"].get(k) for k in ("music", "sfx", "volumen_musica")}}
+
+
+class TimelineIn(BaseModel):
+    ops: list[dict] = Field(default_factory=list, max_length=200)
+
+
+@app.post("/api/jobs/{job_id}/linea")
+def edit_timeline(job_id: str, body: TimelineIn):
+    """Aplica lo que el creador ha movido, alargado, escrito o borrado en la línea de tiempo y vuelve a montar."""
+    from . import linea
+
+    job = _done_job(job_id)
+    workdir = _dir(job_id)
+    line = jsonfile.load(workdir / "linea.json")
+    if not isinstance(line, dict):
+        raise HTTPException(409, "Este reel no tiene línea de tiempo todavía")
+    plan = _saved_plan(workdir)
+    words = _saved_words(workdir)
+    options = dict(job["options"])
+    done = linea.apply(plan, words, line, body.ops, options)
+    if not done:
+        raise HTTPException(400, "No hay cambios que aplicar")
+    if any(op.get("op") == "word" for op in body.ops if isinstance(op, dict)):
+        jsonfile.save(workdir / "transcript.json", [w.__dict__ for w in words], indent=1)
+    opts = pipeline.EditOptions(**{k: v for k, v in options.items() if k in {f.name for f in fields(pipeline.EditOptions)}})
+    src = _original(workdir)
+    _claim(job_id, step="Aplicando tus cambios", progress=0.0, options=asdict(opts), error=None)
+    chat = list(JOBS[job_id].get("chat") or [])
+    chat.append({"role": "iman", "text": "Editor Pro: " + "; ".join(done[:8]) + ("…" if len(done) > 8 else "")})
+    JOBS[job_id]["chat"] = chat[-60:]
+    threading.Thread(target=_work, args=(job_id, src, workdir, opts, plan), daemon=True).start()
+    return {**JOBS[job_id], "cambios": done}
+
+
 @app.post("/api/jobs/{job_id}/guia")
 def make_guide(job_id: str, nuevo: bool = False):
     """Guía en PDF sacada del vídeo, para regalarla a cambio de un contacto («escríbeme GUÍA y te la mando»)."""
@@ -1630,6 +1684,7 @@ def make_kit(job_id: str, body: KitIn):
                                current, body.message)
         except Exception as e:
             raise HTTPException(502, f"La IA no ha podido preparar el carrusel. {ai.error_message(e)}")
+        data = kit.complete(data, words, hook, b.cta)  # siempre 8 diapositivas y 4 historias
     else:
         data = kit.fallback(words, hook, b.cta)
     # Fotogramas limpios (sin subtítulos) de la toma original: la portada y unos cuantos más.
@@ -1639,7 +1694,7 @@ def make_kit(job_id: str, body: KitIn):
     t0 = body.cover_t if body.cover_t is not None else first + 0.4
     frames = [media.thumbnail(src, workdir / f"kit-frame-{k}.jpg", max(0.0, min(t, dur - 0.1))) if k == 0 else
               _sharpest(src, workdir, k, t, dur)
-              for k, t in enumerate([t0, dur * 0.25, dur * 0.45, dur * 0.65, dur * 0.85])]
+              for k, t in enumerate([t0, dur * 0.2, dur * 0.32, dur * 0.44, dur * 0.56, dur * 0.68, dur * 0.8, dur * 0.9])]
     names = kit.render(data, outdir, b, frames)
     return {**names, "reply": data.get("reply", ""), "version": int(time.time())}
 

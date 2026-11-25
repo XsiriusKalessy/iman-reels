@@ -223,6 +223,10 @@
       <p class="lead">Con elegir para dónde es y de qué va, basta. Lo demás Imán lo decide solo, y puedes cambiarlo abajo.</p>
       <div class="grid2">
         <div>
+          <div id="up-brand-row" hidden>
+            <h3>¿Para qué marca?</h3>
+            <select id="up-brand" title="Cada reel se monta con la marca elegida (colores, logo, tono y cierre) y la recuerda"></select>
+          </div>
           <h3>¿Para dónde es?</h3>
           <div id="redes" class="choices inline"></div>
           <h3>¿De qué va?</h3>
@@ -438,6 +442,7 @@
             <button class="ghost" id="phrases-apply" hidden>Aplicar cambios</button>
           </details>
           <label class="check small"><input type="checkbox" id="safe-toggle"> Ver zonas que tapan Instagram y TikTok</label>
+          <button class="primary" type="button" id="pro-open" title="Línea de tiempo con pistas: mueve, alarga, escribe y borra textos, apoyo, subtítulos, música y sonidos">🎞 Editor Pro (línea de tiempo)</button>
           <div id="fx-box" hidden>
             <h3>Efectos</h3>
             <div id="fx-list" class="fx-list"></div>
@@ -504,7 +509,7 @@
           </details>
           <h3>Carrusel e historias</h3>
           <div class="kit">
-            <p class="hint">Del mismo reel, con tu marca: un carrusel para el feed y 3 historias para anunciarlo.</p>
+            <p class="hint">Del mismo reel, con tu marca: un carrusel de 8 imágenes para el feed y 4 historias para anunciarlo (la última, con hueco para tu enlace o tu encuesta).</p>
             <button class="ghost" id="kit-btn">✦ Hazme el carrusel y las historias</button>
             <div id="kit-box" hidden>
               <div class="kit-strip" id="kit-carousel"></div>
@@ -528,6 +533,55 @@
       </div>
     </section>
   </main>
+
+  <dialog id="pro" class="pro">
+    <div class="row between">
+      <h2>Editor Pro</h2>
+      <div class="row tight">
+        <button class="ghost small" type="button" id="pro-undo" disabled>↶ Deshacer</button>
+        <button class="ghost small" type="button" id="pro-close">Cerrar</button>
+        <button class="primary small" type="button" id="pro-apply" disabled>Aplicar y montar</button>
+      </div>
+    </div>
+    <div class="pro-top">
+      <div class="pro-screen">
+        <video id="pro-video" playsinline preload="auto"></video>
+        <div id="pro-live" class="pro-live" aria-live="polite"></div>
+      </div>
+      <div class="pro-side">
+        <p class="hint" id="pro-hint">Arrastra un bloque para moverlo y su borde derecho para alargarlo. Toca un bloque para cambiar su texto o quitarlo. Lo que cambies se ve encima del vídeo al momento; con «Aplicar y montar» sale el reel de verdad.</p>
+        <div id="pro-inspector" class="card pro-inspector" hidden></div>
+        <div class="card">
+          <h4>Añadir en <span id="pro-at">0,0 s</span></h4>
+          <div class="row tight wrap">
+            <select id="pro-add-type"></select>
+            <input id="pro-add-text" maxlength="140" placeholder="Texto">
+            <button class="ghost small" type="button" id="pro-add">＋ Añadir</button>
+          </div>
+        </div>
+        <div class="card">
+          <h4>Música y sonidos</h4>
+          <div class="row tight wrap">
+            <select id="pro-music"></select>
+            <label class="small">Volumen <input type="range" id="pro-vol" min="0" max="200" step="10"></label>
+            <label class="check small"><input type="checkbox" id="pro-sfx"> Sonidos</label>
+          </div>
+        </div>
+        <p class="hint" id="pro-pending"></p>
+      </div>
+    </div>
+    <div class="pro-controls row tight">
+      <button class="ghost small" type="button" id="pro-play">▶</button>
+      <span id="pro-time" class="hint">0,0 / 0,0 s</span>
+      <button class="ghost small" type="button" id="pro-cut" title="Quita del reel el trozo que estás oyendo (de la frase entera)">✂ Cortar aquí</button>
+      <label class="small">Zoom <input type="range" id="pro-zoom" min="30" max="240" value="90"></label>
+    </div>
+    <div class="pro-timeline" id="pro-timeline">
+      <div class="pro-ruler" id="pro-ruler"></div>
+      <div id="pro-tracks"></div>
+      <div class="pro-head" id="pro-head"></div>
+    </div>
+  </dialog>
 
   <dialog id="recorder" class="wide">
     <h2>Grabar aquí</h2>
