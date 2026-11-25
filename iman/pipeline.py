@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable
 
-from . import ai, brand, captions, copystyle, effects, fondos, ganchos, gestos, hands, jsonfile, limpiar, media, musica, packfx, packs, pexels, redes, segment, seguir, sfx, viral
+from . import ai, brand, captions, copystyle, effects, linea, fondos, ganchos, gestos, hands, jsonfile, limpiar, media, musica, packfx, packs, pexels, redes, segment, seguir, sfx, viral
 from .config import ai_config
 from .captions import STYLES, _ts, build_ass
 from .models import EditPlan, Span, Word
@@ -73,6 +73,13 @@ class EditOptions:
     # Cuánto espectáculo: "alta" (un efecto cada 3-5 s, los más vistosos primero), "media" o "baja" (solo si aportan).
     intensidad: str = "alta"
     circulo: bool = False  # tu cara en un círculo sobre los vídeos de apoyo, el mapa y las tarjetas (tapaba títulos)
+    volumen_musica: int = 100  # % del volumen de serie de la música (Editor Pro)
+    sfx_fuera: list = field(default_factory=list)  # segundos del reel de los sonidos quitados en el Editor Pro
+    # Marca con la que se monta: "activo" (la del cliente elegido al montar), "" (la propia) o el id de un cliente.
+    cliente: str = "activo"
+    reels: int = 4  # vídeo largo: cuántos reels sacar (de 1 a 10)
+    # Reel sin salir tú (mode "ilustrado"): de dónde salen las imágenes de cada escena (escenas.SOURCES).
+    imagenes: str = "auto"
 
 
 @dataclass
@@ -548,7 +555,14 @@ def _preview_async(src: Path, workdir: Path, spans: list[tuple[float, float]]) -
     threading.Thread(target=go, daemon=True).start()
 
 
-def run(
+def run(src: Path, workdir: Path, opts: "EditOptions", cfg: dict, progress: "Progress" = lambda msg, pct: None,
+        words: list[Word] | None = None, plan: EditPlan | None = None) -> "EditResult":
+    """Monta el reel con la marca de su cliente (opts.cliente), aunque mientras tanto se elija otro."""
+    with brand.using(opts.cliente):
+        return _run(src, workdir, opts, cfg, progress, words, plan)
+
+
+def _run(
     src: Path,
     workdir: Path,
     opts: EditOptions,
@@ -563,7 +577,7 @@ def run(
         opts.style = "auto"
     progress("Preparando tu vídeo", 0.03)
     (workdir / "previa.mp4").unlink(missing_ok=True)  # la vista previa es de este montaje, no del anterior
-    voice_only = opts.mode == "voz"
+    voice_only = opts.mode in ("voz", "ilustrado")
     notices = []
     if opts.ruido:
         progress("Quitando el ruido de fondo de tu voz", 0.04)
@@ -582,7 +596,13 @@ def run(
             progress("Montando tus vídeos con tu voz", 0.25)
             kit0 = brand.load() if opts.brand else None
             bg = kit0.primary if kit0 is not None and kit0.active and brand.is_hex(kit0.primary or "") else "#141518"
-            media.voice_canvas(src, canvas, visual_cuts(words), clips, bg, size=opts.size)
+            pictures = clips
+            if opts.mode == "ilustrado":  # sin salir tú: una imagen por escena que cuenta lo que dices
+                from . import escenas
+
+                pictures = escenas.clips(words, visual_cuts(words), workdir, cfg, kit0, clips, opts.imagenes,
+                                         ai_config(cfg), lambda m, p: progress(m, 0.25 + 0.1 * p))
+            media.voice_canvas(src, canvas, visual_cuts(words), pictures, bg, size=opts.size)
         src = canvas
     info = media.probe(src)
     if not info.has_audio:
@@ -725,7 +745,8 @@ def run(
         plan.caption_style = packs.get(opts.pack).style or "impacto"  # sin IA, el del sector
     jsonfile.save(workdir / "plan.json", plan.to_dict(), indent=1)
 
-    active = [dict(fx) for fx in plan.effects if not fx.get("off")]  # los que el creador ha apagado no salen
+    # Los que el creador ha apagado no salen; `_i` es su sitio en el plan (para el Editor Pro).
+    active = [dict(fx, _i=i) for i, fx in enumerate(plan.effects) if not fx.get("off")]
     active = _make_room(active)
     active = effects.dedupe_overlaps(active, effects.WordClock(kept, kept_idx),  # nunca dos a la vez
                                      DEDUPE_GAP.get(opts.intensidad, 1.0))
@@ -812,11 +833,13 @@ def run(
     hush = _hush_windows(plan.silence, words, clock) if (opts.sfx or opts.music) else []
     trans = media.transition_plan(spans) if opts.transiciones and not voice_only else {}
     sound = None
+    evs: list = []
     if opts.sfx:
         evs = _sfx_events(active if opts.effects else [], clock, bool(opts.hook and plan.hook_title), beats, spans,
                           hush)
         starts = [sum(sp.duration for sp in spans[:i]) for i in range(len(spans))]
         evs = sorted(evs + [(starts[i], "whoosh" if k == "whip" else "click", 0.45) for i, k in trans.items()])
+        evs = linea.drop_sfx(evs, opts.sfx_fuera)
         if evs:
             sound = sfx.bed(evs, total, workdir / "sfx.wav")
     # La música "explota" justo cuando se va el texto del gancho.
@@ -829,7 +852,16 @@ def run(
     if look == "auto":
         look = plan.color if plan.color in media.LOOKS else AUTO_LOOK.get(opts.pack, "natural")
         plan.color = look
-    av = dict(sfx_bed=sound, music=music, punch=punch, hush=hush, look=look, transitions=trans, framing=frames)
+    av = dict(sfx_bed=sound, music=music, punch=punch, hush=hush, look=look, transitions=trans, framing=frames,
+              music_gain=max(0.0, min(2.0, opts.volumen_musica / 100)))
+    try:  # la línea de tiempo para el Editor Pro (si falla, el reel sale igual)
+        jsonfile.save(workdir / "linea.json", linea.build(
+            plan=plan, active=active, kept=kept, kept_idx=kept_idx, spans=spans, zoom=zoom, total=total,
+            out_duration=out_duration, music=str(choice) if music is not None else "", music_on=music is not None,
+            music_vol=opts.volumen_musica, sfx_events=evs, sfx_on=opts.sfx, hook=bool(opts.hook and plan.hook_shown),
+            clips=len(clips)))
+    except Exception:  # noqa: BLE001
+        log.exception("No se pudo guardar la línea de tiempo")
     # En un ordenador sencillo, x264 «faster» tarda la mitad que «medium» y la diferencia no se ve en el móvil.
     final_preset = "faster" if opts.ligero else "medium"
     warnings = notices

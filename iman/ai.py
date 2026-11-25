@@ -840,6 +840,12 @@ def post_copy(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "", ct
 # --- Copiar el estilo de un reel ------------------------------------------------------
 
 STYLE_FONTS = ["Moderna", "Impacto", "Condensada", "Elegante", "Manuscrita"]
+# Lo que Imán sabe reproducir de la edición de otro reel (copystyle.EFFECT_MAP dice con qué).
+STYLE_EFFECTS = ["zoom", "transiciones", "titulares", "palabra_gigante", "emojis", "apoyo", "texto_detras", "listas",
+                 "cifras", "barra_progreso", "fondo_liso"]
+STYLE_LOOKS = ["natural", "calido", "teal", "cine", "grano", "retro", "bn"]
+STYLE_MUSIC = ["", "epica", "tranquila", "inspiracional", "alegre", "phonk", "cinematica", "emotiva", "corporativa",
+               "tropical", "suspense", "piano"]
 STYLE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -856,9 +862,16 @@ STYLE_SCHEMA = {
         "box_color": {"type": "string", "description": "#RRGGBB o vacío"},
         "pop": {"type": "boolean", "description": "la palabra que se dice crece o salta"},
         "notes": {"type": "string", "description": "En una frase: cómo es el estilo (letra, colores, ritmo, efectos)."},
+        "effects": {"type": "array", "items": {"type": "string", "enum": STYLE_EFFECTS},
+                    "description": "Recursos de edición que se ven en los fotogramas."},
+        "look": {"type": "string", "enum": STYLE_LOOKS, "description": "Color del vídeo que más se parece."},
+        "energy": {"type": "string", "enum": ["alta", "media", "baja"],
+                   "description": "Cuánto pasa en pantalla: alta = algo nuevo cada 2-4 s."},
+        "music": {"type": "string", "enum": STYLE_MUSIC, "description": "Tipo de música que pega (si se adivina)."},
     },
     "required": ["name", "font", "uppercase", "words_per_line", "position", "size", "text_color",
-                 "highlight_color", "outline", "box", "box_color", "pop", "notes"],
+                 "highlight_color", "outline", "box", "box_color", "pop", "notes", "effects", "look", "energy",
+                 "music"],
     "additionalProperties": False,
 }
 
@@ -866,8 +879,10 @@ STYLE_SYSTEM = """Eres diseñador de reels. Te paso fotogramas de un reel que le
 estilo de los subtítulos y los textos en pantalla, no en el contenido ni en la persona: qué tipo de letra es
 (Moderna = sans limpia; Impacto = sans muy gruesa; Condensada = alta y estrecha; Elegante = con serifa;
 Manuscrita = a mano), si va en mayúsculas, cuántas palabras se ven a la vez, dónde está, de qué tamaño, los
-colores (texto y palabra destacada), si lleva borde o caja detrás y si la palabra activa salta. Inspírate en el
-estilo; no copies logotipos ni marcas. Si no hay subtítulos visibles, deduce un estilo limpio que encaje."""
+colores (texto y palabra destacada), si lleva borde o caja detrás y si la palabra activa salta. Mira también la
+edición: qué recursos se ven (effects), el color del vídeo (look), cuánta energía tiene (energy) y qué música
+pegaría (music, vacío si no se adivina). Inspírate en el estilo; no copies logotipos ni marcas. Si no hay
+subtítulos visibles, deduce un estilo limpio que encaje."""
 
 
 def style_from_frames(cfg: AIConfig, frames: list[bytes], extra: str = "") -> dict:
@@ -889,7 +904,7 @@ KIT_SCHEMA = {
     "properties": {
         "carousel": {
             "type": "array",
-            "description": "De 5 a 8 diapositivas. La primera es la portada (gancho), la última la llamada a la acción.",
+            "description": "8 diapositivas. La primera es la portada (gancho), la última la llamada a la acción.",
             "items": {
                 "type": "object",
                 "properties": {"title": {"type": "string"}, "body": {"type": "string"}},
@@ -899,11 +914,13 @@ KIT_SCHEMA = {
         },
         "stories": {
             "type": "array",
-            "description": "3 historias para anunciar el reel.",
+            "description": "4 historias verticales para anunciar el reel; la 4.ª deja sitio para el enlace o la encuesta.",
             "items": {
                 "type": "object",
-                "properties": {"text": {"type": "string"}, "sticker": {"type": "string"}},
-                "required": ["text", "sticker"],
+                "properties": {"text": {"type": "string"}, "sticker": {"type": "string"},
+                               "kind": {"type": "string", "enum": ["normal", "enlace", "encuesta"]},
+                               "options": {"type": "array", "items": {"type": "string"}}},
+                "required": ["text", "sticker", "kind", "options"],
                 "additionalProperties": False,
             },
         },
@@ -914,11 +931,14 @@ KIT_SCHEMA = {
 }
 
 KIT_SYSTEM = """Preparas, a partir de un reel ya editado, el resto de piezas para publicarlo con la voz del creador.
-CARRUSEL de Instagram (5 a 8 diapositivas): la 1 es la portada con un gancho fuerte (título de 3 a 8 palabras,
+CARRUSEL de Instagram (8 diapositivas): la 1 es la portada con un gancho fuerte (título de 3 a 8 palabras,
 body vacío o una línea); las del medio cuentan las ideas del vídeo, una por diapositiva (título corto de 2 a 7
 palabras y body de 1 a 3 frases, máximo 220 caracteres); la última invita a actuar (usa la llamada a la acción
-del creador si la hay). HISTORIAS (3): textos muy cortos para anunciar el reel (máx. 90 caracteres) y un sticker
-de 1 a 3 palabras ("Nuevo reel", "¿Te pasa?", "Link en bio"…). Nada de inventar datos que no diga el vídeo.
+del creador si la hay). HISTORIAS (4): textos muy cortos para anunciar el reel (máx. 90 caracteres) y un sticker
+de 1 a 3 palabras ("Nuevo reel", "¿Te pasa?", "Link en bio"…). Las 3 primeras con kind "normal" y options vacío;
+la 4.ª deja hueco para un sticker de Instagram: kind "encuesta" (text = la pregunta, options = 2 respuestas de
+1 a 3 palabras) si el vídeo plantea una duda o una elección, o kind "enlace" (text = por qué tocar el enlace,
+sticker = el texto del botón, options vacío) si hay algo que reservar, comprar o leer. Nada de inventar datos que no diga el vídeo.
 Si te pasan un KIT ACTUAL y un CAMBIO, devuelve el kit completo con solo ese cambio aplicado
 ("en la diapositiva 3…" = la tercera, contando desde 1). En reply, una frase corta con lo que has hecho.""" + "\n\n" + COPY_RULES
 
@@ -951,7 +971,9 @@ def kit_copy_raw(cfg: AIConfig, transcript: str, hook: str = "", pack: str = "",
 def clean_kit(data: dict) -> dict:
     slides = [{"title": str(s.get("title", "")).strip()[:90], "body": str(s.get("body", "")).strip()[:260]}
               for s in data.get("carousel", []) if str(s.get("title", "")).strip()][:10]
-    stories = [{"text": str(s.get("text", "")).strip()[:120], "sticker": str(s.get("sticker", "")).strip()[:30]}
+    stories = [{"text": str(s.get("text", "")).strip()[:120], "sticker": str(s.get("sticker", "")).strip()[:30],
+                "kind": s.get("kind") if s.get("kind") in ("enlace", "encuesta") else "normal",
+                "options": [str(o).strip()[:24] for o in s.get("options") or [] if str(o).strip()][:4]}
                for s in data.get("stories", []) if str(s.get("text", "")).strip()][:5]
     return {"carousel": slides, "stories": stories, "reply": str(data.get("reply", "")).strip()[:300]}
 
@@ -982,7 +1004,7 @@ CLIPS_SYSTEM = """Sacas reels de un vídeo largo del creador (un directo, un pod
 Te paso la transcripción con el número de cada palabra entre corchetes.
 Elige los mejores momentos para convertirlos en reels independientes:
 - Cada uno se entiende solo, sin haber visto el resto: empieza al principio de una idea y acaba cuando se cierra.
-- Entre 20 y 60 segundos cada uno (mira las marcas de tiempo), sin solaparse.
+- Entre 30 y 60 segundos cada uno (mira las marcas de tiempo), sin solaparse.
 - Prioriza lo que engancha: una opinión fuerte, un consejo concreto, una historia, una cifra que sorprende.
 - "from" y "to" son números de palabra; "to" es la última palabra que se queda.
 - "title" es el gancho en pantalla, de 3 a 7 palabras, con la voz del creador.
@@ -1018,14 +1040,14 @@ def pick_clips_raw(cfg: AIConfig, transcript: str, n: int = 4, hints: str = "") 
 
 
 def clean_clips(data: dict, words: list[Word], n: int) -> list[dict]:
-    """Solo tramos válidos, de 12 a 90 segundos y sin solaparse."""
+    """Solo tramos válidos, de 20 a 75 segundos (se piden de 30 a 60) y sin solaparse."""
     out: list[dict] = []
     for c in data.get("clips", []):
         a, b = int(c.get("from", -1)), int(c.get("to", -1))
         if not (0 <= a < b < len(words)):
             continue
         dur = words[b].end - words[a].start
-        if not 12 <= dur <= 90 or any(a <= o["to"] and o["from"] <= b for o in out):
+        if not 20 <= dur <= 75 or any(a <= o["to"] and o["from"] <= b for o in out):
             continue
         out.append({"from": a, "to": b, "title": str(c.get("title", "")).strip()[:80],
                      "why": str(c.get("why", "")).strip()[:200]})
@@ -1035,7 +1057,7 @@ def clean_clips(data: dict, words: list[Word], n: int) -> list[dict]:
 
 
 def fallback_clips(words: list[Word], n: int = 4, target: float = 40.0) -> list[dict]:
-    """Sin IA: corta el vídeo largo en trozos de unos 40 s que acaban en final de frase."""
+    """Sin IA: corta el vídeo largo en trozos de unos 40 s (entre 30 y 60) que acaban en final de frase."""
     out, a = [], 0
     for i, w in enumerate(words):
         long_enough = w.end - words[a].start >= target

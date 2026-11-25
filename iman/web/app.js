@@ -2,7 +2,16 @@ const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const state = { file: null, takes: [], job: null, settings: null, poll: null };
 
+// Varias marcas: al montar se elige para cuál es (por defecto, la que está elegida en «Mi marca»).
+async function loadUploadBrands() {
+  let cl = { clientes: [], activo: "" };
+  try { cl = await api("/api/clientes"); } catch { /* sin clientes */ }
+  $("#up-brand-row").hidden = !cl.clientes.length;
+  $("#up-brand").innerHTML = `<option value="">Mi marca (la propia)</option>` + cl.clientes.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+  $("#up-brand").value = cl.activo || "";
+}
 function go(step) {
+  if (step === "edit") loadUploadBrands();
   if (step === "home") loadLibrary();
   if (step === "upload") loadTemplates();
   if (step === "idea") loadInspiration();
@@ -131,7 +140,7 @@ function renderStyles(list, select) {
   const cur = select || $("input[name=style]:checked")?.value;
   $("#styles").innerHTML = autoStyleCard(list, cur) + list.map(s => `
     <label class="choice style-card ${s.mine ? "mine" : ""}" ${s.notes ? `title="${esc(s.notes)}"` : ""}>
-      <input type="radio" name="style" value="${s.key}" data-rhythm="${s.rhythm || ""}" ${cur && s.key === cur ? "checked" : ""}>
+      <input type="radio" name="style" value="${s.key}" data-rhythm="${s.rhythm || ""}" data-extras="${esc(JSON.stringify(s.extras || {}))}" ${cur && s.key === cur ? "checked" : ""}>
       <span>${stylePreview(s)}${esc(s.label)}${s.mine ? `<small>Copiado de un reel</small><button type="button" class="link forget" data-style-del="${s.key}" title="Borrar">✕</button>` : ""}</span></label>`).join("");
 }
 $("#styles").onclick = async e => {
@@ -141,9 +150,19 @@ $("#styles").onclick = async e => {
   if (!confirm("¿Borrar este estilo?")) return;
   renderStyles((await api(`/api/styles/${del.dataset.styleDel}`, { method: "DELETE" })).styles);
 };
+// Un estilo copiado trae también su edición: ritmo, cantidad de efectos, transiciones, color, barra y música.
+function applyStyleExtras(x) {
+  if (!x) return;
+  if (x.intensidad && $(`#intensidad option[value="${x.intensidad}"]`)) $("#intensidad").value = x.intensidad;
+  if ("transiciones" in x) $("#transiciones").checked = !!x.transiciones;
+  if ("barra" in x) $("#barra").checked = !!x.barra;
+  if (x.look && $(`#look option[value="${x.look}"]`)) $("#look").value = x.look;
+  if (x.music && $(`#music-style option[value="${x.music}"]`)) $("#music-style").value = x.music;
+}
 $("#styles").onchange = e => {
   const r = e.target.dataset.rhythm && $(`input[name=rhythm][value="${e.target.dataset.rhythm}"]`);
   if (r) r.checked = true;  // el estilo copiado trae su ritmo
+  try { applyStyleExtras(JSON.parse(e.target.dataset.extras || "{}")); } catch {}
 };
 $("#copy-style-btn").onclick = () => { $("#copy-style-box").hidden = !$("#copy-style-box").hidden; };
 $("#copy-style-go").onclick = async () => {
@@ -157,7 +176,10 @@ $("#copy-style-go").onclick = async () => {
     const r = await api("/api/styles/copy", { method: "POST", body: fd });
     renderStyles(r.styles, r.key);
     const rh = $(`input[name=rhythm][value="${r.rhythm}"]`); if (rh) rh.checked = true;
-    msg.textContent = `Listo: «${r.label}». ${r.notes}`;
+    applyStyleExtras(r.extras);
+    msg.innerHTML = `Listo: «${esc(r.label)}». ${esc(r.notes)}`
+      + (r.report ? `<span class="copy-report"><b>Copiado</b><ul>${r.report.copied.map(t => `<li>✓ ${esc(t)}</li>`).join("")}</ul>`
+        + `<b>No se copia</b><ul>${r.report.not_copied.map(t => `<li>✕ ${esc(t)}</li>`).join("")}</ul></span>` : "");
     $("#copy-style-file").value = ""; $("#copy-style-name").value = "";
   } catch (err) { msg.textContent = err.message; }
   finally { btn.disabled = false; btn.textContent = "Sacar el estilo"; }
@@ -509,13 +531,20 @@ const MODES = {
     broll: "＋ Fotos o vídeos para acompañar (opcional)", brollHint: "Sin ellos, tu voz va sobre un fondo con tus colores y subtítulos grandes." },
   vozclips: { title: "Arrastra tu voz aquí", hint: "una nota de voz o un vídeo del que solo quieres la voz", accept: "audio/*,video/*",
     broll: "＋ Tus vídeos y fotos", brollHint: "Imán va cambiando de plano al ritmo de lo que dices." },
+  ilustrado: { title: "Arrastra tu voz aquí", hint: "una nota de voz o un vídeo del que solo quieres la voz · M4A, MP3, WAV, MP4", accept: "audio/*,video/*",
+    broll: "＋ Tus fotos (opcional)", brollHint: "Si subes fotos, salen primero, en orden. Si no, Imán pone imágenes que cuentan lo que dices." },
   largo: { title: "Arrastra tu vídeo largo aquí", hint: "un directo, una clase o un podcast · Imán saca los mejores momentos", accept: "video/*" },
 };
 const mode = () => $("input[name=mode]:checked").value;
-document.querySelectorAll("input[name=mode]").forEach(r => r.addEventListener("change", () => { $("#directo-row").hidden = mode() !== "largo"; }));
+document.querySelectorAll("input[name=mode]").forEach(r => r.addEventListener("change", () => { $("#directo-row").hidden = $("#largo-row").hidden = mode() !== "largo"; $("#ilustrado-row").hidden = mode() !== "ilustrado"; canGo(); }));
+// Vídeo largo: también vale un enlace de YouTube del propio creador.
+const ytUrl = () => mode() === "largo" && /^https?:\/\/(www\.|m\.)?(youtube\.com\/|youtu\.be\/)\S+$/i.test($("#yt-url").value.trim()) ? $("#yt-url").value.trim() : "";
 function canGo() {
-  $("#to-edit").disabled = $("#go-quick").disabled = !state.file || (mode() === "vozclips" && !state.broll.length);
+  const has = state.file || (ytUrl() && $("#yt-mio").checked);
+  $("#to-edit").disabled = $("#go-quick").disabled = !has || (mode() === "vozclips" && !state.broll.length);
 }
+$("#yt-url").oninput = canGo;
+$("#yt-mio").onchange = canGo;
 function setMode() {
   const m = MODES[mode()];
   $("#drop-title").textContent = m.title; $("#drop-hint").textContent = m.hint;
@@ -554,7 +583,7 @@ async function grabFrames(file) {
 // se ordenan por nombre como en la carpeta (VID_001, VID_002…) y el creador puede moverlas con las flechas.
 const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
 function pick(files, add = false) {
-  const ok = f => f && (f.type.startsWith("video") || (mode().startsWith("voz") && f.type.startsWith("audio")));
+  const ok = f => f && (f.type.startsWith("video") || ((mode().startsWith("voz") || mode() === "ilustrado") && f.type.startsWith("audio")));
   let list = [...(files || [])].filter(ok);
   if (!list.length) return;
   if (mode() === "camara") {
@@ -660,12 +689,15 @@ $("#change-file").onclick = e => { e.preventDefault(); clearUpload(); $("#file")
 
 // ---------- 2. editar ----------
 $("#go").onclick = async () => {
-  if (!state.file) return go("upload");
+  if (!state.file && !(ytUrl() && $("#yt-mio").checked)) return go("upload");
   if (state.uploading) return;  // un doble clic no debe crear dos reels
   state.uploading = true;
   $("#go").disabled = $("#go-quick").disabled = true;
   const fd = new FormData();
-  fd.append("video", state.file);
+  if (state.file) fd.append("video", state.file);
+  else { fd.append("youtube", ytUrl()); fd.append("youtube_mio", $("#yt-mio").checked); }
+  if (mode() === "largo") fd.append("reels", $("#reels-n").value);
+  if (mode() === "ilustrado") fd.append("imagenes", $("#imagenes").value);
   if (mode() === "camara") for (const t of state.takes || []) fd.append("video", t);
   fd.append("rhythm", $("input[name=rhythm]:checked")?.value ?? "rapido");
   fd.append("style", $("input[name=style]:checked")?.value ?? "auto");
@@ -694,6 +726,7 @@ $("#go").onclick = async () => {
   fd.append("look", $("#look").value);
   fd.append("intensidad", $("#intensidad").value);
   fd.append("circulo", $("#circulo").checked);
+  if (!$("#up-brand-row").hidden) fd.append("cliente", $("#up-brand").value);
   fd.append("letra", $("input[name=letra]:checked")?.value || "normal");
   fd.append("red", $("input[name=red]:checked")?.value || "instagram");
   if (state.comment?.text) { fd.append("comentario", state.comment.text); fd.append("comentario_de", state.comment.author || ""); }
@@ -1478,7 +1511,8 @@ function showResult(j) {
   const v = $("#out");
   v.hidden = false; $("#working").hidden = true;
   state.bust = bust;
-  $("#view-tabs").hidden = j.mode === "voz" || j.mode === "largo";
+  $("#view-tabs").hidden = j.mode === "voz" || j.mode === "largo" || j.mode === "ilustrado" || j.mode === "trailer";
+  $("#pro-open").hidden = j.mode === "trailer";  // el tráiler no tiene palabras ni línea de tiempo de reel
   setView("reel");
   $("#download").href = `/api/jobs/${j.id}/reel.mp4`;
   $("#download-wa").href = `/api/jobs/${j.id}/whatsapp.zip`;
@@ -1998,8 +2032,78 @@ const rec = { stream: null, recorder: null, chunks: [], blob: null, timer: null,
 const recDialog = $("#recorder");
 function recUpdatePrompter() {
   const box = $("#rec-scroll");
-  box.textContent = $("#rec-script").value || "Pega el guion abajo, o grábalo sin teleprompter.";
+  const text = $("#rec-script").value || "Pega el guion abajo, o grábalo sin teleprompter.";
+  // Cada palabra en su <span>: así el guion puede marcar lo ya leído y colocarse donde vas.
+  let k = 0;
+  box.innerHTML = text.split(/(\s+)/).map(part => !part || /^\s+$/.test(part) ? esc(part) : `<span data-k="${k++}">${esc(part)}</span>`).join("");
+  rec.words = k;
   box.style.fontSize = `${$("#rec-size").value}px`;
+}
+// --- Teleprompter que sigue la voz (todo en este ordenador) ---
+// Oye el micro: mientras hablas, el guion avanza a ritmo de habla; cada 1,5 s Imán escucha los últimos 4 s y dice
+// por qué palabra vas exactamente (si no puede, se queda el avance por voz). Si te callas, el guion se para.
+function recFollowStart() {
+  rec.cursor = 0; rec.cursorF = 0; rec.lastAt = 0; rec.listenOff = false; rec.busy = false; rec.prompterY = 0;
+  const track = rec.stream?.getAudioTracks()[0];
+  if (!track) return;
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const srcNode = ctx.createMediaStreamSource(new MediaStream([track]));
+  const proc = ctx.createScriptProcessor(4096, 1, 1);
+  const ratio = ctx.sampleRate / 16000;
+  rec.ring = new Int16Array(16000 * 4); rec.ringPos = 0; rec.ringFull = false; rec.level = 0;
+  proc.onaudioprocess = e => {
+    const x = e.inputBuffer.getChannelData(0);
+    let sum = 0;
+    for (let i = 0; i < x.length; i++) sum += x[i] * x[i];
+    rec.level = 0.8 * rec.level + 0.2 * Math.sqrt(sum / x.length);
+    for (let i = 0; i < x.length; i += ratio) {  // de 44,1/48 kHz a 16 kHz (para la voz basta)
+      const v = Math.max(-1, Math.min(1, x[Math.floor(i)]));
+      rec.ring[rec.ringPos++] = v * 32767;
+      if (rec.ringPos >= rec.ring.length) { rec.ringPos = 0; rec.ringFull = true; }
+    }
+  };
+  srcNode.connect(proc); proc.connect(ctx.destination);
+  rec.audio = { ctx, srcNode, proc };
+  rec.listen = setInterval(recListen, 1500);
+}
+function recFollowStop() {
+  clearInterval(rec.listen);
+  if (rec.audio) { try { rec.audio.proc.disconnect(); rec.audio.srcNode.disconnect(); rec.audio.ctx.close(); } catch {} }
+  rec.audio = null;
+}
+async function recListen() {
+  if (rec.listenOff || rec.busy || !rec.ring || rec.level < 0.01) return;
+  const n = rec.ringFull ? rec.ring.length : rec.ringPos;
+  if (n < 16000) return;
+  const out = new Int16Array(n);
+  if (rec.ringFull) { out.set(rec.ring.subarray(rec.ringPos)); out.set(rec.ring.subarray(0, rec.ringPos), rec.ring.length - rec.ringPos); }
+  else out.set(rec.ring.subarray(0, n));
+  const fd = new FormData();
+  fd.append("audio", new Blob([out.buffer], { type: "application/octet-stream" }), "voz.pcm");
+  fd.append("script", $("#rec-script").value);
+  rec.busy = true;
+  try {
+    const r = await fetch(`/api/apuntador?cursor=${Math.round(rec.cursor)}`, { method: "POST", body: fd });
+    if (r.status === 503) { rec.listenOff = true; return; }
+    const d = await r.json();
+    if (Number.isInteger(d.at)) { rec.cursor = d.at; rec.cursorF = d.at; rec.lastAt = Date.now(); }
+  } catch { /* la siguiente vez */ } finally { rec.busy = false; }
+}
+function recFollowStep(dt) {
+  // Mientras se oye voz avanza a unas 2,3 palabras por segundo, sin adelantarse más de 5 a lo último oído.
+  // Si Imán no puede escucharte (o lleva rato sin reconocer el guion), manda solo el avance por voz.
+  const lost = (Date.now() - (rec.lastAt || rec.t0)) / 1000;
+  const cap = rec.listenOff ? Infinity : rec.cursor + 5 + Math.max(0, lost - 4) * 2;
+  if (rec.level > 0.015) rec.cursorF = Math.min(rec.cursorF + 2.3 * dt, cap);
+  const k = Math.max(0, Math.min((rec.words || 1) - 1, Math.floor(rec.cursorF)));
+  const box = $("#rec-scroll");
+  $$("span", box).forEach(s => { s.classList.toggle("read", +s.dataset.k < k); s.classList.toggle("now", +s.dataset.k === k); });
+  const cur = box.querySelector(`span[data-k="${k}"]`);
+  if (cur) {
+    const y = Math.max(0, cur.offsetTop - $("#rec-prompter").clientHeight * 0.3);
+    rec.prompterY += (y - rec.prompterY) * 0.25;
+    box.style.transform = `translateY(-${rec.prompterY}px)`;
+  }
 }
 $("#rec-script").oninput = recUpdatePrompter;
 $("#rec-size").oninput = recUpdatePrompter;
@@ -2034,7 +2138,7 @@ function recReset() {
   if (rec.stream) { v.srcObject = rec.stream; v.play().catch(() => {}); }
 }
 function recClose() {
-  clearInterval(rec.timer); cancelAnimationFrame(rec.raf);
+  clearInterval(rec.timer); cancelAnimationFrame(rec.raf); recFollowStop();
   if (rec.recorder && rec.recorder.state !== "inactive") rec.recorder.stop();
   if (rec.stream) rec.stream.getTracks().forEach(t => t.stop());
   rec.stream = null;
@@ -2086,15 +2190,18 @@ $("#rec-start").onclick = async () => {
   };
   rec.recorder.start(250);
   rec.t0 = Date.now();
+  rec.follow = $("#rec-follow").checked;
+  if (rec.follow) recFollowStart();
   $("#rec-start").hidden = true; $("#rec-time").hidden = false;
   const stopBtn = $("#rec-retake"); stopBtn.hidden = false; stopBtn.textContent = "■ Parar";
-  stopBtn.onclick = () => { stopBtn.textContent = "Repetir"; stopBtn.onclick = recReset; clearInterval(rec.timer); rec.recorder.stop(); };
+  stopBtn.onclick = () => { stopBtn.textContent = "Repetir"; stopBtn.onclick = recReset; clearInterval(rec.timer); recFollowStop(); rec.recorder.stop(); };
   // El guion sube solo, a la velocidad elegida (se puede cambiar mientras grabas).
   rec.prompterY = 0;
   const box = $("#rec-scroll");
   rec.timer = setInterval(() => {
     const s = Math.round((Date.now() - rec.t0) / 1000);
     $("#rec-time").textContent = `● ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    if (rec.follow) return recFollowStep(0.1);
     rec.prompterY += +$("#rec-speed").value * 0.9;
     const max = Math.max(0, box.scrollHeight - $("#rec-prompter").clientHeight + 40);
     box.style.transform = `translateY(-${Math.min(rec.prompterY, max)}px)`;
@@ -2106,4 +2213,246 @@ $("#rec-use").onclick = () => {
   const file = new File([rec.blob], `grabado-en-iman-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.${ext}`, { type: rec.blob.type });
   recClose();
   pick([file]);
+};
+
+// --- Editor Pro: línea de tiempo con pistas (vídeo, gancho, textos, fondo, apoyo, subtítulos, música, sonidos) ---
+const PRO_TRACKS = [
+  ["video", "Vídeo"], ["hook", "Gancho"], ["textos", "Textos"], ["fondo", "Detrás de ti"], ["apoyo", "Apoyo"],
+  ["captions", "Subtítulos"], ["music", "Música"], ["sfx", "Sonidos"],
+];
+const PRO_ADD_NAMES = { frase: "Frase", titular: "Titular", palabra: "Palabra gigante", cifra: "Cifra", cta: "Llamada a la acción", dato: "Dato", detras: "Texto detrás de ti", apoyo: "Vídeo/foto de apoyo (n.º)", pexels: "Plano de Pexels (palabra)" };
+const pro = { job: null, line: null, ops: [], undo: [], sel: null, pps: 90, raf: 0 };
+const proFmt = t => (Math.round(t * 10) / 10).toFixed(1).replace(".", ",");
+const proSnap = () => JSON.stringify({ line: pro.line, ops: pro.ops });
+
+async function proOpen() {
+  const j = state.job;
+  if (!j?.id) return;
+  let line;
+  try { line = await api(`/api/jobs/${j.id}/linea`); }
+  catch (err) { alert(err.message); return; }
+  Object.assign(pro, { job: j.id, line, ops: [], undo: [], sel: null });
+  const v = $("#pro-video");
+  v.src = `/api/jobs/${j.id}/reel.mp4${state.bust || ""}`;
+  $("#pro-add-type").innerHTML = Object.keys(line.addable || {}).map(k => `<option value="${k}">${esc(PRO_ADD_NAMES[k] || k)}</option>`).join("");
+  const styles = [...(line.canciones || []), ...(line.music_styles || [])];
+  const cur = line.music?.style || "";
+  $("#pro-music").innerHTML = `<option value="">Sin música</option>` + styles.map(k => `<option value="${esc(k)}">${esc(k)}</option>`).join("")
+    + (cur && !styles.includes(cur) ? `<option value="${esc(cur)}">${esc(cur === "mia" ? "Mi música" : cur)}</option>` : "");
+  $("#pro-music").value = line.music?.on ? cur : "";
+  $("#pro-vol").value = line.music?.volume ?? 100;
+  $("#pro-sfx").checked = !!line.sfx?.on;
+  proRender();
+  $("#pro").showModal();
+  proTick();
+}
+function proPush(op) {
+  pro.undo.push(proSnap());
+  pro.ops.push(op);
+  proRender();
+}
+// Un bloque recién añadido aún no está en el plan: sus cambios van a su propio «añadir».
+function proChange(b, op, patch) {
+  if (!b.nuevo) return proPush(op);
+  pro.undo.push(proSnap());
+  Object.assign(pro.ops[b.opIndex], patch);
+  proRender();
+}
+function proRender() {
+  const L = pro.line, pps = pro.pps, W = Math.max(1, L.total) * pps;
+  const ruler = $("#pro-ruler");
+  ruler.style.width = `${W}px`;
+  const step = pps < 50 ? 5 : pps < 120 ? 2 : 1;
+  let marks = "";
+  for (let t = 0; t <= L.total; t += step) marks += `<span style="left:${t * pps}px">${t}s</span>`;
+  ruler.innerHTML = marks;
+  const blk = (cls, t0, t1, label, data = "", title = "") =>
+    `<div class="pro-b ${cls}" style="left:${t0 * pps}px;width:${Math.max(6, (t1 - t0) * pps)}px" ${data} title="${esc(title || label)}"><span>${esc(label)}</span></div>`;
+  const rows = PRO_TRACKS.map(([key, name]) => {
+    let inner = "";
+    if (key === "video") inner = L.video.map((v, k) => blk(`vid${v.zoom ? " zoom" : ""}${v.cut ? " cut" : ""}`, v.t0, v.t1, v.zoom ? "🔍" : "", `data-v="${k}"`, `Del segundo ${proFmt(v.src0)} al ${proFmt(v.src1)} de tu vídeo`)).join("");
+    else if (key === "hook") inner = L.hook?.text ? blk("hook", L.hook.t0, L.hook.t1, L.hook.text, `data-hook="1"`) : `<button class="ghost small pro-addhook" data-hook="1">＋ Gancho</button>`;
+    else if (key === "captions") inner = L.captions.map((c, k) => blk(`cap${c.cut ? " cut" : ""}`, c.t0, c.t1, c.words.map(w => w.text).join(" "), `data-c="${k}"`)).join("");
+    else if (key === "music") inner = L.music?.on || $("#pro-music")?.value ? blk("mus", 0, L.total, `🎵 ${L.music?.style || ""} · ${L.music?.volume ?? 100}%`, `data-music="1"`) : "";
+    else if (key === "sfx") inner = (L.sfx?.events || []).filter(e => !e.gone).map((e, k) => `<i class="pro-dot" style="left:${e.t * pps}px" data-s="${k}" title="${esc(e.name)} · toca para quitarlo"></i>`).join("");
+    else inner = L.blocks.map((b, k) => b.track !== key ? "" : blk(`fx${b.off ? " off" : ""}${b.pedido ? " mine" : ""}`, b.t0, b.t1, `${b.text || b.type}`, `data-b="${k}"`, `${b.type}: ${b.text || ""}`) + "").join("");
+    return `<div class="pro-row" data-track="${key}"><b class="pro-name">${name}</b><div class="pro-lane" style="width:${W}px">${inner}</div></div>`;
+  }).join("");
+  $("#pro-tracks").innerHTML = rows;
+  $$(".pro-b.fx:not(.off)").forEach(el => { el.insertAdjacentHTML("beforeend", `<i class="pro-grip" aria-hidden="true"></i>`); });
+  $("#pro-undo").disabled = !pro.undo.length;
+  $("#pro-apply").disabled = !pro.ops.length;
+  $("#pro-pending").textContent = pro.ops.length ? `${pro.ops.length} cambio${pro.ops.length > 1 ? "s" : ""} sin montar.` : "";
+  proSelect(pro.sel);
+  proLive();
+}
+function proSelect(sel) {
+  pro.sel = sel;
+  $$(".pro-b.sel").forEach(e => e.classList.remove("sel"));
+  const box = $("#pro-inspector");
+  if (!sel) { box.hidden = true; return; }
+  const L = pro.line;
+  box.hidden = false;
+  if (sel.b !== undefined) {
+    const b = L.blocks[sel.b];
+    $(`.pro-b[data-b="${sel.b}"]`)?.classList.add("sel");
+    box.innerHTML = `<h4>${esc(b.type)} · ${proFmt(b.t0)}–${proFmt(b.t1)} s</h4>
+      <label>Texto<input id="pro-text" maxlength="140" value="${esc(b.text)}"></label>
+      <div class="row tight wrap">${b.off ? `<button class="ghost small" id="pro-restore">Recuperarlo</button>` : `<button class="ghost small" id="pro-del">🗑 Quitarlo</button>`}
+      <button class="ghost small" id="pro-here">Llevarlo a ${proFmt($("#pro-video").currentTime)} s</button></div>`;
+    $("#pro-text").onchange = e => { const t = e.target.value.trim(); if (!t || t === b.text) return; b.text = t; proChange(b, { op: "text", i: b.i, text: t }, { text: t }); };
+    if ($("#pro-del")) $("#pro-del").onclick = () => { b.off = true; proChange(b, { op: "delete", i: b.i }, { skip: true }); };
+    if ($("#pro-restore")) $("#pro-restore").onclick = () => { b.off = false; b.pedido = true; proChange(b, { op: "restore", i: b.i }, { skip: false }); };
+    $("#pro-here").onclick = () => { const t = $("#pro-video").currentTime, d = b.t1 - b.t0; b.t0 = t; b.t1 = Math.min(L.total, t + d); b.pedido = true; proChange(b, { op: "move", i: b.i, t }, { t }); };
+  } else if (sel.c !== undefined) {
+    const c = L.captions[sel.c];
+    $(`.pro-b[data-c="${sel.c}"]`)?.classList.add("sel");
+    box.innerHTML = `<h4>Subtítulo · ${proFmt(c.t0)}–${proFmt(c.t1)} s</h4><p class="hint">Corrige una palabra (se oye igual; solo cambia lo escrito).</p>
+      <div class="pro-words">${c.words.map((w, k) => `<input data-w="${k}" maxlength="40" value="${esc(w.text)}">`).join("")}</div>
+      <button class="ghost small" id="pro-cutcap">✂ Quitar esta frase del reel</button>`;
+    $$(".pro-words input").forEach(inp => inp.onchange = () => {
+      const w = c.words[+inp.dataset.w], t = inp.value.trim();
+      if (!t || t === w.text) return;
+      w.text = t; proPush({ op: "word", k: w.i, text: t });
+    });
+    $("#pro-cutcap").onclick = () => { c.cut = true; proPush({ op: "cut", t0: c.t0, t1: c.t1 }); };
+  } else if (sel.v !== undefined) {
+    const v = L.video[sel.v];
+    $(`.pro-b[data-v="${sel.v}"]`)?.classList.add("sel");
+    box.innerHTML = `<h4>Plano · ${proFmt(v.t0)}–${proFmt(v.t1)} s</h4><p class="hint">Del segundo ${proFmt(v.src0)} al ${proFmt(v.src1)} de tu vídeo${v.zoom ? ", con zoom" : ""}.</p>
+      <button class="ghost small" id="pro-cutv">✂ Quitar este trozo</button>`;
+    $("#pro-cutv").onclick = () => { v.cut = true; proPush({ op: "cut", t0: v.t0, t1: v.t1 }); };
+  } else if (sel.hook) {
+    box.innerHTML = `<h4>Gancho (primeros segundos)</h4><label>Texto<input id="pro-hook" maxlength="80" value="${esc(L.hook?.text || "")}"></label><p class="hint">Déjalo vacío para quitarlo.</p>`;
+    $("#pro-hook").onchange = e => { const t = e.target.value.trim(); L.hook = { ...(L.hook || { t0: 0, t1: 2.8 }), text: t }; proPush({ op: "hook", text: t }); };
+  } else box.hidden = true;
+}
+function proLive() {
+  const L = pro.line, t = $("#pro-video").currentTime || 0;
+  const live = [];
+  if (L.hook?.text && t < L.hook.t1) live.push(`<div class="pro-l hook">${esc(L.hook.text)}</div>`);
+  for (const b of L.blocks) if (!b.off && b.track !== "apoyo" && t >= b.t0 && t < b.t1 && b.text) live.push(`<div class="pro-l ${b.track}${b.pedido ? " mine" : ""}">${esc(b.text)}</div>`);
+  for (const b of L.blocks) if (!b.off && b.track === "apoyo" && t >= b.t0 && t < b.t1) live.push(`<div class="pro-l apoyo">▣ Apoyo ${esc(b.text || "")}</div>`);
+  const c = L.captions.find(c => t >= c.t0 && t < c.t1 + 0.05);
+  if (c) live.push(`<div class="pro-l cap${c.cut ? " cut" : ""}">${esc(c.words.map(w => w.text).join(" "))}</div>`);
+  $("#pro-live").innerHTML = live.join("");
+  $("#pro-head").style.left = `${t * pro.pps + 110}px`;
+  $("#pro-time").textContent = `${proFmt(t)} / ${proFmt(L.total)} s`;
+  $("#pro-at").textContent = `${proFmt(t)} s`;
+}
+function proTick() {
+  cancelAnimationFrame(pro.raf);
+  const step = () => { if (!$("#pro").open) return; proLive(); pro.raf = requestAnimationFrame(step); };
+  pro.raf = requestAnimationFrame(step);
+}
+// Arrastrar: mover un bloque o alargarlo por su borde derecho. Tocar sin mover: seleccionarlo.
+$("#pro-tracks").addEventListener("pointerdown", e => {
+  const el = e.target.closest(".pro-b, .pro-dot, [data-hook]");
+  const L = pro.line;
+  if (!el) {
+    const lane = e.target.closest(".pro-lane");
+    if (lane) { const r = lane.getBoundingClientRect(); $("#pro-video").currentTime = Math.max(0, (e.clientX - r.left) / pro.pps); }
+    return;
+  }
+  if (el.dataset.s !== undefined) { const ev = L.sfx.events[+el.dataset.s]; ev.gone = true; proPush({ op: "sfx", t: ev.t }); return; }
+  if (el.dataset.hook) return proSelect({ hook: true });
+  if (el.dataset.c !== undefined) { $("#pro-video").currentTime = L.captions[+el.dataset.c].t0; return proSelect({ c: +el.dataset.c }); }
+  if (el.dataset.v !== undefined) { $("#pro-video").currentTime = L.video[+el.dataset.v].t0; return proSelect({ v: +el.dataset.v }); }
+  if (el.dataset.music) return;
+  if (el.dataset.b === undefined) return;
+  const k = +el.dataset.b, b = L.blocks[k];
+  if (b.off) return proSelect({ b: k });
+  const resize = e.target.classList.contains("pro-grip");
+  const x0 = e.clientX, t0 = b.t0, t1 = b.t1;
+  let moved = false;
+  el.setPointerCapture(e.pointerId);
+  const onMove = ev => {
+    const dt = (ev.clientX - x0) / pro.pps;
+    if (Math.abs(ev.clientX - x0) > 3) moved = true;
+    if (!moved) return;
+    if (resize) { const n = Math.max(t0 + 0.4, Math.min(L.total, t1 + dt)); el.style.width = `${(n - t0) * pro.pps}px`; }
+    else { const n = Math.max(0, Math.min(L.total - 0.3, t0 + dt)); el.style.left = `${n * pro.pps}px`; $("#pro-video").currentTime = n; }
+  };
+  const onUp = ev => {
+    el.removeEventListener("pointermove", onMove); el.removeEventListener("pointerup", onUp);
+    const dt = (ev.clientX - x0) / pro.pps;
+    if (!moved) return proSelect({ b: k });
+    pro.sel = { b: k };
+    if (resize) { const n = Math.max(t0 + 0.4, Math.min(L.total, t1 + dt)); b.t1 = n; b.pedido = true; proChange(b, { op: "resize", i: b.i, t1: n }, { t1: n }); }
+    else { const n = Math.max(0, Math.min(L.total - 0.3, t0 + dt)); b.t0 = n; b.t1 = Math.min(L.total, n + (t1 - t0)); b.pedido = true; proChange(b, { op: "move", i: b.i, t: n }, { t: n, t1: b.t1 }); }
+  };
+  el.addEventListener("pointermove", onMove); el.addEventListener("pointerup", onUp);
+});
+$("#pro-ruler").addEventListener("pointerdown", e => { const r = e.currentTarget.getBoundingClientRect(); $("#pro-video").currentTime = Math.max(0, (e.clientX - r.left) / pro.pps); });
+$("#pro-zoom").oninput = e => { pro.pps = +e.target.value; proRender(); };
+$("#pro-play").onclick = () => { const v = $("#pro-video"); if (v.paused) v.play(); else v.pause(); };
+$("#pro-video").addEventListener("play", () => { $("#pro-play").textContent = "❚❚"; });
+$("#pro-video").addEventListener("pause", () => { $("#pro-play").textContent = "▶"; });
+$("#pro-cut").onclick = () => {
+  const t = $("#pro-video").currentTime, L = pro.line;
+  const k = L.captions.findIndex(c => t >= c.t0 - 0.05 && t < c.t1 + 0.05);
+  if (k < 0) return;
+  L.captions[k].cut = true; proPush({ op: "cut", t0: L.captions[k].t0, t1: L.captions[k].t1 });
+};
+$("#pro-add").onclick = () => {
+  const L = pro.line, type = $("#pro-add-type").value, t = $("#pro-video").currentTime;
+  const text = $("#pro-add-text").value.trim() || L.addable[type];
+  const track = type === "apoyo" || type === "pexels" ? "apoyo" : type === "detras" ? "fondo" : "textos";
+  L.blocks.push({ i: null, type, track, t0: t, t1: Math.min(L.total, t + 2.5), text, pedido: true, nuevo: true, opIndex: pro.ops.length });
+  $("#pro-add-text").value = "";
+  proPush({ op: "add", type, t, text });
+};
+$("#pro-music").onchange = e => { pro.line.music = { ...pro.line.music, style: e.target.value, on: !!e.target.value }; proPush({ op: "music", style: e.target.value }); };
+$("#pro-vol").onchange = e => { pro.line.music = { ...pro.line.music, volume: +e.target.value }; proPush({ op: "music", volume: +e.target.value }); };
+$("#pro-sfx").onchange = e => { pro.line.sfx = { ...pro.line.sfx, on: e.target.checked }; proPush({ op: "sfx", on: e.target.checked }); };
+$("#pro-undo").onclick = () => { const s = pro.undo.pop(); if (!s) return; const o = JSON.parse(s); pro.line = o.line; pro.ops = o.ops; pro.sel = null; proRender(); };
+$("#pro-close").onclick = () => {
+  if (pro.ops.length && !confirm("Tienes cambios sin montar. ¿Cerrar sin aplicarlos?")) return;
+  $("#pro-video").pause(); $("#pro").close();
+};
+$("#pro-apply").onclick = async () => {
+  const ops = pro.ops.filter(o => !o.skip);
+  const btn = $("#pro-apply"); btn.disabled = true; btn.textContent = "Montando…";
+  try {
+    const j = await postJSON(`/api/jobs/${pro.job}/linea`, { ops });
+    $("#pro-video").pause(); $("#pro").close();
+    state.job = j; showWorking(j.step, 0); poll();
+  } catch (err) { $("#pro-pending").textContent = err.message; btn.disabled = false; }
+  finally { btn.textContent = "Aplicar y montar"; }
+};
+$("#pro-open").onclick = () => proOpen();
+
+// --- Enviar desde el móvil: Imán abre una página en la wifi y enseña su QR ---
+$("#movil-open").onclick = async () => {
+  $("#movil-msg").textContent = ""; $("#movil-qr").innerHTML = `<div class="spinner"></div>`; $("#movil-url").textContent = "";
+  $("#movil").showModal();
+  try {
+    const r = await postJSON("/api/movil", {});
+    $("#movil-qr").innerHTML = r.qr;  // SVG generado por Imán
+    $("#movil-url").textContent = r.url;
+    if (r.url.includes("//127.0.0.1")) $("#movil-msg").textContent = "No encuentro la wifi de este ordenador: conéctalo a la misma red que el móvil y vuelve a abrir esto.";
+  } catch (err) { $("#movil-qr").innerHTML = ""; $("#movil-msg").textContent = err.message; }
+};
+$("#movil-close").onclick = () => $("#movil").close();
+$("#movil-stop").onclick = async () => { await api("/api/movil", { method: "DELETE" }); $("#movil").close(); };
+
+// --- Tráiler o anuncio de cine con tus fotos ---
+$("#trailer-open").onclick = () => { $("#tr-msg").textContent = ""; $("#trailer").showModal(); };
+$("#tr-cancel").onclick = () => $("#trailer").close();
+$("#trailer-form").onsubmit = async e => {
+  e.preventDefault();
+  const files = [...$("#tr-fotos").files];
+  if (files.length < 2) { $("#tr-msg").textContent = "Elige al menos 2 fotos (mejor de 4 a 8)."; return; }
+  const fd = new FormData();
+  files.forEach(f => fd.append("fotos", f));
+  for (const [k, id] of [["title", "#tr-title"], ["tagline", "#tr-tagline"], ["fecha", "#tr-fecha"], ["cta", "#tr-cta"], ["idea", "#tr-idea"], ["estilo", "#tr-estilo"]]) fd.append(k, $(id).value);
+  if ($("#tr-voz").files[0]) fd.append("voz", $("#tr-voz").files[0]);
+  if (!$("#up-brand-row").hidden) fd.append("cliente", $("#up-brand").value);
+  const btn = $("#tr-go"); btn.disabled = true; $("#tr-msg").textContent = "Subiendo tus fotos…";
+  try {
+    const j = await api("/api/trailer", { method: "POST", body: fd });
+    $("#trailer").close();
+    state.job = j; go("result"); showWorking(j.step, 0); poll();
+  } catch (err) { $("#tr-msg").textContent = err.message; }
+  finally { btn.disabled = false; }
 };

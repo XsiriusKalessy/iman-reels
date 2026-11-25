@@ -6,6 +6,9 @@ confirma. Se guarda en ~/.iman/marca/ (brand.json + logo.png).
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
+
 import colorsys
 import json
 import re
@@ -138,11 +141,31 @@ class Brand:
         return p if p.exists() else None
 
 
+# Marca de este montaje (cada reel recuerda para qué cliente es): la pone pipeline.run en su hilo con `using`.
+_CURRENT: contextvars.ContextVar[str | None] = contextvars.ContextVar("iman_marca", default=None)
+
+
+@contextlib.contextmanager
+def using(cid: str | None):
+    """Mientras dura el bloque, la marca es la del cliente `cid` ("" la propia; None o "activo", la elegida)."""
+    from . import clientes
+
+    if cid is not None and cid != "activo" and cid and not any(c["id"] == cid for c in clientes.listar()):
+        cid = ""  # cliente borrado: la marca propia
+    token = _CURRENT.set(None if cid in (None, "activo") else cid)
+    try:
+        yield
+    finally:
+        _CURRENT.reset(token)
+
+
 def brand_dir() -> Path:
     """La marca propia («marca») o, con un cliente activo (multi-cliente Pro), la de ese cliente."""
     from . import clientes
 
-    cid = clientes.activo()
+    cid = _CURRENT.get()
+    if cid is None:
+        cid = clientes.activo()
     return clientes.dir_for(cid) / "marca" if cid else config.HOME / "marca"
 
 

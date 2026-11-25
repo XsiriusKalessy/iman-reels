@@ -181,6 +181,8 @@
         <div id="audio-picked" class="audio-picked" hidden></div>
       </label>
       <p class="hint record-row"><button class="ghost" type="button" id="record-open">🎥 Grabar aquí, con teleprompter</button> <span>Con la cámara del ordenador: el guion pasa por delante de la cámara y la guía te mantiene centrado.</span></p>
+      <p class="hint record-row"><button class="ghost" type="button" id="trailer-open">🎬 Tráiler o anuncio de cine</button> <span>Para un lanzamiento, un producto o un viaje: con tus fotos, carteles de cine, música de tráiler y golpes de sonido.</span></p>
+      <p class="hint record-row"><button class="ghost" type="button" id="movil-open">📱 Enviar desde el móvil</button> <span>Escanea un QR, manda el vídeo desde el móvil y el reel montado vuelve al móvil.</span></p>
       <p class="hint picked-row" id="picked-row" hidden><span id="picked-name"></span> · <a href="#" id="change-file">Cambiar de vídeo</a></p>
       <div class="takes" id="takes-box" hidden>
         <p class="hint"><strong>Tus tomas, en este orden.</strong> Imán las une una detrás de otra e iguala el color a la primera. Si el orden no es el que quieres, muévelas con las flechas.</p>
@@ -201,7 +203,24 @@
         <label class="choice"><input type="radio" name="mode" value="camara" checked><span>🎥 Hablo a cámara<small>Tu toma de siempre</small></span></label>
         <label class="choice"><input type="radio" name="mode" value="voz"><span>🎙 Solo mi voz<small>Sin salir en cámara</small></span></label>
         <label class="choice"><input type="radio" name="mode" value="vozclips"><span>🎞 Mi voz sobre mis vídeos<small>Tus clips con tu voz encima</small></span></label>
+        <label class="choice"><input type="radio" name="mode" value="ilustrado"><span>🖼 Sin salir yo<small>Tu voz sobre imágenes que cuentan lo que dices</small></span></label>
         <label class="choice"><input type="radio" name="mode" value="largo"><span>✂️ Vídeo largo → varios reels<small>Un directo, una clase, un podcast</small></span></label>
+      </div>
+      <div id="ilustrado-row" class="stack" hidden>
+        <label>¿De dónde saco las imágenes? <select id="imagenes">
+          <option value="auto" selected>Tus fotos primero, luego Pexels (con tu clave) y si no, láminas con tu marca</option>
+          <option value="pexels">Fotos de Pexels (con tu clave gratuita de Ajustes)</option>
+          <option value="openai">Ilustraciones con tu clave de OpenAI (las cobra tu cuenta de OpenAI)</option>
+          <option value="laminas">Láminas de diseño con tu marca y la idea de cada escena</option>
+          <option value="fotos">Solo mis fotos</option>
+        </select></label>
+        <p class="hint">Una imagen cada ~3 s, en movimiento, con tus subtítulos, música y efectos. Sin avatares ni voces inventadas: la voz es la tuya.</p>
+      </div>
+      <div id="largo-row" class="stack" hidden>
+        <label>¿Cuántos reels saco? <select id="reels-n"><option>3</option><option selected>5</option><option>8</option><option>10</option></select></label>
+        <label>O pega el enlace de YouTube de tu vídeo <input id="yt-url" type="url" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off"></label>
+        <label class="check small"><input type="checkbox" id="yt-mio"> Es mi vídeo (o tengo permiso de quien lo grabó para usarlo)</label>
+        <p class="hint">Cada reel sale de 30 a 60 segundos, empieza al principio de una idea y se entiende solo.</p>
       </div>
       <label class="check" id="directo-row" hidden><input type="checkbox" id="directo"> Es un directo o una charla con público: busca también los momentos con más energía (risas, subidas de voz, reacciones)</label>
       </details>
@@ -223,6 +242,10 @@
       <p class="lead">Con elegir para dónde es y de qué va, basta. Lo demás Imán lo decide solo, y puedes cambiarlo abajo.</p>
       <div class="grid2">
         <div>
+          <div id="up-brand-row" hidden>
+            <h3>¿Para qué marca?</h3>
+            <select id="up-brand" title="Cada reel se monta con la marca elegida (colores, logo, tono y cierre) y la recuerda"></select>
+          </div>
           <h3>¿Para dónde es?</h3>
           <div id="redes" class="choices inline"></div>
           <h3>¿De qué va?</h3>
@@ -438,6 +461,7 @@
             <button class="ghost" id="phrases-apply" hidden>Aplicar cambios</button>
           </details>
           <label class="check small"><input type="checkbox" id="safe-toggle"> Ver zonas que tapan Instagram y TikTok</label>
+          <button class="primary" type="button" id="pro-open" title="Línea de tiempo con pistas: mueve, alarga, escribe y borra textos, apoyo, subtítulos, música y sonidos">🎞 Editor Pro (línea de tiempo)</button>
           <div id="fx-box" hidden>
             <h3>Efectos</h3>
             <div id="fx-list" class="fx-list"></div>
@@ -504,7 +528,7 @@
           </details>
           <h3>Carrusel e historias</h3>
           <div class="kit">
-            <p class="hint">Del mismo reel, con tu marca: un carrusel para el feed y 3 historias para anunciarlo.</p>
+            <p class="hint">Del mismo reel, con tu marca: un carrusel de 8 imágenes para el feed y 4 historias para anunciarlo (la última, con hueco para tu enlace o tu encuesta).</p>
             <button class="ghost" id="kit-btn">✦ Hazme el carrusel y las historias</button>
             <div id="kit-box" hidden>
               <div class="kit-strip" id="kit-carousel"></div>
@@ -529,6 +553,92 @@
     </section>
   </main>
 
+  <dialog id="pro" class="pro">
+    <div class="row between">
+      <h2>Editor Pro</h2>
+      <div class="row tight">
+        <button class="ghost small" type="button" id="pro-undo" disabled>↶ Deshacer</button>
+        <button class="ghost small" type="button" id="pro-close">Cerrar</button>
+        <button class="primary small" type="button" id="pro-apply" disabled>Aplicar y montar</button>
+      </div>
+    </div>
+    <div class="pro-top">
+      <div class="pro-screen">
+        <video id="pro-video" playsinline preload="auto"></video>
+        <div id="pro-live" class="pro-live" aria-live="polite"></div>
+      </div>
+      <div class="pro-side">
+        <p class="hint" id="pro-hint">Arrastra un bloque para moverlo y su borde derecho para alargarlo. Toca un bloque para cambiar su texto o quitarlo. Lo que cambies se ve encima del vídeo al momento; con «Aplicar y montar» sale el reel de verdad.</p>
+        <div id="pro-inspector" class="card pro-inspector" hidden></div>
+        <div class="card">
+          <h4>Añadir en <span id="pro-at">0,0 s</span></h4>
+          <div class="row tight wrap">
+            <select id="pro-add-type"></select>
+            <input id="pro-add-text" maxlength="140" placeholder="Texto">
+            <button class="ghost small" type="button" id="pro-add">＋ Añadir</button>
+          </div>
+        </div>
+        <div class="card">
+          <h4>Música y sonidos</h4>
+          <div class="row tight wrap">
+            <select id="pro-music"></select>
+            <label class="small">Volumen <input type="range" id="pro-vol" min="0" max="200" step="10"></label>
+            <label class="check small"><input type="checkbox" id="pro-sfx"> Sonidos</label>
+          </div>
+        </div>
+        <p class="hint" id="pro-pending"></p>
+      </div>
+    </div>
+    <div class="pro-controls row tight">
+      <button class="ghost small" type="button" id="pro-play">▶</button>
+      <span id="pro-time" class="hint">0,0 / 0,0 s</span>
+      <button class="ghost small" type="button" id="pro-cut" title="Quita del reel el trozo que estás oyendo (de la frase entera)">✂ Cortar aquí</button>
+      <label class="small">Zoom <input type="range" id="pro-zoom" min="30" max="240" value="90"></label>
+    </div>
+    <div class="pro-timeline" id="pro-timeline">
+      <div class="pro-ruler" id="pro-ruler"></div>
+      <div id="pro-tracks"></div>
+      <div class="pro-head" id="pro-head"></div>
+    </div>
+  </dialog>
+
+  <dialog id="trailer" class="wide">
+    <form method="dialog" id="trailer-form" class="stack">
+      <h2>Tráiler o anuncio de cine</h2>
+      <p class="hint">Con tus fotos (de 4 a 8 va genial): cada una se mueve en 2.5D, entre carteles en negro como en el cine, con música de tráiler y golpes de sonido. Al final, el título, la fecha y tu llamada a la acción con tu marca.</p>
+      <label>Tus fotos (o clips cortos) <input type="file" id="tr-fotos" accept="image/*,video/*" multiple required></label>
+      <label>Qué anuncias (título) <input id="tr-title" maxlength="60" required placeholder="Ej.: Japón 2027"></label>
+      <label>La frase del tráiler <input id="tr-tagline" maxlength="200" placeholder="Ej.: Treinta viajeros, un solo destino que cambia la vida"></label>
+      <div class="row tight wrap">
+        <label class="grow">Fecha <input id="tr-fecha" maxlength="40" placeholder="Ej.: Noviembre 2027"></label>
+        <label class="grow">Llamada a la acción <input id="tr-cta" maxlength="80" placeholder="Ej.: Reserva tu plaza"></label>
+      </div>
+      <label>Algo más para la IA (opcional) <textarea id="tr-idea" rows="2" maxlength="1000" placeholder="Ej.: es un viaje en grupo de 12 días, ryokan con onsen, plazas limitadas"></textarea></label>
+      <div class="row tight wrap">
+        <label class="grow">Estilo <select id="tr-estilo"><option value="epico">Épico</option><option value="misterio">Misterio</option><option value="emotivo">Emotivo</option><option value="accion">Acción</option><option value="lujo">Lujo</option></select></label>
+        <label class="grow">Tu voz en off (opcional) <input type="file" id="tr-voz" accept="audio/*,video/*"></label>
+      </div>
+      <p class="hint" id="tr-msg"></p>
+      <div class="row between">
+        <button class="ghost" type="button" id="tr-cancel">Cancelar</button>
+        <button class="primary" type="submit" id="tr-go">✦ Montar el tráiler</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="movil">
+    <h2>Enviar desde el móvil</h2>
+    <p class="hint">Escanea el código con la cámara del móvil. Se abre una página de Imán: graba o elige el vídeo, dale a «Enviar» y aquí se monta. Cuando esté listo, el reel vuelve al móvil para guardarlo o compartirlo. Sin instalar nada.</p>
+    <div class="movil-qr" id="movil-qr"></div>
+    <p class="center"><code id="movil-url"></code></p>
+    <p class="hint">El móvil y este ordenador tienen que estar en la <b>misma wifi</b> y Imán abierto. Si el ordenador pregunta si deja a Imán usar la red, di que sí (solo red privada). Lo que mandes sale también en «Mis reels».</p>
+    <p class="hint" id="movil-msg"></p>
+    <div class="row between">
+      <button class="ghost" type="button" id="movil-stop" title="Nadie más podrá abrir la página hasta que la vuelvas a activar">Apagar la página del móvil</button>
+      <button class="primary" type="button" id="movil-close">Cerrar</button>
+    </div>
+  </dialog>
+
   <dialog id="recorder" class="wide">
     <h2>Grabar aquí</h2>
     <p class="hint">Mira al punto rojo (justo bajo la cámara) y lee el guion que pasa por delante. Cuando pares, Imán quita los silencios y los fallos como siempre.</p>
@@ -542,6 +652,7 @@
     </div>
     <label>Guion para el teleprompter<textarea id="rec-script" rows="3" placeholder="Pega aquí el guion (o viene solo desde «Grabar esta →»)."></textarea></label>
     <div class="row">
+      <label class="check small" title="Imán te escucha en este ordenador (sin mandar nada fuera) y el guion va por donde vas: si paras, se para; si repites, espera"><input type="checkbox" id="rec-follow" checked> El guion sigue tu voz</label>
       <label>Velocidad<input type="range" id="rec-speed" min="1" max="5" value="3"></label>
       <label>Letra<input type="range" id="rec-size" min="22" max="48" value="32"></label>
     </div>

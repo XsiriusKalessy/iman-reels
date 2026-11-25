@@ -223,7 +223,7 @@ def test_library_toggles_and_post(sample, tmp_path, monkeypatch):
 
     # Carrusel e historias, sin IA: salen de las frases del vídeo.
     kit = c.post(f"/api/jobs/{jid}/kit", json={}).json()
-    assert len(kit["carousel"]) >= 2 and len(kit["stories"]) == 3
+    assert len(kit["carousel"]) == 8 and len(kit["stories"]) == 4  # la 4.ª, con hueco para enlace o encuesta
     r = c.get(f"/api/jobs/{jid}/kit/{kit['carousel'][0]}")
     assert r.status_code == 200 and r.headers["content-type"] == "image/png"
     assert c.get(f"/api/jobs/{jid}/kit/kit.zip").status_code == 200
@@ -274,7 +274,9 @@ def test_copy_style_from_a_reel(sample, tmp_path, monkeypatch):
         assert all(f[:2] == b"\xff\xd8" for f in frames)  # JPEG
         return {"name": "Amarillo grande", "font": "Condensada", "uppercase": True, "words_per_line": 2,
                 "position": "centro", "size": "grande", "text_color": "#ffffff", "highlight_color": "#FFD400",
-                "outline": True, "box": False, "box_color": "", "pop": True, "notes": "Letra alta y amarilla."}
+                "outline": True, "box": False, "box_color": "", "pop": True, "notes": "Letra alta y amarilla.",
+                "effects": ["zoom", "transiciones", "emojis", "inventado"], "look": "teal", "energy": "alta",
+                "music": "phonk"}
 
     monkeypatch.setattr(ai, "style_from_frames", fake)
     c = TestClient(server.app)
@@ -285,6 +287,8 @@ def test_copy_style_from_a_reel(sample, tmp_path, monkeypatch):
     with sample.open("rb") as f:
         r = c.post("/api/styles/copy", files={"file": ("r.mp4", f, "video/mp4")}, data={"name": ""}).json()
     assert seen["n"] >= 3 and r["key"] == "mio-amarillo-grande" and r["rhythm"] in ("rapido", "dinamico", "natural")
+    assert r["extras"] == {"intensidad": "alta", "transiciones": True, "barra": False, "look": "teal", "music": "phonk"}
+    assert any("transiciones" in t for t in r["report"]["copied"]) and len(r["report"]["not_copied"]) >= 4
     st = STYLES[r["key"]]
     assert st.font == "Anton" and st.uppercase and st.max_words == 2 and st.accent == rgb("#FFD400") and st.y == 1000
     assert any(s["key"] == r["key"] and s["mine"] for s in c.get("/api/options").json()["styles"])

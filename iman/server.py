@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import logging
@@ -15,7 +16,7 @@ import uuid
 from dataclasses import asdict, fields, replace
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -282,7 +283,8 @@ def _styles() -> list[dict]:
     copystyle.register()
     mine = copystyle.custom()
     return [{"key": s.key, "label": s.label, "mine": s.key in mine, "rhythm": mine.get(s.key, {}).get("rhythm", ""),
-             "notes": mine.get(s.key, {}).get("notes", ""), "look": _style_look(s)} for s in STYLES.values()]
+             "notes": mine.get(s.key, {}).get("notes", ""), "extras": mine.get(s.key, {}).get("extras") or {},
+             "look": _style_look(s)} for s in STYLES.values()]
 
 
 def _hex(ass: str) -> str:
@@ -322,11 +324,11 @@ async def copy_style(file: UploadFile = File(...), name: str = Form("")):
         except Exception as e:
             raise HTTPException(502, f"La IA no ha podido analizar el reel. {ai.error_message(e)}")
         saved = copystyle.save(name.strip() or analysis.get("name") or "Mi estilo", analysis,
-                               copystyle.rhythm_for(rate))
+                               copystyle.rhythm_for(rate), rate)
     finally:
         src.unlink(missing_ok=True)
     return {"key": saved["key"], "label": saved["style"]["label"], "rhythm": saved["rhythm"], "notes": saved["notes"],
-            "styles": _styles()}
+            "extras": saved["extras"], "report": saved["report"], "styles": _styles()}
 
 
 @app.delete("/api/styles/{key}")
@@ -1039,7 +1041,7 @@ def music_preview(key: str):
 
 @app.post("/api/jobs")
 async def create_job(
-    video: list[UploadFile] = File(...),
+    video: list[UploadFile] | None = File(None),
     rhythm: str = Form("rapido"),
     style: str = Form("auto"),
     size: str = Form("1080"),
@@ -1073,8 +1075,29 @@ async def create_job(
     directo: bool = Form(False),
     intensidad: str = Form("alta"),
     circulo: bool = Form(False),
+    cliente: str = Form("activo"),
+    youtube: str = Form(""),
+    youtube_mio: bool = Form(False),
+    reels: int = Form(4),
+    imagenes: str = Form("auto"),
 ):
-    if (pack and pack not in packs.PACKS) or mode not in ("camara", "voz", "largo") \
+    from . import youtube as yt
+
+    cliente = _cliente(cliente)
+    video = [v for v in video or [] if v.filename]
+    youtube = youtube.strip()
+    if not video:
+        if not youtube:
+            raise HTTPException(400, "Falta el vídeo")
+        if mode != "largo":
+            raise HTTPException(400, "Los enlaces de YouTube son para «Vídeo largo → varios reels»")
+        if not yt.valid(youtube):
+            raise HTTPException(400, "Ese enlace no es de un vídeo de YouTube")
+        if not youtube_mio:
+            raise HTTPException(400, "Marca que el vídeo es tuyo o que tienes permiso para usarlo")
+        if not yt.available():
+            raise HTTPException(400, "Esta versión de Imán no puede bajar vídeos de YouTube: descárgalo y súbelo")
+    if (pack and pack not in packs.PACKS) or mode not in ("camara", "voz", "largo", "ilustrado") \
             or background not in pipeline.BACKGROUNDS:
         raise HTTPException(400, "Opción no válida")
     copystyle.register()
@@ -1125,7 +1148,7 @@ async def create_job(
     except HTTPException:
         shutil.rmtree(workdir, ignore_errors=True)
         raise
-    src = takes[0] if len(takes) == 1 else workdir / "original.mp4"
+    src = takes[0] if len(takes) == 1 else workdir / "original.mp4"  # (sin tomas: lo baja _youtube_then)
     music = "mia" if music_file and _save_music(workdir, music_file) else \
         (music_style if music_style in musica.STYLES or music_style in musica.CANCIONES or music_style == "auto" else "")
     if names and mode == "camara":  # en "solo voz" los vídeos ya son la imagen de todo el reel
@@ -1136,7 +1159,8 @@ async def create_job(
     gancho = gancho if gancho in ganchos.GANCHOS else "auto"
     opts = pipeline.EditOptions(rhythm, style, size, fit, hook, hook_title, hook_template, gancho, instructions,
                                 voice=voice, ruido=ruido, watermark=watermark, brand=use_brand, pack=pack,
-                                mode="voz" if mode == "voz" else "camara", background=background,
+                                mode=mode if mode in ("voz", "ilustrado") else "camara", background=background,
+                                imagenes=imagenes if imagenes in ("auto", "fotos", "pexels", "openai", "laminas") else "auto",
                                 sfx=sfx, music=music, punch=punch, barra=barra, transiciones=transiciones,
                                 look=look if look in media.LOOKS or look == "auto" else "",
                                 letra=letra if letra in captions_mod.SIZES else "normal",
@@ -1144,15 +1168,17 @@ async def create_job(
                                 comentario=" ".join(comentario.split())[:140],
                                 comentario_de=comentario_de.strip().lstrip("@")[:40], ligero=light,
                                 intensidad=intensidad if intensidad in pipeline.INTENSIDADES else "alta",
-                                circulo=bool(circulo),
+                                circulo=bool(circulo), cliente=cliente, reels=max(1, min(10, int(reels))),
                                 gestures=not light, directo=bool(directo) and mode == "largo")
     if watermark:  # el reel de prueba se cuenta al crearlo (si falla, se devuelve)
         _count_trial(+1)
     with _lock:
         JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0, "mode": mode,
-                        "options": asdict(opts), "created": time.time(), "trial": watermark, "cliente": clientes.activo()}
+                        "options": asdict(opts), "created": time.time(), "trial": watermark, "cliente": cliente}
     target = _work_long if mode == "largo" else _work
-    if len(takes) > 1:
+    if not takes:  # vídeo de YouTube: primero se baja y luego sigue como si lo hubieras subido
+        threading.Thread(target=_youtube_then, args=(target, youtube, job_id, workdir, opts), daemon=True).start()
+    elif len(takes) > 1:
         threading.Thread(target=_join_then, args=(target, takes, take_names, job_id, src, workdir, opts),
                          daemon=True).start()
     else:
@@ -1161,6 +1187,14 @@ async def create_job(
 
 
 MAX_TAKES = 10
+
+
+def _cliente(value: str) -> str:
+    """Para qué marca es el reel: el id de un cliente, "" (la propia) o "activo" (el elegido ahora)."""
+    value = (value or "").strip()
+    if value == "activo":
+        return clientes.activo()
+    return value if value and any(c["id"] == value for c in clientes.listar()) else ""
 
 
 def _join_then(target, takes: list[Path], names: list[str], job_id: str, src: Path, workdir: Path, opts) -> None:
@@ -1192,13 +1226,32 @@ def _join_then(target, takes: list[Path], names: list[str], job_id: str, src: Pa
     target(job_id, src, workdir, opts)
 
 
+def _youtube_then(target, url: str, job_id: str, workdir: Path, opts) -> None:
+    """Vídeo largo desde un enlace de YouTube (del propio creador): se baja y sigue como uno subido."""
+    from . import youtube as yt
+
+    try:
+        _set(job_id, step="Bajando tu vídeo de YouTube", progress=0.01)
+        src = yt.download(url, workdir, lambda pct: _set(job_id, step="Bajando tu vídeo de YouTube",
+                                                         progress=round(0.01 + 0.04 * pct, 3)))
+    except Exception as e:  # noqa: BLE001
+        log.exception("No se pudo bajar de YouTube")
+        msg = str(e) if isinstance(e, ValueError) else ("No he podido bajar ese vídeo de YouTube. Comprueba el enlace "
+                                                        "y la conexión, o descárgalo y súbelo.")
+        if JOBS[job_id].pop("trial", False):
+            _count_trial(-1)
+        _set(job_id, status="error", error=msg)
+        return
+    target(job_id, src, workdir, opts)
+
+
 def _work_long(job_id: str, src: Path, workdir: Path, opts: pipeline.EditOptions) -> None:
     """Vídeo largo → varios reels: cada momento elegido es un reel normal que aparece en la biblioteca."""
     try:
         cfg = config.load()
         words, picks = pipeline.long_video_clips(src, workdir, cfg,
                                                  lambda msg, pct: _set(job_id, step=msg, progress=pct * 0.3),
-                                                 directo=opts.directo)
+                                                 n=max(1, min(10, opts.reels)), directo=opts.directo)
         if not picks:
             raise ValueError("No he encontrado momentos de al menos 12 segundos en los que hables")
         made = []
@@ -1528,6 +1581,166 @@ def edit_plan(job_id: str, body: PlanEditIn):
     return JOBS[job_id]
 
 
+# --- Tráileres y anuncios de cine con tus imágenes (iman/trailer.py) ---
+@app.post("/api/trailer")
+async def make_trailer(fotos: list[UploadFile] = File(...), title: str = Form(...), tagline: str = Form(""),
+                       fecha: str = Form(""), cta: str = Form(""), idea: str = Form(""), estilo: str = Form("epico"),
+                       voz: UploadFile | None = File(None), use_brand: bool = Form(True), cliente: str = Form("activo")):
+    from . import trailer
+
+    allowed, watermark = license.can_edit(_refresh_license())
+    if not allowed:
+        raise HTTPException(402, "Has usado tus reels de prueba. Activa tu licencia en Ajustes para seguir editando.")
+    if not title.strip():
+        raise HTTPException(400, "Ponle título: qué anuncias")
+    job_id = uuid.uuid4().hex[:10]
+    workdir = JOBS_DIR / job_id
+    (workdir / "fotos").mkdir(parents=True, exist_ok=True)
+    photos = []
+    try:
+        for k, up in enumerate([f for f in fotos if f.filename][:15]):
+            ext = Path(up.filename).suffix.lower()
+            if ext not in trailer.STILL + (".mp4", ".mov", ".m4v", ".webm"):
+                continue
+            dst = workdir / "fotos" / f"{k + 1:02d}{ext}"
+            _save_upload(up, dst, MAX_MEDIA)
+            photos.append(dst)
+        voice = None
+        if voz is not None and voz.filename:
+            voice = workdir / f"voz{Path(voz.filename).suffix.lower() or '.m4a'}"
+            _save_upload(voz, voice, MAX_MEDIA)
+    except HTTPException:
+        shutil.rmtree(workdir, ignore_errors=True)
+        raise
+    if len(photos) < 2:
+        shutil.rmtree(workdir, ignore_errors=True)
+        raise HTTPException(400, "Sube al menos 2 fotos (mejor de 4 a 8)")
+    cliente = _cliente(cliente)
+    form = {"title": title.strip()[:60], "tagline": tagline.strip()[:200], "fecha": fecha.strip()[:40],
+            "cta": cta.strip()[:80], "idea": idea.strip()[:1000], "estilo": estilo if estilo in trailer.ESTILOS else "epico"}
+    if watermark:
+        _count_trial(+1)
+    with _lock:
+        JOBS[job_id] = {"id": job_id, "status": "working", "step": "En cola", "progress": 0.0, "mode": "trailer",
+                        "options": {**asdict(pipeline.EditOptions(cliente=cliente, brand=use_brand)), "trailer": form},
+                        "created": time.time(), "trial": watermark, "cliente": cliente}
+
+    def work():
+        try:
+            with brand.using(cliente):
+                kit = brand.load() if use_brand else None
+                info = trailer.render(photos, workdir / "reel.mp4", form["title"], form["tagline"], form["fecha"],
+                                      form["cta"], form["idea"], form["estilo"], voice, kit,
+                                      config.ai_config(config.load()), lambda m, p: _set(job_id, step=m, progress=p))
+            JOBS[job_id].pop("trial", None)
+            _set(job_id, status="done", result={
+                "video": "reel.mp4", "plan": {"hook_title": form["title"], "effects": [], "hook_options": []},
+                "duration_in": info["duration"], "duration_out": info["duration"], "removed_words": [], "cuts": 0,
+                "ai_warning": "", "notices": [], "checks": [], "fixes": [
+                    "Carteles: " + " / ".join(info["cards"]), f"{info['shots']} imágenes en movimiento 2.5D"],
+                "viral": {}, "trailer": info})
+        except Exception as e:  # noqa: BLE001
+            log.exception("Falla el tráiler %s", job_id)
+            if JOBS[job_id].pop("trial", False):
+                _count_trial(-1)
+            _set(job_id, status="error", error=_friendly(e))
+
+    threading.Thread(target=work, daemon=True).start()
+    return JOBS[job_id]
+
+
+# --- Enviar desde el móvil: página en la wifi con QR (iman/movil.py) ---
+@app.get("/api/movil")
+def phone_status():
+    from . import movil
+
+    return movil.status()
+
+
+@app.post("/api/movil")
+def phone_start():
+    from . import movil
+
+    try:
+        return movil.start()
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, f"No he podido abrir la página para el móvil: {e}") from None
+
+
+@app.delete("/api/movil")
+def phone_stop():
+    from . import movil
+
+    return movil.stop()
+
+
+@app.post("/api/apuntador")
+async def prompter_listen(request: Request, cursor: int = 0):
+    """Teleprompter que sigue tu voz: recibe los últimos segundos de audio (PCM 16 bits, 16 kHz) y el guion, y
+    devuelve lo oído y por qué palabra del guion vas. Todo en este ordenador."""
+    from . import apuntador
+
+    form = await request.form()
+    audio = form.get("audio")
+    script = str(form.get("script") or "")[:20000]
+    if audio is None or not hasattr(audio, "read"):
+        raise HTTPException(400, "Falta el audio")
+    pcm = await audio.read(apuntador.RATE * apuntador.MAX_SECONDS * 2 + 1)
+    words = script.split()
+    near = " ".join(words[max(0, cursor - 10): cursor + 25])
+    cfg = config.load()
+    try:
+        heard = await asyncio.to_thread(apuntador.hear, pcm, cfg.get("whisper_model", "small"), "es", near)
+    except Exception as e:  # noqa: BLE001 - sin modelo, la app hace avanzar el guion mientras hablas
+        log.warning("El teleprompter no puede escuchar: %s", e)
+        raise HTTPException(503, "No puedo escucharte ahora; el guion avanzará mientras hablas") from None
+    return {"heard": heard, "at": apuntador.locate(words, heard, max(0, cursor))}
+
+
+@app.get("/api/jobs/{job_id}/linea")
+def get_timeline(job_id: str):
+    """Editor Pro: la línea de tiempo del reel (pistas de vídeo, apoyo, textos, subtítulos, música y sonidos)."""
+    job = _done_job(job_id)
+    line = jsonfile.load(_dir(job_id) / "linea.json")
+    if not isinstance(line, dict):
+        raise HTTPException(409, "Este reel se montó con una versión anterior: dale a «Aplicar» una vez y ya podrás "
+                                 "editarlo en la línea de tiempo")
+    return {**line, "music_styles": sorted(musica.STYLES), "canciones": sorted(musica.CANCIONES),
+            "options": {k: job["options"].get(k) for k in ("music", "sfx", "volumen_musica")}}
+
+
+class TimelineIn(BaseModel):
+    ops: list[dict] = Field(default_factory=list, max_length=200)
+
+
+@app.post("/api/jobs/{job_id}/linea")
+def edit_timeline(job_id: str, body: TimelineIn):
+    """Aplica lo que el creador ha movido, alargado, escrito o borrado en la línea de tiempo y vuelve a montar."""
+    from . import linea
+
+    job = _done_job(job_id)
+    workdir = _dir(job_id)
+    line = jsonfile.load(workdir / "linea.json")
+    if not isinstance(line, dict):
+        raise HTTPException(409, "Este reel no tiene línea de tiempo todavía")
+    plan = _saved_plan(workdir)
+    words = _saved_words(workdir)
+    options = dict(job["options"])
+    done = linea.apply(plan, words, line, body.ops, options)
+    if not done:
+        raise HTTPException(400, "No hay cambios que aplicar")
+    if any(op.get("op") == "word" for op in body.ops if isinstance(op, dict)):
+        jsonfile.save(workdir / "transcript.json", [w.__dict__ for w in words], indent=1)
+    opts = pipeline.EditOptions(**{k: v for k, v in options.items() if k in {f.name for f in fields(pipeline.EditOptions)}})
+    src = _original(workdir)
+    _claim(job_id, step="Aplicando tus cambios", progress=0.0, options=asdict(opts), error=None)
+    chat = list(JOBS[job_id].get("chat") or [])
+    chat.append({"role": "iman", "text": "Editor Pro: " + "; ".join(done[:8]) + ("…" if len(done) > 8 else "")})
+    JOBS[job_id]["chat"] = chat[-60:]
+    threading.Thread(target=_work, args=(job_id, src, workdir, opts, plan), daemon=True).start()
+    return {**JOBS[job_id], "cambios": done}
+
+
 @app.post("/api/jobs/{job_id}/guia")
 def make_guide(job_id: str, nuevo: bool = False):
     """Guía en PDF sacada del vídeo, para regalarla a cambio de un contacto («escríbeme GUÍA y te la mando»)."""
@@ -1630,6 +1843,7 @@ def make_kit(job_id: str, body: KitIn):
                                current, body.message)
         except Exception as e:
             raise HTTPException(502, f"La IA no ha podido preparar el carrusel. {ai.error_message(e)}")
+        data = kit.complete(data, words, hook, b.cta)  # siempre 8 diapositivas y 4 historias
     else:
         data = kit.fallback(words, hook, b.cta)
     # Fotogramas limpios (sin subtítulos) de la toma original: la portada y unos cuantos más.
@@ -1639,7 +1853,7 @@ def make_kit(job_id: str, body: KitIn):
     t0 = body.cover_t if body.cover_t is not None else first + 0.4
     frames = [media.thumbnail(src, workdir / f"kit-frame-{k}.jpg", max(0.0, min(t, dur - 0.1))) if k == 0 else
               _sharpest(src, workdir, k, t, dur)
-              for k, t in enumerate([t0, dur * 0.25, dur * 0.45, dur * 0.65, dur * 0.85])]
+              for k, t in enumerate([t0, dur * 0.2, dur * 0.32, dur * 0.44, dur * 0.56, dur * 0.68, dur * 0.8, dur * 0.9])]
     names = kit.render(data, outdir, b, frames)
     return {**names, "reply": data.get("reply", ""), "version": int(time.time())}
 
